@@ -1,0 +1,115 @@
+{
+  "expo": {
+    "name": "Olyox",
+    "slug": "olyox",
+    "version": "1.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/appicon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "jsEngine": "jsc",
+    "splash": {
+      "image": "./assets/appicon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.olyoxuser.olyox",
+      "usesNotifications": true,
+      "development": {
+        "distribution": "internal",
+        "buildType": "simulator"
+      },
+      "production": {
+        "distribution": "app-store"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Olyox needs your location to show nearby hotels, restaurants, and services around you, and to auto-fill your address during checkout.",
+        "NSLocationAlwaysUsageDescription": "Olyox uses your location to help with background location tracking for delivery updates, even when you're not using the app.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Olyox requires location access at all times to provide accurate real-time updates for orders and to find nearby service providers.",
+        "NSPhotoLibraryUsageDescription": "Olyox uses your photo library to let you upload saved images such as profile photos, mismatched items, or food pictures for order tracking, returns, and support.",
+        "LSApplicationQueriesSchemes": [
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp"
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "GMSApiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
+      },
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/appicon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "googleMaps": {
+        "apiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "versionCode": 22,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "https",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "package": "com.happy_coding.olyox",
+      "googleServicesFile": "./google-services.json",
+      "runtimeVersion": "1.0.0"
+    },
+
+    "web": {
+      "favicon": "./assets/appicon.png",
+      "build": {
+        "publicPath": "/"
+      }
+    },
+    "extra": {
+      "clerkFrontendApi": "pk_test_c2VjdXJlLWdudS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
+      "clerkApiKey": "pk_test_c2VjdXJlLWdudS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
+      "eas": {
+        "projectId": "e73c718b-d6aa-45ea-a12a-c496424892ba"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "@react-native-firebase/app",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "podfileProperties": {
+              "use_modular_headers!": true
+            }
+          }
+        }
+      ]
+    ],
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/e73c718b-d6aa-45ea-a12a-c496424892ba"
+    }
+  }
+}
