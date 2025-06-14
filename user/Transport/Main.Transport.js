@@ -48,7 +48,7 @@ export default function MainTransport() {
     try {
       const { data } = await axios.get(`https://appapi.olyox.com/api/v1/admin/get-heavy`)
       if (data.data) {
-        console.log("Vehicle categories:", data.data)
+        
 
         // Add "All" category
         const allCategory = {

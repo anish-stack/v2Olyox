@@ -260,7 +260,7 @@ const App = () => {
         });
 
       } catch (error) {
-        console.error('❌ Error getting location:', error);
+        console.error('❌ Error getting location from App .js:', error);
 
         // Try to get last known location as fallback
         try {

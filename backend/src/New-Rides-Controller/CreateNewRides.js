@@ -395,18 +395,46 @@ const calculateBasePricing = (vehicleType, distance) => {
 
 
 const initiateDriverSearch = async (rideId) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 10000;
+    const INITIAL_RADIUS = 2500;
+    const RADIUS_INCREMENT = 500;
+    const API_TIMEOUT = 8000;
+    const MIN_ACTIVE_DRIVERS_THRESHOLD = 1;
     try {
         console.info(`Initiating driver search for ride: ${rideId}`);
 
-        // Get the ride details
+
         const ride = await RideBooking.findById(rideId);
         if (!ride) {
             throw new Error('Ride not found');
         }
 
-        // Update ride status to searching
         ride.ride_status = 'searching';
         await ride.save();
+
+        const getDriverSocketMap = () => {
+            const driverSocketMap = app.get('driverSocketMap');
+            if (!driverSocketMap) {
+                logger.warn("driverSocketMap not found in app context", null, context);
+                return new Map();
+            }
+            return driverSocketMap;
+        };
+
+        const getPubClient = () => {
+            const pubClient = app.get('pubClient');
+            if (!pubClient) {
+                logger.warn("Redis pubClient not found in app context", null, context);
+                return null;
+            }
+            return pubClient;
+        };
+
+        if (['cancelled', 'completed'].includes(RideBooking?.ride_status)) {
+            logger.info(`Ride request is ${RideBooking?.ride_status}, stopping search`, null, context);
+            return { message: `Ride request is ${status}` };
+        }
 
         // TODO: Implement your driver search logic here
         // This should include:
@@ -441,9 +469,9 @@ const initiateDriverSearch = async (rideId) => {
 
 exports.ride_status_after_booking = async (req, res) => {
     try {
-       console.log("I am")
+        console.log("I am")
         const user = Array.isArray(req.user.user) ? req.user.user[0] : req.user.user;
-        if (!user ) {
+        if (!user) {
             return res.status(401).json({ message: 'Authentication error: User not found.' });
         }
         //  console.log("I user",user)
@@ -489,7 +517,7 @@ exports.ride_status_after_booking = async (req, res) => {
                 if (ride.driver) {
                     responsePayload.rideDetails = ride
                 } else {
-                  
+
                     responsePayload.message = 'Driver assigned, but details are unavailable. Please wait.';
                     console.warn(`Ride ${ride._id} has status 'driver_assigned' but no driver details populated.`);
                 }
@@ -498,10 +526,10 @@ exports.ride_status_after_booking = async (req, res) => {
 
             case 'driver_arrived':
                 responsePayload.message = 'Your driver has arrived at the pickup location!';
-                 if (ride.driver) { // Populate details if needed for UI update
+                if (ride.driver) { // Populate details if needed for UI update
                     responsePayload.rideDetails = ride
                 }
-              
+
                 break;
 
             case 'in_progress':
@@ -518,8 +546,8 @@ exports.ride_status_after_booking = async (req, res) => {
 
             case 'completed':
                 responsePayload.message = 'Your ride has been completed. Thank you!';
-                responsePayload.rideDetails =ride
-               
+                responsePayload.rideDetails = ride
+
                 break;
 
             case 'cancelled':
