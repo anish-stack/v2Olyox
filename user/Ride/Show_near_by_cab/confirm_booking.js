@@ -154,7 +154,7 @@ export default function BookingConfirmation() {
                 }
 
                 const response = await axios.get(
-                    `http://192.168.1.23:3100/api/v1/new/status/${createdRideId}`,
+                    `http://192.168.1.22:3100/api/v1/new/status/${createdRideId}`,
                     {
                         headers: { Authorization: `Bearer ${token}` },
                         timeout: POLLING_INTERVAL - 1000,
@@ -268,7 +268,7 @@ export default function BookingConfirmation() {
             };
 
             const response = await axios.post(
-                "http://192.168.1.23:3100/api/v1/new/new-ride",
+                "http://192.168.1.22:3100/api/v1/new/new-ride",
                 rideData,
                 {
                     headers: { Authorization: `Bearer ${token}` },

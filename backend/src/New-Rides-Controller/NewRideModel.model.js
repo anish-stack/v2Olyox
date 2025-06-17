@@ -101,7 +101,7 @@ const RideRequestSchema = new Schema({
 
     driver: {
         type: Schema.Types.ObjectId,
-        ref: 'Driver',
+        ref: 'Rider',
         index: true
     },
     driver_tracking: DriverTrackingSchema,
@@ -127,7 +127,9 @@ const RideRequestSchema = new Schema({
         required: true,
         index: true
     },
-
+    search_started_at:{
+        type:Date
+    },
     // OTP for ride verification
     ride_otp: {
         type: String,
@@ -209,8 +211,8 @@ const RideRequestSchema = new Schema({
     },
     cancelled_at: Date,
     cancellation_reason: {
-        type: Schema.Types.ObjectId,
-        ref: 'CancellationReason'
+        type: String,
+        
     },
     cancellation_fee: {
         type: Number,
