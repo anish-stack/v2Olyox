@@ -159,7 +159,7 @@ app.use((req, res, next) => {
     }
     next();
 });
-
+// ia am ams
 // Long Polling Updates Endpoint
 app.get('/updates/:userId/:userType', async (req, res) => {
     const { userId, userType } = req.params;
