@@ -10,7 +10,7 @@
 dist/
 web-build/
 expo-env.d.ts
-
+*.apk
 # Native
 *.orig.*
 *.jks
