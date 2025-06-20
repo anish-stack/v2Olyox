@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store"
 import axios from "axios"
 import { Alert } from "react-native"
 import { useNavigation } from "@react-navigation/native"
-const API_URL = "https://appapi.olyox.com/api/v1"
+const API_URL = "http://192.168.1.6:3100/api/v1"
 const RIDER_API = `${API_URL}/rider`
 const useUserDetails = () => {
   const [userData, setUserData] = useState(null)

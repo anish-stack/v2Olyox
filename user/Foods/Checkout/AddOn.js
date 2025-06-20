@@ -41,7 +41,7 @@ export default function AddOn({ restaurant_id }) {
     setLoading(true)
     try {
       const { data } = await axios.get(
-        `https://appapi.olyox.com/api/v1/tiffin/find_Restaurant_And_Her_foods?restaurant_id=${restaurant_id?._id}`,
+        `http://192.168.1.6:3100/api/v1/tiffin/find_Restaurant_And_Her_foods?restaurant_id=${restaurant_id?._id}`,
       )
       if (data.details) {
         setDetails(data.details)

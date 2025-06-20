@@ -31,7 +31,7 @@ export default function Bonus() {
         throw new Error("Authentication token not found. Please login again.")
       }
 
-      const response = await axios.get("https://appapi.olyox.com/api/v1/rider/user-details", {
+      const response = await axios.get("http://192.168.1.6:3100/api/v1/rider/user-details", {
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -41,7 +41,7 @@ export default function Bonus() {
         throw new Error("Partner ID not found in user details.")
       }
 
-      const bonusResponse = await axios.get(`https://appapi.olyox.com/api/v1/rides/getMyEligibleBonus/${partnerId}`)
+      const bonusResponse = await axios.get(`http://192.168.1.6:3100/api/v1/rides/getMyEligibleBonus/${partnerId}`)
 
       setBonusData(bonusResponse.data)
       return true

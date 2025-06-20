@@ -65,7 +65,7 @@ const OfferBanner = ({refreshing}) => {
   useEffect(() => {
     const fetchBanners = async () => {
       try {
-        const { data } = await axios.get('https://appapi.olyox.com/api/v1/admin/get_home_banners');
+        const { data } = await axios.get('http://192.168.1.6:3100/api/v1/admin/get_home_banners');
         
         if (data.data && Array.isArray(data.data)) {
           const activeBanners = data.data.filter(item => item.is_active === true);

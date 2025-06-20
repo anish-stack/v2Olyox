@@ -55,7 +55,7 @@ export default function Choose_Vehicle() {
   const fetchVehicles = async () => {
     try {
       setLoading(true)
-      const response = await axios.get("https://appapi.olyox.com/api/v1/parcel/all-parcel")
+      const response = await axios.get("http://192.168.1.6:3100/api/v1/parcel/all-parcel")
 
       if (response.data.success) {
         // Add BaseFare property to each vehicle

@@ -42,7 +42,7 @@ export default function Restaurant() {
     setError(null);
     try {
       const { data } = await axios.get(
-        `https://appapi.olyox.com/api/v1/tiffin/find_Restaurant_And_Her_foods?restaurant_id=${item}`
+        `http://192.168.1.6:3100/api/v1/tiffin/find_Restaurant_And_Her_foods?restaurant_id=${item}`
       );
       if (data.details) {
         setDetails(data.details);

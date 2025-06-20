@@ -158,7 +158,7 @@ export default function DeliveryTracking() {
     setError(null);
     try {
       console.log("Fetching parcel details...");
-      const { data } = await axios.get(`https://appapi.olyox.com/api/v1/parcel/get-parcel/${parcelId}`);
+      const { data } = await axios.get(`http://192.168.1.6:3100/api/v1/parcel/get-parcel/${parcelId}`);
       // console.log("Fetched parcel details:", data?.parcelDetails);
       setParcelDetails(data?.parcelDetails);
 
@@ -183,7 +183,7 @@ export default function DeliveryTracking() {
   const handleChangeStatus = useCallback(async (status) => {
     try {
       setLoadingAction(true);
-      await axios.post('https://appapi.olyox.com/api/v1/parcel/parcel-status-update', {
+      await axios.post('http://192.168.1.6:3100/api/v1/parcel/parcel-status-update', {
         parcelId,
         status,
       });
@@ -249,7 +249,7 @@ export default function DeliveryTracking() {
           onPress: async () => {
             try {
               setLoadingAction(true);
-              await axios.post('https://appapi.olyox.com/api/v1/parcel/parcel-status-update', {
+              await axios.post('http://192.168.1.6:3100/api/v1/parcel/parcel-status-update', {
                 parcelId,
                 status: 'cancelled',
               });

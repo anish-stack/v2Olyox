@@ -8,7 +8,7 @@ import { useNavigation, useRoute } from "@react-navigation/native"
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 const API_BASE_URL = "https://www.webapi.olyox.com/api/v1"
-const MAIN_API_BASE_URL = "https://appapi.olyox.com/api/v1"
+const MAIN_API_BASE_URL = "http://192.168.1.6:3100/api/v1"
 
 export default function RegistrationForm() {
   const route = useRoute()

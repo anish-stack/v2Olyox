@@ -18,6 +18,7 @@ const User = require('./models/normal_user/User.model');
 const ParcelBoyLocation = require('./models/Parcel_Models/Parcel_Boys_Location');
 const Settings = require('./models/Admin/Settings');
 const tempRideDetailsSchema = require('./models/tempRideDetailsSchema');
+const NewRideModel = require('./src/New-Rides-Controller/NewRideModel.model')
 
 // Routes
 const router = require('./routes/routes');
@@ -76,6 +77,26 @@ const redisOptions = {
     password: process.env.REDIS_PASSWORD || undefined
 };
 
+
+(async () => {
+    try {
+        await sendNotification.sendNotification(
+            'd-wdag-rTdKKABGjpH_IMt:APA91bEqVfLyag8qEj7lg2xTY8U9GDhKcQBPOJoo7B4afgm7hoLlFYU0Uj11F_3ASSELrpSkDKSTZFYc_TOP__ObRJCOMI-YURl1OgmdhGeD4yVIqMQ27Gc',
+            "Ride Accepted",
+            "Your ride request has been accepted!",
+            {
+                event: 'RIDE_ACCEPTED',
+                eta: 5,
+                message: 'Your ride request has been accepted!',
+            }
+        );
+        console.log("✅ Notification sent successfully");
+    } catch (error) {
+        console.error("❌ Error sending notification:", error);
+    }
+})();
+
+
 // Global Redis client
 let pubClient;
 
@@ -83,33 +104,33 @@ let pubClient;
 async function connectRedis() {
     try {
         pubClient = createClient(redisOptions);
-        
+
         pubClient.on('error', (err) => {
             console.error(`[${new Date().toISOString()}] Redis client error:`, err.message);
         });
-        
+
         pubClient.on('connect', () => {
             console.log(`[${new Date().toISOString()}] Redis client connecting...`);
         });
-        
+
         pubClient.on('ready', () => {
             console.log(`[${new Date().toISOString()}] Redis client ready`);
         });
-        
+
         pubClient.on('end', () => {
             console.log(`[${new Date().toISOString()}] Redis client connection ended`);
         });
-        
+
         pubClient.on('reconnecting', () => {
             console.log(`[${new Date().toISOString()}] Redis client reconnecting...`);
         });
 
         await pubClient.connect();
         console.log(`[${new Date().toISOString()}] Redis connected successfully`);
-        
+
         // Make Redis client available to the app
         app.set('pubClient', pubClient);
-        
+
         return pubClient;
     } catch (error) {
         console.error(`[${new Date().toISOString()}] Redis connection failed:`, error.message);
@@ -122,7 +143,7 @@ async function connectDatabases() {
     try {
         await connectDb();
         console.log(`[${new Date().toISOString()}] Main database connected`);
-        
+
         await connectwebDb();
         console.log(`[${new Date().toISOString()}] Web database connected`);
     } catch (error) {
@@ -164,7 +185,7 @@ app.use((req, res, next) => {
 app.get('/updates/:userId/:userType', async (req, res) => {
     const { userId, userType } = req.params;
     const validTypes = ['user', 'driver', 'tiffin_partner'];
-    
+
     if (!validTypes.includes(userType)) {
         return res.status(400).json({ success: false, message: 'Invalid user type' });
     }
@@ -207,9 +228,79 @@ app.get('/rider', async (req, res) => {
     }
 });
 
+app.get('/rider/:tempRide', async (req, res) => {
+    const { tempRide } = req.params;
+    console.log(`[STEP 1] Received tempRide param: ${tempRide}`);
+
+    if (!tempRide || !mongoose.Types.ObjectId.isValid(tempRide)) {
+        console.warn("[STEP 2] Invalid ride ID");
+        return res.status(400).json({ error: 'Invalid ride ID' });
+    }
+
+    try {
+        console.log("[STEP 3] Fetching ride from MongoDB...");
+        const ride = await NewRideModel.findById(tempRide).populate('user').populate('driver');
+
+        if (!ride) {
+            console.warn("[STEP 4] Ride not found in MongoDB");
+            return res.status(404).json({ error: 'Ride not found' });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            data: ride
+        });
+
+    } catch (error) {
+        console.error(`[ERROR] ${new Date().toISOString()} Internal server error:`, error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+app.post('/webhook/cab-receive-location', async (req, res, next) => {
+    if (!req.body.riderId) {
+        // Apply Protect middleware only if riderId is not provided
+        return Protect(req, res, next);
+    }
+    next(); // Proceed to the handler if riderId is provided
+}, async (req, res) => {
+    try {
+        const { latitude, longitude, riderId } = req.body;
+        let userId;
+        if (riderId) {
+            userId = riderId;  // Use riderId from the body if it's provided
+        } else {
+            userId = req.user.userId;  // Otherwise, get userId from the authenticated user
+        }
+
+
+
+        const data = await RiderModel.findOneAndUpdate(
+            { _id: userId },
+            {
+                location: {
+                    type: 'Point',
+                    coordinates: [longitude, latitude]
+                },
+                lastUpdated: new Date()
+            },
+            { upsert: true, new: true }
+        );
+
+        // console.log("data of rider updated");
+
+        res.status(200).json({ message: 'Location updated successfully' });
+    } catch (error) {
+        console.error('Error updating location:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Root Endpoint
 app.get('/', (req, res) => {
-    res.status(200).json({ 
+    res.status(200).json({
         message: 'Welcome to the API',
         timestamp: new Date().toISOString(),
         version: '1.0.0'
@@ -246,20 +337,20 @@ app.get('/health', async (req, res) => {
 
     const allServicesUp = Object.values(health.services).every(service => service.status === 'UP');
     const statusCode = allServicesUp ? 200 : 503;
-    
+
     res.status(statusCode).json(health);
 });
 
 // Fetch Current Location
 app.post('/Fetch-Current-Location', async (req, res) => {
     const { lat, lng } = req.body;
-    
+
     if (!lat || !lng) {
         return res.status(400).json({ success: false, message: 'Latitude and longitude required' });
     }
 
     const cacheKey = `geocode:${lat},${lng}`;
-    
+
     try {
         // Try to get from cache if Redis is available
         let cachedData = null;
@@ -281,7 +372,7 @@ app.post('/Fetch-Current-Location', async (req, res) => {
         const response = await axios.get(
             `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyCBATa-tKn2Ebm1VbQ5BU8VOqda2nzkoTU'}`
         );
-        
+
         if (!response.data.results?.[0]) {
             return res.status(404).json({ success: false, message: 'No address found' });
         }
@@ -299,7 +390,7 @@ app.post('/Fetch-Current-Location', async (req, res) => {
         };
 
         const result = { location: { lat, lng }, address: addressDetails };
-        
+
         // Cache the result if Redis is available
         if (pubClient && pubClient.isOpen) {
             try {
@@ -308,7 +399,7 @@ app.post('/Fetch-Current-Location', async (req, res) => {
                 console.warn(`[${new Date().toISOString()}] Cache write error:`, cacheError.message);
             }
         }
-        
+
         res.status(200).json({ success: true, data: result, message: 'Location fetched' });
     } catch (err) {
         console.error(`[${new Date().toISOString()}] Location fetch error:`, err.message);
@@ -320,13 +411,13 @@ app.post('/Fetch-Current-Location', async (req, res) => {
 app.post('/geo-code-distance', async (req, res) => {
     try {
         const { pickup, dropOff } = req.body;
-        
+
         if (!pickup || !dropOff) {
             return res.status(400).json({ success: false, message: 'Pickup and dropoff addresses required' });
         }
 
         const cacheKey = `distance:${pickup}:${dropOff}`;
-        
+
         // Try to get from cache if Redis is available
         if (pubClient && pubClient.isOpen) {
             try {
@@ -344,7 +435,7 @@ app.post('/geo-code-distance', async (req, res) => {
         const pickupResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
             params: { address: pickup, key: apiKey }
         });
-        
+
         if (pickupResponse.data.status !== 'OK') {
             return res.status(400).json({ success: false, message: 'Invalid pickup location' });
         }
@@ -353,7 +444,7 @@ app.post('/geo-code-distance', async (req, res) => {
         const dropOffResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
             params: { address: dropOff, key: apiKey }
         });
-        
+
         if (dropOffResponse.data.status !== 'OK') {
             return res.status(400).json({ success: false, message: 'Invalid dropoff location' });
         }
@@ -366,7 +457,7 @@ app.post('/geo-code-distance', async (req, res) => {
                 key: apiKey
             }
         });
-        
+
         if (distanceResponse.data.status !== 'OK' || distanceResponse.data.rows[0].elements[0].status !== 'OK') {
             return res.status(400).json({ success: false, message: 'Failed to calculate distance' });
         }
@@ -393,7 +484,7 @@ app.post('/geo-code-distance', async (req, res) => {
                 console.warn(`[${new Date().toISOString()}] Cache write error:`, cacheError.message);
             }
         }
-        
+
         res.status(200).json({ success: true, ...result });
     } catch (err) {
         console.error(`[${new Date().toISOString()}] Geo-code distance error:`, err.message);
@@ -414,10 +505,10 @@ app.use('/api/v1/new', NewRoutes);
 
 // 404 Handler
 app.use('*', (req, res) => {
-    res.status(404).json({ 
-        success: false, 
+    res.status(404).json({
+        success: false,
         message: 'Route not found',
-        path: req.originalUrl 
+        path: req.originalUrl
     });
 });
 
@@ -425,8 +516,8 @@ app.use('*', (req, res) => {
 app.use((err, req, res, next) => {
     console.error(`[${new Date().toISOString()}] Server error:`, err.message);
     console.error('Stack:', err.stack);
-    
-    res.status(err.status || 500).json({ 
+
+    res.status(err.status || 500).json({
         success: false,
         message: process.env.NODE_ENV === 'production' ? 'Something went wrong!' : err.message,
         ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
@@ -436,10 +527,10 @@ app.use((err, req, res, next) => {
 // Graceful Shutdown
 process.on('SIGTERM', async () => {
     console.log(`[${new Date().toISOString()}] SIGTERM received, shutting down gracefully`);
-    
+
     server.close(async () => {
         console.log(`[${new Date().toISOString()}] HTTP server closed`);
-        
+
         // Close Redis connection
         if (pubClient) {
             try {
@@ -449,7 +540,7 @@ process.on('SIGTERM', async () => {
                 console.error(`[${new Date().toISOString()}] Error closing Redis:`, error.message);
             }
         }
-        
+
         // Close MongoDB connection
         try {
             await mongoose.connection.close();
@@ -457,7 +548,7 @@ process.on('SIGTERM', async () => {
         } catch (error) {
             console.error(`[${new Date().toISOString()}] Error closing MongoDB:`, error.message);
         }
-        
+
         process.exit(0);
     });
 });
@@ -484,23 +575,23 @@ process.on('uncaughtException', (error) => {
 // Server Startup Function
 async function startServer() {
     const PORT = process.env.PORT || 3100;
-    
+
     try {
         console.log(`[${new Date().toISOString()}] Starting server initialization...`);
-        
+
         // Connect to Redis first
         await connectRedis();
-        
+
         // Connect to databases
         await connectDatabases();
-        
+
         // Start the server
         server.listen(PORT, () => {
             console.log(`[${new Date().toISOString()}] 🚀 Server running on port ${PORT}`);
             console.log(`[${new Date().toISOString()}] 🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`[${new Date().toISOString()}] ✅ All services connected successfully`);
         });
-        
+
     } catch (error) {
         console.error(`[${new Date().toISOString()}] ❌ Failed to start server:`, error.message);
         process.exit(1);

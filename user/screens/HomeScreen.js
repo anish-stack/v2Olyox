@@ -263,7 +263,7 @@ const HomeScreen = () => {
             // Reset socket if userId exists
             if (userId) {
                 console.log('🔌 Reinitializing socket...');
-                initializeSocket({ userId: userId });
+                // initializeSocket({ userId: userId });
             }
             
             await fetchData();

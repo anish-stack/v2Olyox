@@ -7,8 +7,9 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { useSocket } from '../context/SocketContext';
 import { useNavigation } from '@react-navigation/native';
+import NewHomeScreen from '../New Screens/NewDriverScreen';
 
-const API_BASE_URL = "https://appapi.olyox.com/api/v1";
+const API_BASE_URL = "http://192.168.1.6:3100/api/v1";
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -51,12 +52,12 @@ export default function HomeScreen() {
       setErrorMsg(null);
       
       // Initialize socket connection with explicit type conversion for any potential boolean flags
-      await initializeSocket({
-        userId: partner._id,
-        // Convert any potential string booleans to actual booleans if needed
-        // For example, if there were any boolean flags:
-        // isActive: String(someValue) === 'true' || someValue === true
-      });
+      // await initializeSocket({
+      //   userId: partner._id,
+      //   // Convert any potential string booleans to actual booleans if needed
+      //   // For example, if there were any boolean flags:
+      //   // isActive: String(someValue) === 'true' || someValue === true
+      // });
       
     } catch (error) {
       // Handle different types of errors
@@ -136,7 +137,8 @@ export default function HomeScreen() {
   // Memoized component based on role
   const RenderedComponent = useMemo(() => {
     if (role === 'parcel') return <ParcelHome />;
-    if (role === 'cab') return <CabHome />;
+    // if (role === 'cab') return <CabHome />;
+    if (role === 'cab') return <NewHomeScreen />;
     return null;
   }, [role]);
 

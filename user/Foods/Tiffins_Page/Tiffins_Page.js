@@ -20,7 +20,7 @@ import axios from 'axios';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
-const BASE_URL = `https://appapi.olyox.com/api/v1/tiffin/find_Restaurant_Packages`;
+const BASE_URL = `http://192.168.1.6:3100/api/v1/tiffin/find_Restaurant_Packages`;
 
 const MealTypeFilter = ({ selected, onSelect }) => {
   const filters = [

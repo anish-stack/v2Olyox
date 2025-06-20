@@ -75,7 +75,7 @@ const Map = ({ origin, destination, isFakeRiderShow = false }) => {
                     };
                     
                     // Send the pickup and dropoff coordinates to your backend API
-                    const response = await axios.post('https://appapi.olyox.com/directions', { pickup, dropoff });
+                    const response = await axios.post('http://192.168.1.6:3100/directions', { pickup, dropoff });
                     
                     const json = response.data;
                     console.log("Fetching directions json...", json);

@@ -46,7 +46,7 @@ export default function TopFood({ show = false, refreshing, onRefresh }) {
             setLoadingText('Finding restaurants near you...');
 
             // Fetch restaurants based on location
-            const response = await axios.get(`https://appapi.olyox.com/api/v1/tiffin/find_RestaurantTop`, {
+            const response = await axios.get(`http://192.168.1.6:3100/api/v1/tiffin/find_RestaurantTop`, {
                 params: {
                     lat: latitude,
                     lng: longitude

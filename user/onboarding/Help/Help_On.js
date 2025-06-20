@@ -66,7 +66,7 @@ export default function Help_On() {
         }
         setLoading(true)
         try {
-            const response = await fetch('https://appapi.olyox.com/api/v1/admin/report', {
+            const response = await fetch('http://192.168.1.6:3100/api/v1/admin/report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'multipart/form-data',

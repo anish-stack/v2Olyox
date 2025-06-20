@@ -48,6 +48,9 @@ const PricingSchema = new Schema({
     rain_charge: {
         type: Number, min: 0, default: 0
     },
+    collected_amount:{
+        type: Number, min: 0, default: 0 
+    },
     toll_charge: {
         type: Number, min: 0, default: 0
     },
@@ -122,7 +125,7 @@ const RideRequestSchema = new Schema({
 
     ride_status: {
         type: String,
-        enum: ['pending', 'searching', 'driver_assigned', 'driver_arrived', 'in_progress', 'completed', 'cancelled'],
+        enum: ['pending', 'searching', 'driver_assigned', 'driver_arrived','in_progress', 'completed', 'cancelled'],
         default: 'pending',
         required: true,
         index: true
@@ -181,13 +184,13 @@ const RideRequestSchema = new Schema({
     // Payment Information
     payment_method: {
         type: String,
-        enum: ['cash', 'card', 'wallet', 'upi', 'paypal','online'],
+        enum: ['cash', 'card', 'wallet','digital', 'upi', 'paypal','online'],
         required: [true, 'Payment method is required'],
         lowercase: true
     },
     payment_status: {
         type: String,
-        enum: ['pending', 'processing', 'completed', 'failed', 'refunded'],
+        enum: ['pending', 'processing', 'completed', 'failed', 'refunded','cancelled'],
         default: 'pending'
     },
     payment_transaction_id: String,

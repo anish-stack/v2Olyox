@@ -34,7 +34,7 @@ export default function ProgressOrder() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const response = await axios.get(`https://appapi.olyox.com/api/v1/rides/inProgressOrder/${id}`);
+      const response = await axios.get(`http://192.168.1.6:3100/api/v1/rides/inProgressOrder/${id}`);
       if (response.data.success) {
         setOrders(response.data.inProgressOrders);
         setError(null);

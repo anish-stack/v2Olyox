@@ -22,7 +22,7 @@ export default function FloatingRide() {
                 setIsRideActive(false);
                 return;
             }
-            const { data } = await axios.get(`https://appapi.olyox.com/api/v1/rides/find-ride_details?id=${rideId}`);
+            const { data } = await axios.get(`http://192.168.1.6:3100/api/v1/rides/find-ride_details?id=${rideId}`);
             if (data?.data?.is_ride_paid === false) {
                 // console.log(data)
                 setIsRideActive(data.data?.ride_is_started || false);

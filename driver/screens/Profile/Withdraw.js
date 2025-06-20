@@ -77,7 +77,7 @@ export default function Withdraw() {
     try {
       const token = await SecureStore.getItemAsync("auth_token_cab")
       if (token) {
-        const response = await axios.get("https://appapi.olyox.com/api/v1/rider/user-details", {
+        const response = await axios.get("http://192.168.1.6:3100/api/v1/rider/user-details", {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (response.data.partner) {

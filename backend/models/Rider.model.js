@@ -29,8 +29,8 @@ const RiderSchema = new Schema({
         VehicleImage: [String]
 
     },
-    aadharNumber:{
-        type:String,
+    aadharNumber: {
+        type: String,
     },
     isFirstRechargeDone: {
         type: Boolean,
@@ -90,10 +90,10 @@ const RiderSchema = new Schema({
         rechargePlan: String,
         expireData: Date,
         onHowManyEarning: {
-            type:String,
-            default:'Ops'
+            type: String,
+            default: 'Ops'
         },
-        whichDateRecharge:Date,
+        whichDateRecharge: Date,
         approveRecharge: Boolean
     },
     lastNotificationSent: {
@@ -212,7 +212,9 @@ const RiderSchema = new Schema({
         enum: ["parcel", "cab"],
         default: "cab"
     },
-
+    fcmToken: {
+        type: String,
+    },
     isBlockByAdmin: {
         type: Boolean,
         default: false

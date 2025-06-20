@@ -50,8 +50,11 @@ export const RideProvider = ({ children }) => {
   const clearCurrentRide = async () => {
     setCurrentRide(null);
     setRideStatus('idle');
+    console.log("Cleanin")
     await SecureStore.deleteItemAsync(RIDE_KEY);
   };
+ 
+
 
   return (
     <RideContext.Provider value={{

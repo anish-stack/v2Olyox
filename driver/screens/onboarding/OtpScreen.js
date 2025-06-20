@@ -154,7 +154,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
     
     try {
       const response = await axios.post(
-        'https://appapi.olyox.com/api/v1/rider/rider-verify',
+        'http://192.168.1.6:3100/api/v1/rider/rider-verify',
         { 
           otp, 
           number,
@@ -182,10 +182,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
           } else if (!DocumentVerify) {
             navigation.navigate('Wait_Screen');
           } else {
-            // Try to connect socket
-      await initializeConnection(5, 6000, response?.data?.user);
-            
-            // Navigate to Home regardless of socket connection status
+         
             navigation.navigate('Home');
           }
 
@@ -225,7 +222,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
     
     try {
       const response = await axios.post(
-        'https://appapi.olyox.com/api/v1/rider/rider-login',
+        'http://192.168.1.6:3100/api/v1/rider/rider-login',
         { 
           number,
           otpType: type // Send OTP type in request body

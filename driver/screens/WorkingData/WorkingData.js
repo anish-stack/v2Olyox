@@ -48,7 +48,7 @@ export default function WorkingData() {
 
     // First fetch user details
     const userResponse = await axios.get(
-      'https://appapi.olyox.com/api/v1/rider/user-details',
+      'http://192.168.1.6:3100/api/v1/rider/user-details',
       { headers: { Authorization: `Bearer ${token}` } }
     );
     
@@ -58,7 +58,7 @@ export default function WorkingData() {
     // Then fetch session data using the user's ID
     if (user?._id) {
       const sessionResponse = await axios.get(
-        `https://appapi.olyox.com/api/v1/rider/getMySessionsByUserId?userId=${user._id}`,
+        `http://192.168.1.6:3100/api/v1/rider/getMySessionsByUserId?userId=${user._id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setSessionData(sessionResponse.data.data);

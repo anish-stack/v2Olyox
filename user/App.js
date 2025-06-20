@@ -64,6 +64,7 @@ import useNotificationPermission from './hooks/notification';
 import { find_me } from './utils/helpers';
 import axios from 'axios';
 import OlyoxAppUpdate from './context/CheckAppUpdate';
+import OnWayRide from './New Screen/OnWayRide';
 
 const Stack = createNativeStackNavigator();
 
@@ -79,7 +80,7 @@ Sentry.init({
 const MAX_LOADING_TIME = 5000; // 5 seconds max loading time
 const MIN_UPDATE_INTERVAL = 10000; // Minimum time between location state updates
 const MAX_RETRY_ATTEMPTS = 3; // Maximum location retry attempts
-const API_URL = "https://appapi.olyox.com/api/v1";
+const API_URL = "http://192.168.1.6:3100/api/v1";
 
 // Define location error types
 const ERROR_TYPES = {
@@ -369,7 +370,8 @@ const App = () => {
       <Stack.Screen name="second_step_of_booking" options={{ headerShown: false }} component={Show_Cabs} />
       <Stack.Screen name="confirm_screen" options={{ headerShown: false }} component={BookingConfirmation} />
       <Stack.Screen name="driver_match" options={{ headerShown: false }} component={DriverMatching} />
-      <Stack.Screen name="RideStarted" options={{ headerShown: false }} component={RideConfirmed} />
+        {/*<Stack.Screen name="RideStarted" options={{ headerShown: false }} component={RideConfirmed} />*/}
+      <Stack.Screen name="RideStarted" options={{ headerShown: false }} component={OnWayRide} />
       <Stack.Screen name="Rate_Your_ride" options={{ headerShown: false }} component={Ride_Rating} />
       {/* Hotel Booking Screens */}
       <Stack.Screen name="hotels-details" options={{ headerShown: false }} component={Hotels_details} />

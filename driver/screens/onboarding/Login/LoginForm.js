@@ -13,6 +13,7 @@ import Button from "../../../components/Button";
 import axios from 'axios';
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from '@expo/vector-icons'; // Make sure to install expo vector icons if not already
+import useNotificationPermission from "../../../hooks/notification";
 
 const LoginForm = ({ onLogin }) => {
   const [phone, setPhone] = useState("");
@@ -20,6 +21,7 @@ const LoginForm = ({ onLogin }) => {
   const [error, setError] = useState("");
   const [otpType, setOtpType] = useState("text"); // "text" or "whatsapp"
   const navigation = useNavigation();
+    const { isGranted, fcmToken } = useNotificationPermission();
 
   const validateAndFormatPhone = (number) => {
     // Remove all non-numeric characters including +91
@@ -53,8 +55,9 @@ const LoginForm = ({ onLogin }) => {
     
     try {
       const response = await axios.post(
-        'https://appapi.olyox.com/api/v1/rider/rider-login', 
+        'http://192.168.1.6:3100/api/v1/rider/rider-login', 
         { 
+          fcmToken:isGranted ? fcmToken:null,
           number: formattedPhone,
           otpType: otpType // Add otpType to the request body
         }

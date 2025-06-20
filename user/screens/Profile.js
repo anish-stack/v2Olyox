@@ -601,7 +601,7 @@ export default function OlyoxUserProfile() {
             const db_token = await tokenCache.getToken('auth_token_db');
             const token = db_token || gmail_token;
 
-            const response = await axios.get('https://appapi.olyox.com/api/v1/user/find-Orders-details', {
+            const response = await axios.get('http://192.168.1.6:3100/api/v1/user/find-Orders-details', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setOrderData(response.data.data);
@@ -682,7 +682,7 @@ export default function OlyoxUserProfile() {
                 type: 'image/jpeg',
             });
 
-            const response = await axios.post('https://appapi.olyox.com/api/v1/user/update-profile', form, {
+            const response = await axios.post('http://192.168.1.6:3100/api/v1/user/update-profile', form, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`,
@@ -717,7 +717,7 @@ export default function OlyoxUserProfile() {
                 return;
             }
 
-            const response = await axios.post('https://appapi.olyox.com/api/v1/user/update-profile', form, {
+            const response = await axios.post('http://192.168.1.6:3100/api/v1/user/update-profile', form, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`,
@@ -738,7 +738,7 @@ export default function OlyoxUserProfile() {
     const deleteAccount = useCallback(async (id) => {
         try {
             setLoading(true);
-            const response = await axios.post(`https://appapi.olyox.com/api/v1/user/delete-my-account/${id}`);
+            const response = await axios.post(`http://192.168.1.6:3100/api/v1/user/delete-my-account/${id}`);
             Alert.alert('Account Deleted', response.data.message);
             await handleLogout();
         } catch (error) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppState, Platform, LogBox ,View,Text,Button} from 'react-native';
+import { AppState, Platform, LogBox, View, Text, Button, StatusBar } from 'react-native';
 import { AppRegistry } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,6 +12,7 @@ import axios from 'axios';
 import * as Notifications from 'expo-notifications';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as Sentry from '@sentry/react-native';
+import './context/firebaseConfig';
 
 import { name as appName } from './app.json';
 import { store } from './redux/store';
@@ -52,7 +53,8 @@ import AvailableOrder from './screens/Parcel_Screens/Available_Orders/AvailableO
 import ProgressOrder from './screens/Parcel_Screens/ProgressOrder/ProgressOrder';
 import UnlockCoupons from './screens/Unlock/UnlockCoupons';
 import CheckAppUpdate from './context/CheckAppUpdate';
-// import BubbleService from './screens/BubbleService/BubbleService';
+import useNotificationPermission from './hooks/notification';
+import RunningRide from './New Screens/on_way_ride/RunningRide';
 
 LogBox.ignoreLogs(['Setting a timer']);
 
@@ -67,7 +69,6 @@ Sentry.init({
   tracesSampleRate: 1.0,
 });
 
-
 export async function getExpoPushToken() {
   const tokenData = await Notifications.getExpoPushTokenAsync();
   console.log("Expo Push Token:", tokenData.data);
@@ -81,6 +82,19 @@ const App = () => {
   const [activeRideData, setActiveRideData] = useState(false);
   const navigationRef = useNavigationContainerRef();
   const [currentRoute, setCurrentRoute] = useState(null);
+
+  // Use the notification hook
+  const { 
+    permissionStatus, 
+    isGranted, 
+    requestPermission, 
+    fcmToken,
+    getToken,
+    showNotification,
+    lastNotification,
+    lastFcmMessage
+  } = useNotificationPermission();
+
   // Handle authentication and user state
   useEffect(() => {
     const checkAuthToken = async () => {
@@ -100,7 +114,6 @@ const App = () => {
           } else {
             setActiveRide(false);
           }
-
 
           if (!partner?.isDocumentUpload) {
             setInitialRoute('UploadDocuments');
@@ -124,38 +137,73 @@ const App = () => {
   }, []);
 
   const foundRideDetails = async (temp_ride_id) => {
-    console.log("Temp", temp_ride_id)
+    console.log("Temp", temp_ride_id);
     try {
-      const response = await axios.get(`https://www.appapi.olyox.com/rider/${temp_ride_id}`)
-      console.log("hello", response.data)
-      setActiveRideData(response.data)
+      const response = await axios.get(`https://www.appapi.olyox.com/rider/${temp_ride_id}`);
+      console.log("hello", response.data);
+      setActiveRideData(response.data);
     } catch (error) {
-      console.log(error?.response.data)
-
+      console.log(error?.response.data);
     }
-  }
-  // Handle push notifications
-  useEffect(() => {
-    const setupNotifications = async () => {
-      const { status } = await Notifications.requestPermissionsAsync();
-      console.log("Notification", status)
-      if (status !== 'granted') {
-        alert('Notification permission not granted');
-        return;
-      }
+  };
 
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.HIGH,
-        });
+  // Handle FCM token updates - send to your backend
+  useEffect(() => {
+    const updateTokenOnServer = async () => {
+      if (fcmToken) {
+        try {
+          const authToken = await SecureStore.getItemAsync('auth_token_cab');
+          if (authToken) {
+            // Update FCM token on your server
+            await axios.post(
+              'https://www.appapi.olyox.com/api/v1/rider/update-fcm-token',
+              { fcm_token: fcmToken },
+              { headers: { Authorization: `Bearer ${authToken}` } }
+            );
+            console.log('✅ FCM token updated on server');
+          }
+        } catch (error) {
+          console.error('❌ Error updating FCM token on server:', error.response.data);
+        }
       }
     };
-    getExpoPushToken()
 
-    setupNotifications();
+    updateTokenOnServer();
+  }, [fcmToken]);
+
+  // Handle notification responses (when user taps on notification)
+  useEffect(() => {
+    if (lastNotification) {
+      console.log('📱 Handling notification:', lastNotification);
+      // Handle notification tap - navigate to appropriate screen
+      const data = lastNotification.request?.content?.data || {};
+      
+      if (data.type === 'ride_request') {
+        navigationRef.navigate('NewRideScreen', { rideId: data.ride_id });
+      } else if (data.type === 'ride_update') {
+        navigationRef.navigate('start', { rideId: data.ride_id });
+      }
+      // Add more navigation logic based on your notification types
+    }
+  }, [lastNotification, navigationRef]);
+
+  // Handle FCM messages
+  useEffect(() => {
+    if (lastFcmMessage) {
+      console.log('🔥 Handling FCM message:', lastFcmMessage);
+      const data = lastFcmMessage.data || {};
+      
+      // You can add custom logic here based on FCM message data
+      if (data.type === 'ride_status_update') {
+        // Refresh ride data or update UI
+      }
+    }
+  }, [lastFcmMessage]);
+
+  // Get Expo push token for additional push notification services
+  useEffect(() => {
+    getExpoPushToken();
   }, []);
-
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -166,27 +214,17 @@ const App = () => {
     return () => clearTimeout(timeout);
   }, [navigationRef]);
 
-
-
-  useEffect(() => {
-    const setupBackgroundTask = async () => {
-      const status = await BackgroundFetch.getStatusAsync();
-      if (status === BackgroundFetch.BackgroundFetchStatus.Available || status === BackgroundFetch.BackgroundFetchStatus.Restricted) {
-        await registerBackgroundSocketTask();
-      } else {
-        console.warn('⛔️ Background fetch not permitted');
-      }
-    };
-
-    setupBackgroundTask();
-  }, []);
   // useEffect(() => {
-  //   const subscription = AppState.addEventListener('change', (state) => {
-  //     if (state === 'background') {
-  //       registerBackgroundSocketTask();
+  //   const setupBackgroundTask = async () => {
+  //     const status = await BackgroundFetch.getStatusAsync();
+  //     if (status === BackgroundFetch.BackgroundFetchStatus.Available || status === BackgroundFetch.BackgroundFetchStatus.Restricted) {
+  //       await registerBackgroundSocketTask();
+  //     } else {
+  //       console.warn('⛔️ Background fetch not permitted');
   //     }
-  //   });
-  //   return () => subscription?.remove();
+  //   };
+
+  //   setupBackgroundTask();
   // }, []);
 
   if (loading) return <Loading />;
@@ -200,13 +238,15 @@ const App = () => {
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <SafeAreaProvider>
                   <NavigationContainer ref={navigationRef}>
+                    <StatusBar barStyle={'dark-content'} />
                     <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                       <Stack.Screen name="register" options={{ headerShown: true, title: 'Complete Profile' }} component={RegistrationForm} />
                       <Stack.Screen name="UploadDocuments" component={Document} />
                       <Stack.Screen name="Wait_Screen" component={Wait_Screen} />
                       <Stack.Screen name="Home" component={HomeScreen} />
-                      <Stack.Screen name="start" component={RideDetailsScreen} />
+                      {/* <Stack.Screen name="start" component={RideDetailsScreen} /> old */}
+                      <Stack.Screen name="start" component={RunningRide} /> 
                       <Stack.Screen name="support" component={SupportScreen} />
                       <Stack.Screen name="collect_money" component={MoneyPage} />
                       <Stack.Screen name="AllRides" component={AllRides} />
@@ -222,20 +262,13 @@ const App = () => {
                       <Stack.Screen name="WorkingData" component={WorkingData} />
                       <Stack.Screen name="referral-history" component={ReferalHistory} />
                       <Stack.Screen name="withdraw" component={Withdraw} />
-
-
-
+                      
                       {/* Parcel Rides */}
                       <Stack.Screen name="ParcelDetails" component={NewParcelLive} />
                       <Stack.Screen name="DeliveryTracking" options={{ headerShown: false }} component={DeliveryTracking} />
                       <Stack.Screen name="available-orders" options={{ headerShown: false, title: "Available Orders" }} component={AvailableOrder} />
                       <Stack.Screen name="progress-order" options={{ headerShown: true, title: "Progress Orders" }} component={ProgressOrder} />
-
-
                     </Stack.Navigator>
-                  
-
-
                   </NavigationContainer>
                 </SafeAreaProvider>
               </GestureHandlerRootView>

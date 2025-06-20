@@ -43,7 +43,7 @@ export default function ReferralHistory() {
             }
 
             const response = await axios.get(
-                'https://appapi.olyox.com/api/v1/rider/user-details',
+                'http://192.168.1.6:3100/api/v1/rider/user-details',
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 

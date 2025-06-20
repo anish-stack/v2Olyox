@@ -91,7 +91,7 @@ const ParcelBooking = () => {
     setLoading(true);
     try {
       console.log('🔵 Calculating distance and ETA');
-      const { data } = await axios.post("https://appapi.olyox.com/geo-code-distance", {
+      const { data } = await axios.post("http://192.168.1.6:3100/geo-code-distance", {
         pickup,
         dropOff: dropoff,
       });
@@ -144,7 +144,7 @@ const ParcelBooking = () => {
       const token = await tokenCache.getToken("auth_token_db") || await tokenCache.getToken("auth_token");
 
       const { data } = await axios.post(
-        "https://appapi.olyox.com/api/v1/parcel/request_of_parcel",
+        "http://192.168.1.6:3100/api/v1/parcel/request_of_parcel",
         {
           pickup,
           dropoff,

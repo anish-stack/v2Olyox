@@ -154,13 +154,13 @@ export default function BookingConfirmation() {
                 }
 
                 const response = await axios.get(
-                    `http://192.168.1.22:3100/api/v1/new/status/${createdRideId}`,
+                    `http://192.168.1.6:3100/api/v1/new/status/${createdRideId}`,
                     {
                         headers: { Authorization: `Bearer ${token}` },
                         timeout: POLLING_INTERVAL - 1000,
                     }
                 );
-
+                console.log("response.data", response.data)
                 const { status: newStatus, rideDetails: polledRideDetails, message: pollMessage } = response.data;
                 setCurrentRideStatus(newStatus);
                 setBookingStatusMessage(pollMessage || `Ride status: ${newStatus}`);
@@ -171,8 +171,8 @@ export default function BookingConfirmation() {
                         saveRide({ ...polledRideDetails, ride_otp: rideOtp });
                         updateRideContextStatus("confirmed");
                         stopBookingProcess("DRIVER_ASSIGNED");
-                        navigation.replace("DriverTrackingScreen", {
-                            ride: { ...polledRideDetails, ride_otp: rideOtp },
+                        navigation.replace("RideStarted", {
+                            driver: polledRideDetails?._id,
                             origin,
                             destination,
                         });
@@ -268,7 +268,7 @@ export default function BookingConfirmation() {
             };
 
             const response = await axios.post(
-                "http://192.168.1.22:3100/api/v1/new/new-ride",
+                "http://192.168.1.6:3100/api/v1/new/new-ride",
                 rideData,
                 {
                     headers: { Authorization: `Bearer ${token}` },

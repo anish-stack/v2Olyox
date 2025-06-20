@@ -232,8 +232,8 @@ exports.updateRechargeDetails = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { number, otpType } = req.body;
-    console.log("otpType", otpType);
+    const { number, otpType, fcmToken } = req.body;
+    // console.log("req.body",req.body)
 
     if (!number) {
       return res.status(400).json({
@@ -248,26 +248,23 @@ exports.login = async (req, res) => {
       try {
         const response = await axios.post(
           `https://www.webapi.olyox.com/api/v1/getProviderDetailsByNumber`,
-          {
-            number: number,
-          }
+          { number }
         );
+
         if (response.data.success) {
           return res.status(403).json({
             success: false,
             message:
-              "You are  registered with us on website But on vendor Complete Profile First !!",
+              "You are registered with us on website but on vendor complete profile first!!",
             redirect: "complete-profile",
           });
-        } else {
-          console.log(response.data);
         }
       } catch (error) {
-        console.log(error.response.data);
+        console.log(error?.response?.data || error.message);
         return res.status(402).json({
           success: false,
           message:
-            "Profile is not be found on website and app please register first !!! ",
+            "Profile not found on website and app. Please register first!",
         });
       }
     }
@@ -275,17 +272,15 @@ exports.login = async (req, res) => {
     if (partner.isBlockByAdmin) {
       return res.status(401).json({
         success: false,
-        message: "Your Account Has been Blocked By Admin Contact Support !!",
+        message: "Your account has been blocked by admin. Contact support.",
       });
     }
 
     // Check if the user is blocked for OTP
     if (partner.isOtpBlock) {
-      // Check the time when OTP should be unblocked
       const currentTime = new Date();
       const unblockTime = new Date(partner.otpUnblockAfterThisTime);
 
-      // If the unblock time has not passed yet, notify the user
       if (currentTime < unblockTime) {
         return res.status(403).json({
           success: false,
@@ -293,18 +288,23 @@ exports.login = async (req, res) => {
         });
       }
 
-      // If unblock time has passed, unblock the user
+      // Unblock user
       partner.isOtpBlock = false;
-      partner.otpUnblockAfterThisTime = null; // Clear unblock time
-      partner.howManyTimesHitResend = 0; // Reset resend attempts
-      await partner.save();
+      partner.otpUnblockAfterThisTime = null;
+      partner.howManyTimesHitResend = 0;
     }
 
-    // Generate OTP if the user is not blocked
+    // ✅ Only update fcmToken if it's provided and different
+    if (fcmToken && fcmToken !== partner.fcmToken) {
+      partner.fcmToken = fcmToken;
+    }
+
+    // Generate and save OTP
     const otp = await generateOtp();
     partner.otp = otp;
     await partner.save();
 
+    // Send OTP
     if (otpType === "text") {
       await sendDltMessage(otp, number);
     } else {
@@ -324,6 +324,7 @@ exports.login = async (req, res) => {
     });
   }
 };
+
 
 exports.logoutRider = async (req, res) => {
   try {

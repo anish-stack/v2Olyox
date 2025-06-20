@@ -23,7 +23,7 @@ export const RideProvider = ({ children }) => {
 
   return (
     <RideContext.Provider value={{
-      currentRide,
+      rideData:currentRide,
       rideStatus,
       rideHistory,
       updateRideStatus,
@@ -35,4 +35,4 @@ export const RideProvider = ({ children }) => {
   );
 };
 
-export const useRide = () => useContext(RideContext);
+export const useRideDriver = () => useContext(RideContext);

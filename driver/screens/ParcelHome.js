@@ -36,7 +36,7 @@ import Bonus from "./Bonus/Bonus";
 import { useLocation } from "../context/LocationContext";
 
 // API configuration
-const API_URL = "https://appapi.olyox.com/api/v1";
+const API_URL = "http://192.168.1.6:3100/api/v1";
 const RIDER_API = `${API_URL}/rider`;
 
 const { width, height } = Dimensions.get("window");
@@ -258,7 +258,7 @@ const ParcelHome = () => {
 
       if (response.data.success && response.data.partner) {
         const partnerData = response.data.partner;
-        const dashboard = await axios.get(`https://appapi.olyox.com/api/v1/rides/parcelDashboardData/${partnerData?._id}`);
+        const dashboard = await axios.get(`http://192.168.1.6:3100/api/v1/rides/parcelDashboardData/${partnerData?._id}`);
 
         if (dashboard.data.data) {
           const { totalDeliveries, inProgressDeliveries, totalEarnings, ridesRejected } = dashboard.data.data;
@@ -334,7 +334,7 @@ const ParcelHome = () => {
 
   const updateDriverLocation = useCallback(async (latitude, longitude) => {
     try {
-      await axios.post('https://appapi.olyox.com/webhook/cab-receive-location', {
+      await axios.post('http://192.168.1.6:3100/webhook/cab-receive-location', {
         riderId: userData?._id,
         latitude,
         longitude

@@ -27,7 +27,7 @@ import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get("window");
 const GOOGLE_MAPS_API_KEY = "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8";
-const API_BASE_URL = "https://appapi.olyox.com/api/v1";
+const API_BASE_URL = "http://192.168.1.6:3100/api/v1";
 // Loading steps with more engaging descriptions
 const LOADING_STEPS = [
   "Initializing your delivery request...",

@@ -34,7 +34,6 @@ const BottomNav = () => {
         { name: isGuest ? 'Login' : 'Profile', icon: '👤', route: isGuest ? 'Onboarding' : 'Profile' },
     ];
     
- 
     // Add Running Ride tab if currentRide exists
     const tabs = currentRide ? [
         ...baseTabs.slice(0, 2),

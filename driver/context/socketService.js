@@ -3,7 +3,7 @@ import io from "socket.io-client";
 import axios from "axios";
 import * as SecureStore from 'expo-secure-store';
 
-const SOCKET_URL = "https://appapi.olyox.com";
+const SOCKET_URL = "http://192.168.1.6:3100";
 let socket = null;
 let pingIntervalRef = null;
 let networkStateRef = null;
@@ -211,7 +211,7 @@ export const fetchUserData = async () => {
         log.debug("Auth token retrieved successfully");
 
         const response = await axios.get(
-            "https://appapi.olyox.com/api/v1/rider/user-details",
+            "http://192.168.1.6:3100/api/v1/rider/user-details",
             {
                 headers: { Authorization: `Bearer ${token}` },
                 timeout: 10000 // 10 second timeout
@@ -338,21 +338,21 @@ export const initializeSocket = async ({ userType = "driver", userId }) => {
                 const errorTime = new Date().toLocaleTimeString();
                 reconnectAttempts++;
                 
-                log.error(`Connection error at ${errorTime} (attempt ${reconnectAttempts})`, {
-                    message: error.message,
-                    description: error.description,
-                    type: error.type,
-                    transport: error.transport
-                });
+                // log.error(`Connection error at ${errorTime} (attempt ${reconnectAttempts})`, {
+                //     message: error.message,
+                //     description: error.description,
+                //     type: error.type,
+                //     transport: error.transport
+                // });
 
                 // Check network state on connection error
                 try {
                     const networkState = await NetInfo.fetch();
-                    log.network("Network state on connection error", {
-                        isConnected: networkState.isConnected,
-                        isInternetReachable: networkState.isInternetReachable,
-                        type: networkState.type
-                    });
+                    // log.network("Network state on connection error", {
+                    //     isConnected: networkState.isConnected,
+                    //     isInternetReachable: networkState.isInternetReachable,
+                    //     type: networkState.type
+                    // });
                 } catch (netError) {
                     log.error("Error checking network during connection error", { error: netError.message });
                 }
@@ -546,14 +546,14 @@ export const initializeSocket = async ({ userType = "driver", userId }) => {
             });
 
             // Transport error event
-            socket.io.engine.transport.on('error', (error) => {
-                log.error("TRANSPORT ERROR EVENT", {
-                    error: error.message || error,
-                    transport: socket.io.engine.transport.name,
-                    readyState: socket.io.engine.transport.readyState,
-                    timestamp: new Date().toISOString()
-                });
-            });
+            // socket.io.engine.transport.on('error', (error) => {
+            //     log.error("TRANSPORT ERROR EVENT", {
+            //         error: error.message || error,
+            //         transport: socket.io.engine.transport.name,
+            //         readyState: socket.io.engine.transport.readyState,
+            //         timestamp: new Date().toISOString()
+            //     });
+            // });
         });
     } else {
         log.info("Socket already exists, returning existing instance", {

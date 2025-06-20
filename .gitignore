@@ -4,6 +4,8 @@
 ./driver/node_modules
 ./backend/node_modules
 ./user/node_modules
+node_modules/
+**/node_modules/
 
 # Expo
 .expo/

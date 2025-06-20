@@ -8,7 +8,7 @@ import { Audio } from 'expo-av';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import useUserDetails from '../../../hooks/user/User.hook';
 
-const API_BASE_URL = 'https://appapi.olyox.com/api/v1';
+const API_BASE_URL = 'http://192.168.1.6:3100/api/v1';
 
 export default function NewParcelLive() {
     const route = useRoute();

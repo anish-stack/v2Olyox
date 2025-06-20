@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import * as SecureStore from 'expo-secure-store'; // assuming you're using expo-secure-store
 
-const API_URL_APP = `https://appapi.olyox.com`;
+const API_URL_APP = `http://192.168.1.6:3100`;
 
 const useGetCoupons = () => {
   const [coupons, setCoupons] = useState([]);

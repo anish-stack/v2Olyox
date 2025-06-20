@@ -26,7 +26,7 @@ import axios from 'axios';
 import { useRide } from '../../context/RideContext';
 
 const { width, height } = Dimensions.get('window');
-const API_BASE_URL = 'https://appapi.olyox.com/api/v1';
+const API_BASE_URL = 'http://192.168.1.6:3100/api/v1';
 export function RideConfirmed() {
 
     const route = useRoute();

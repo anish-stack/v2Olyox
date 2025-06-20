@@ -7,7 +7,7 @@ import { CommonActions, useNavigation } from '@react-navigation/native'
 import * as SecureStore from 'expo-secure-store'
 import { useRideStatus } from "../context/CheckRideHaveOrNot.context"
 import { fetchUserData } from "../context/socketService"
-const API_BASE_URL = "https://appapi.olyox.com/api/v1"
+const API_BASE_URL = "http://192.168.1.6:3100/api/v1"
 
 export function useRideActions({ state, setState, rideDetails, socket, mapRef, soundRef }) {
   console.log("setState",setState)
@@ -97,7 +97,7 @@ export function useRideActions({ state, setState, rideDetails, socket, mapRef, s
 
     try {
       logDebug('Fetching ride details', { rideId });
-      const response = await axios.get(`https://appapi.olyox.com/rider/${rideId}`);
+      const response = await axios.get(`http://192.168.1.6:3100/rider/${rideId}`);
 
       if (!response.data) {
         throw new Error('No ride data returned from API');

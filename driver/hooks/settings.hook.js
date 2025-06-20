@@ -9,7 +9,7 @@ const useSettings = () => {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await axios.get('https://appapi.olyox.com/api/v1/admin/get_Setting');
+        const response = await axios.get('http://192.168.1.6:3100/api/v1/admin/get_Setting');
         console.log(response.data)
         setSettings(response.data); // Assuming API wraps in { success, data }
       } catch (err) {

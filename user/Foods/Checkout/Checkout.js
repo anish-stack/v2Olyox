@@ -306,7 +306,7 @@ const Checkout = () => {
   // Fetch user's current location and token
   const findCurrent = useCallback(async () => {
     try {
-      const data = await axios.post(`https://appapi.olyox.com/Fetch-Current-Location`, {
+      const data = await axios.post(`http://192.168.1.6:3100/Fetch-Current-Location`, {
         lat: location?.coords?.latitude,
         lng: location?.coords?.longitude,
       })
@@ -326,7 +326,7 @@ const Checkout = () => {
     setCouponsLoading(true)
     setCouponsError(null)
     try {
-      const response = await axios.get("https://appapi.olyox.com/api/v1/tiffin/tiffin-coupons")
+      const response = await axios.get("http://192.168.1.6:3100/api/v1/tiffin/tiffin-coupons")
       if (response.data.success) {
         // Filter only active coupons
         const activeCoupons = response.data.data.filter((coupon) => coupon.active)
@@ -458,7 +458,7 @@ const Checkout = () => {
 
     try {
       const response = await axios.post(
-        `https://appapi.olyox.com/api/v1/tiffin/create_order_of_food`,
+        `http://192.168.1.6:3100/api/v1/tiffin/create_order_of_food`,
         {
           order_items: items,
           orderId: "ORD" + Math.floor(Math.random() * 1000000),

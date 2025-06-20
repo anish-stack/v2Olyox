@@ -39,7 +39,7 @@ const DOCUMENTS = [
   { id: 'profile', title: 'profile', label: 'Profile Image', icon: 'person' },
 ];
 
-const API_URL = 'https://appapi.olyox.com/api/v1/rider/rider-upload';
+const API_URL = 'http://192.168.1.6:3100/api/v1/rider/rider-upload';
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB in bytes
 
 export default function Documents() {
