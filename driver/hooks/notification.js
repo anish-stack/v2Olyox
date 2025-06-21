@@ -3,7 +3,7 @@ import { Platform, PermissionsAndroid, AppState } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
-
+import { Audio } from 'expo-av';
 const FCM_TOKEN_STORAGE_KEY = '@app:fcmToken';
 
 // Configure expo notifications
@@ -11,7 +11,7 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldSetBadge: false,
   }),
 });
 
@@ -20,7 +20,7 @@ const requestNotificationsPermission = async () => {
   return {
     status:
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL
         ? 'granted'
         : 'denied',
   };
@@ -40,12 +40,12 @@ const requestAndroidPermission = async (permission) => {
 const requestExpoNotificationPermission = async () => {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
-  
+
   if (existingStatus !== 'granted') {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-  
+
   return finalStatus === 'granted';
 };
 
@@ -56,9 +56,9 @@ const showExpoNotification = async (title, body, data = {}) => {
       title,
       body,
       data,
-      vibrate:true,
-      sticky:true,
-      sound:'default'
+      vibrate: true,
+      sticky: true,
+      sound: 'default'
     },
     trigger: null, // Show immediately
   });
@@ -70,10 +70,10 @@ const useNotificationPermission = () => {
   const [fcmToken, setFcmToken] = useState(null);
   const [lastNotification, setLastNotification] = useState(null);
   const [lastFcmMessage, setLastFcmMessage] = useState(null);
-  
+
   const notificationListener = useRef();
   const responseListener = useRef();
-  
+
   // Save FCM token to storage
   const storeFcmToken = async (token) => {
     try {
@@ -82,7 +82,7 @@ const useNotificationPermission = () => {
       console.error('❌ Error storing FCM token:', error);
     }
   };
-  
+
   // Get stored FCM token
   const getStoredFcmToken = async () => {
     try {
@@ -113,7 +113,7 @@ const useNotificationPermission = () => {
 
       // Request permissions for Expo Notifications
       const expoPermissionGranted = await requestExpoNotificationPermission();
-      
+
       const granted = status === 'granted' && expoPermissionGranted;
       setPermissionStatus(granted ? 'granted' : 'denied');
       setIsGranted(granted);
@@ -140,10 +140,20 @@ const useNotificationPermission = () => {
         setFcmToken(storedToken);
       }
     };
-    
+
     initializeData();
   }, []);
-
+  const playSound = async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require('./sound.mp3')
+      );
+      console.log('🔊 Playing notification sound');
+      await sound.playAsync();
+    } catch (error) {
+      console.log('❌ Error playing sound:', error);
+    }
+  };
   useEffect(() => {
     requestPermission();
 
@@ -158,7 +168,7 @@ const useNotificationPermission = () => {
     const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
       console.log('📩 FCM Message in foreground:', remoteMessage);
       setLastFcmMessage(remoteMessage);
-      
+
       // Show notification using Expo Notifications
       await showExpoNotification(
         remoteMessage.notification?.title || 'New Notification',
@@ -184,6 +194,14 @@ const useNotificationPermission = () => {
     // Set background handler (only once globally)
     messaging().setBackgroundMessageHandler(async remoteMessage => {
       console.log('📩 Message handled in background:', remoteMessage);
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: remoteMessage.notification?.title || 'New Message',
+          body: remoteMessage.notification?.body || '',
+         sound: 'sound',
+        },
+        trigger: null,
+      });
       // Note: this won't update state directly as the app is in background
       return remoteMessage;
     });
@@ -203,6 +221,21 @@ const useNotificationPermission = () => {
     // Set up Expo Notification listeners
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       console.log('📱 Expo Notification received:', notification);
+      const playSound = async () => {
+        try {
+          const { sound } = await Audio.Sound.createAsync(
+            require('./sound.mp3') // make sure the path is correct
+          );
+          await sound.playAsync();
+        } catch (error) {
+          console.log('❌ Error playing sound:', error);
+        }
+      };
+      if (AppState.currentState === 'active') {
+        playSound(); // ✅ only in foreground
+      } else {
+        playSound(); // ✅ only in background
+      }
       setLastNotification(notification);
     });
 
@@ -227,10 +260,10 @@ const useNotificationPermission = () => {
     return showExpoNotification(title, body, data);
   };
 
-  return { 
-    permissionStatus, 
-    isGranted, 
-    requestPermission, 
+  return {
+    permissionStatus,
+    isGranted,
+    requestPermission,
     fcmToken,
     getToken: async () => fcmToken || await getStoredFcmToken(),
     showNotification,

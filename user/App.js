@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -65,6 +65,7 @@ import { find_me } from './utils/helpers';
 import axios from 'axios';
 import OlyoxAppUpdate from './context/CheckAppUpdate';
 import OnWayRide from './New Screen/OnWayRide';
+import RateRiderOrRide from './New Screen/RateRiderOrRide';
 
 const Stack = createNativeStackNavigator();
 
@@ -77,9 +78,9 @@ Sentry.init({
 });
 
 // Constants
-const MAX_LOADING_TIME = 5000; // 5 seconds max loading time
-const MIN_UPDATE_INTERVAL = 10000; // Minimum time between location state updates
-const MAX_RETRY_ATTEMPTS = 3; // Maximum location retry attempts
+const MAX_LOADING_TIME = 5000;
+const MIN_UPDATE_INTERVAL = 10000;
+const MAX_RETRY_ATTEMPTS = 3;
 const API_URL = "http://192.168.1.6:3100/api/v1";
 
 // Define location error types
@@ -100,9 +101,62 @@ const isSignificantLocationChange = (prevLocation, newLocation) => {
   const latDiff = Math.abs(prevCoords.latitude - newCoords.latitude);
   const lngDiff = Math.abs(prevCoords.longitude - newCoords.longitude);
 
-  // Consider it significant if coordinates differ by more than ~10m
   return (latDiff > 0.0001 || lngDiff > 0.0001);
 };
+
+// Memoized LocationErrorScreen wrapper to prevent recreating on every render
+const LocationErrorScreenWrapper = React.memo(({ locationError, openSettings, getLocationInBackground }) => (
+  <LocationErrorScreen
+    getLocationInBackground={getLocationInBackground}
+    locationError={locationError}
+    openSettings={openSettings}
+  />
+));
+
+// Memoized error banner component
+const ErrorBanner = React.memo(({ locationError }) => {
+  const handlePress = useCallback(async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        await Linking.openURL('app-settings:');
+      } else {
+        await IntentLauncher.startActivityAsync(
+          IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
+          {
+            data: 'package:' + Application.applicationId,
+          }
+        );
+      }
+    } catch (error) {
+      console.error('Error opening settings:', error);
+      Sentry.captureException(error);
+    }
+  }, []);
+
+  if (!locationError) return null;
+
+  return (
+    <TouchableOpacity style={styles.errorBanner} onPress={handlePress}>
+      <Text style={styles.errorBannerText}>
+        Location service issue. Tap to fix.
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// Memoized loading screen component
+const LoadingScreen = React.memo(() => (
+  <View style={styles.loaderContainer}>
+    <StatusBar style="auto" />
+    <LottieView
+      source={require('./location.json')}
+      autoPlay
+      loop
+      style={styles.lottieAnimation}
+    />
+    <Text style={styles.loadingText}>Getting ready...</Text>
+  </View>
+));
 
 const App = () => {
   // State
@@ -117,71 +171,12 @@ const App = () => {
   const watchSubscriptionRef = useRef(null);
   const lastLocationUpdateTimeRef = useRef(0);
   const userDataRef = useRef(null);
+  const fcmTokenSentRef = useRef(false);
 
   // Hooks
   const { isGranted, requestPermission, deviceId, fcmToken } = useNotificationPermission();
 
-  // Check login status
-  useEffect(() => {
-    const checkLoginStatus = async () => {
-      try {
-        const db_token = await tokenCache.getToken('auth_token_db');
-        setIsLogin(db_token !== null);
-
-        if (db_token !== null) {
-          // If logged in, also fetch and store user data for later use
-          const userData = await find_me();
-          userDataRef.current = userData;
-        }
-      } catch (error) {
-        console.error('Error fetching tokens:', error);
-        Sentry.captureException(error);
-      }
-    };
-
-    checkLoginStatus();
-
-    // Set timeout to proceed regardless of location status
-    const timer = setTimeout(() => {
-      setInitialLoading(false);
-    }, MAX_LOADING_TIME);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // FCM Token handling
-  useEffect(() => {
-    const sendFcmTokenToServer = async () => {
-      // Skip if token was already sent or no token exists
-      if (fcmTokenSent || !fcmToken) return;
-
-      // Wait for user data to be available
-      const userData = userDataRef.current;
-      if (!userData || !userData?.user?._id) return;
-
-      try {
-        console.log("📤 Sending FCM token to server:", { fcmToken, userId: userData.user._id });
-
-        await axios.post(`${API_URL}/rider/fcm/add`, {
-          fcm: fcmToken,
-          id: userData.user._id,
-        });
-
-        console.log("✅ FCM token sent successfully");
-        setFcmTokenSent(true);
-      } catch (error) {
-        console.error("❌ FCM registration error:", error?.response?.data || error.message);
-        Sentry.captureException(error);
-      }
-    };
-
-    // Attempt to send token whenever userDataRef or fcmToken changes
-    if (fcmToken && userDataRef.current?.user?._id && !fcmTokenSent) {
-      sendFcmTokenToServer();
-    }
-  }, [fcmToken, fcmTokenSent]);
-
-  // Open device settings
+  // Memoized open settings function
   const openSettings = useCallback(async () => {
     try {
       if (Platform.OS === 'ios') {
@@ -197,11 +192,9 @@ const App = () => {
     }
   }, []);
 
-  // Throttled location update function
+  // Memoized throttled location update function
   const updateLocationState = useCallback((newLocation) => {
     const now = Date.now();
-
-    // Store latest location in ref regardless of whether we update state
     locationRef.current = newLocation;
 
     if (now - lastLocationUpdateTimeRef.current >= MIN_UPDATE_INTERVAL ||
@@ -213,7 +206,7 @@ const App = () => {
     setInitialLoading(false);
   }, []);
 
-  // Location service manager
+  // Memoized location service manager
   const getLocationInBackground = useCallback(async () => {
     try {
       // Cleanup any existing subscription
@@ -239,11 +232,11 @@ const App = () => {
         return;
       }
 
-      // Step 3: Get quick but less accurate location first to reduce waiting time
+      // Step 3: Get quick but less accurate location first
       try {
         const quickLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Low, // Get fast result first
-          maximumAge: 60000, // Accept cached locations up to 1 minute old
+          accuracy: Location.Accuracy.Low,
+          maximumAge: 60000,
         });
 
         console.log("📍 Got quick initial location:", quickLocation);
@@ -257,13 +250,11 @@ const App = () => {
           updateLocationState(accurateLocation);
         }).catch(error => {
           console.log("Could not get accurate location:", error);
-          // Already have quick location, so no need to set error
         });
 
       } catch (error) {
         console.error('❌ Error getting location from App .js:', error);
 
-        // Try to get last known location as fallback
         try {
           const lastKnownLocation = await Location.getLastKnownPositionAsync();
           if (lastKnownLocation) {
@@ -302,11 +293,75 @@ const App = () => {
     }
   }, [updateLocationState]);
 
-  // Initial location fetch in background
+  // Check login status - only run once
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkLoginStatus = async () => {
+      try {
+        const db_token = await tokenCache.getToken('auth_token_db');
+        if (isMounted) {
+          setIsLogin(db_token !== null);
+
+          if (db_token !== null) {
+            const userData = await find_me();
+            if (isMounted) {
+              userDataRef.current = userData;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching tokens:', error);
+        Sentry.captureException(error);
+      }
+    };
+
+    checkLoginStatus();
+
+    // Set timeout to proceed regardless of location status
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        setInitialLoading(false);
+      }
+    }, MAX_LOADING_TIME);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  // FCM Token handling - optimized with ref to prevent multiple calls
+  useEffect(() => {
+    if (fcmTokenSentRef.current || !fcmToken || !userDataRef.current?.user?._id) {
+      return;
+    }
+
+    const sendFcmTokenToServer = async () => {
+      try {
+        console.log("📤 Sending FCM token to server:", { fcmToken, userId: userDataRef.current.user._id });
+
+        await axios.post(`${API_URL}/rider/fcm/add`, {
+          fcm: fcmToken,
+          id: userDataRef.current.user._id,
+        });
+
+        console.log("✅ FCM token sent successfully");
+        fcmTokenSentRef.current = true;
+        setFcmTokenSent(true);
+      } catch (error) {
+        console.error("❌ FCM registration error:", error?.response?.data || error.message);
+        Sentry.captureException(error);
+      }
+    };
+
+    sendFcmTokenToServer();
+  }, [fcmToken, userDataRef.current?.user?._id]);
+
+  // Initial location fetch - only run once
   useEffect(() => {
     getLocationInBackground();
 
-    // Cleanup function
     return () => {
       if (watchSubscriptionRef.current) {
         watchSubscriptionRef.current.remove();
@@ -314,24 +369,24 @@ const App = () => {
         console.log("🧹 Cleaned up location watcher.");
       }
     };
-  }, [getLocationInBackground]);
+  }, []); // Empty dependency array - only run once
 
-  // Handle location retry logic
+  // Handle location retry logic - optimized
   useEffect(() => {
     if ((locationError === ERROR_TYPES.TIMEOUT || locationError === ERROR_TYPES.UNKNOWN) &&
       locationFetchRetries <= MAX_RETRY_ATTEMPTS) {
-      const retryDelay = locationFetchRetries * 5000; // 5s, 10s, 15s
+      const retryDelay = locationFetchRetries * 5000;
       const retryTimer = setTimeout(() => {
         getLocationInBackground();
       }, retryDelay);
 
       return () => clearTimeout(retryTimer);
     }
-  }, [locationError, locationFetchRetries, getLocationInBackground]);
+  }, [locationError, locationFetchRetries]); // Removed getLocationInBackground from deps
 
-  // Handle notification permission request
+  // Handle notification permission request - optimized
   const handleRequestNotificationPermission = useCallback(async () => {
-    if (isGranted) return; // Skip if already granted
+    if (isGranted) return;
 
     console.log("🔔 Requesting notification permission...");
     try {
@@ -343,13 +398,12 @@ const App = () => {
     }
   }, [requestPermission, isGranted]);
 
-  // App initialization effect
+  // App initialization - only run once
   useEffect(() => {
     const initApp = async () => {
       console.log("🔄 App initialization started...");
       try {
         await handleRequestNotificationPermission();
-        // Minimum display time for splash screen
         await new Promise(resolve => setTimeout(resolve, 2000));
         console.log("✅ App initialized");
       } catch (error) {
@@ -359,10 +413,10 @@ const App = () => {
     };
 
     initApp();
-  }, [handleRequestNotificationPermission]);
+  }, []); // Empty dependency array
 
-  // Routes definition - memoized to prevent unnecessary re-renders
-  const routes = React.useMemo(() => (
+  // Routes definition - memoized with useMemo for better performance
+  const routes = useMemo(() => (
     <>
       <Stack.Screen name="Home" options={{ headerShown: false }} component={HomeScreen} />
       {/* Booking Ride Screens */}
@@ -370,9 +424,8 @@ const App = () => {
       <Stack.Screen name="second_step_of_booking" options={{ headerShown: false }} component={Show_Cabs} />
       <Stack.Screen name="confirm_screen" options={{ headerShown: false }} component={BookingConfirmation} />
       <Stack.Screen name="driver_match" options={{ headerShown: false }} component={DriverMatching} />
-        {/*<Stack.Screen name="RideStarted" options={{ headerShown: false }} component={RideConfirmed} />*/}
       <Stack.Screen name="RideStarted" options={{ headerShown: false }} component={OnWayRide} />
-      <Stack.Screen name="Rate_Your_ride" options={{ headerShown: false }} component={Ride_Rating} />
+      <Stack.Screen name="RateRiderOrRide" options={{ headerShown: false }} component={RateRiderOrRide} />
       {/* Hotel Booking Screens */}
       <Stack.Screen name="hotels-details" options={{ headerShown: false }} component={Hotels_details} />
       <Stack.Screen name="Hotel" options={{ headerShown: false }} component={AllHotel} />
@@ -407,12 +460,12 @@ const App = () => {
       <Stack.Screen name="policyauth" options={{ headerShown: true, title: "Olyox App Polices" }} component={Policy} />
       <Stack.Screen name="Help_me" options={{ headerShown: true, title: "Olyox Center" }} component={Help_On} />
 
-      {/* Error Screen - Only show if explicitly navigated to */}
+      {/* Error Screen */}
       <Stack.Screen
         name="LocationError"
         options={{ headerShown: false }}
         children={(props) => (
-          <LocationErrorScreen
+          <LocationErrorScreenWrapper
             {...props}
             getLocationInBackground={getLocationInBackground}
             locationError={locationError}
@@ -423,25 +476,12 @@ const App = () => {
     </>
   ), [locationError, openSettings, getLocationInBackground]);
 
-  // Loading screen with Lottie animation
+  // Early return for loading state
   if (initialLoading) {
-    return (
-      <View style={styles.loaderContainer}>
-        <StatusBar style="auto" />
-        <LottieView
-          source={require('./location.json')}
-          autoPlay
-          loop
-          style={styles.lottieAnimation}
-        />
-        <Text style={styles.loadingText}>Getting ready...</Text>
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
-
   return (
-
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SocketProvider>
         <LocationProvider initialLocation={locationRef.current}>
@@ -455,30 +495,7 @@ const App = () => {
                       <Stack.Navigator initialRouteName={'spalsh'}>
                         {routes}
                       </Stack.Navigator>
-
-                      {/* Overlay error banner if there's a location error but we're proceeding anyway */}
-                      {locationError && (
-                        <TouchableOpacity
-                          style={styles.errorBanner}
-                          onPress={async () => {
-                            if (Platform.OS === 'ios') {
-                              Linking.openURL('app-settings:');
-                            } else {
-                              // Open Android settings for the current app
-                              IntentLauncher.startActivityAsync(
-                                IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
-                                {
-                                  data: 'package:' + Application.applicationId,
-                                }
-                              );
-                            }
-                          }}
-                        >
-                          <Text style={styles.errorBannerText}>
-                            Location service issue. Tap to fix.
-                          </Text>
-                        </TouchableOpacity>
-                      )}
+                      <ErrorBanner locationError={locationError} />
                     </NavigationContainer>
                   </ErrorBoundaryWrapper>
                 </SafeAreaProvider>
@@ -488,7 +505,6 @@ const App = () => {
         </LocationProvider>
       </SocketProvider>
     </GestureHandlerRootView>
-
   );
 };
 
@@ -511,15 +527,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorBanner: {
-    backgroundColor: '#f44336', // Red alert color
+    backgroundColor: '#f44336',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
     margin: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4, // Android shadow
-    shadowColor: '#000', // iOS shadow
+    elevation: 4,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
@@ -532,7 +548,9 @@ const styles = StyleSheet.create({
   },
 });
 
-const WrappedApp = Sentry.wrap(App);
+// Memoize the main App component
+const MemoizedApp = React.memo(App);
+const WrappedApp = Sentry.wrap(MemoizedApp);
 
 const RootApp = () => (
   <FoodProvider>

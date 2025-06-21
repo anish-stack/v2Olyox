@@ -25,7 +25,6 @@ const screenHeight = Dimensions.get('window').height;
 
 export default function RideSearching({refreshing}) {
     const { userData, loading, error, fetchUserDetails, isOnline } = useFetchUserDetails();
-    const { lastNotification } = useNotificationPermission()
     const [rides, setRides] = useState([]);
     const [searching, setSearching] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -140,7 +139,6 @@ export default function RideSearching({refreshing}) {
             statusIntervalRef.current = null;
         }
     };
-        console.log("I am refreshing",refreshing)
 
     useEffect(() => {
         console.log("I am refreshing",refreshing)
@@ -211,7 +209,7 @@ export default function RideSearching({refreshing}) {
                 startStatusPolling(rideId);
 
             } else {
-                console.log("📍 No rides available");
+                
                 setRides([]);
                 setSearching(true);
                 setShowModal(false);
@@ -330,6 +328,12 @@ export default function RideSearching({refreshing}) {
 
         } catch (error) {
             console.error("❌ API Error while accepting ride:");
+                  setShowModal(false);
+            setModalOpen(false);
+          
+            setCurrentRide(null);
+            setRides([]);
+
             console.log("Error response:", error?.response?.data || error.message);
         }
     };

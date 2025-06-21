@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as Notifications from "expo-notifications";
-import { Platform, Alert } from "react-native";
+import { Platform, Alert, AppState } from "react-native";
+import { Audio } from 'expo-av';
 
 // Notification Handler
 Notifications.setNotificationHandler({
@@ -16,6 +17,17 @@ export default function useNotifications() {
   const notificationListener = useRef();
   const responseListener = useRef();
 
+    const playSound = async () => {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          require('./sound.mp3') 
+        );
+        console.log('🔊 Playing notification sound');
+        await sound.playAsync();
+      } catch (error) {
+        console.log('❌ Error playing sound:', error);
+      }
+    };
   useEffect(() => {
     // Register for push notifications
     registerForPushNotificationsAsync().then((token) => {
@@ -27,12 +39,19 @@ export default function useNotifications() {
 
     // Listener for incoming notifications
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("Notification Received:", notification);
+      console.log("Notification Received fom hook:", notification);
+    if (AppState.currentState === 'active') {
+        playSound(); // ✅ only in foreground
+      }
     });
 
     // Listener for user interaction with notifications
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
       console.log("Notification Response:", response);
+    if (AppState.currentState === 'active') {
+      playSound(); // ✅ only in foreground
+    }
+
     });
 
     return () => {

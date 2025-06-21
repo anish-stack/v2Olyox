@@ -16,6 +16,7 @@ const Bonus_Model = require("../models/Bonus_Model/Bonus_Model");
 const Parcel_Request = require("../models/Parcel_Models/Parcel_Request");
 const { sendDltMessage } = require("../utils/DltMessageSend");
 const { checkBhAndDoRechargeOnApp } = require("../PaymentWithWebDb/razarpay");
+const NewRideModelModel = require("../src/New-Rides-Controller/NewRideModel.model");
 cloudinary.config({
   cloud_name: "daxbcusb5",
   api_key: "984861767987573",
@@ -749,44 +750,54 @@ exports.uploadDocuments = async (req, res) => {
 
 exports.uploadPaymentQr = async (req, res) => {
   try {
-    const file = req.file || {};
+    console.log("📥 Incoming QR Upload Request");
 
+    const file = req.file;
     const userId = req.user.userId;
-    const findRider = await Rider.findById(userId);
 
-    if (!findRider) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+    console.log("📌 User ID:", userId);
+
+    if (!file || !file.path) {
+      console.log("❌ No file uploaded");
+      return res.status(400).json({ success: false, message: "No file uploaded" });
     }
 
-    const uploadedDocs = {};
+    const findRider = await Rider.findById(userId);
+    if (!findRider) {
+      console.log("❌ Rider not found");
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
 
+    console.log("☁️ Uploading to Cloudinary:", file.path);
     const uploadResponse = await cloudinary.uploader.upload(file.path, {
       folder: "rider_qrs",
     });
+
+    console.log("✅ Uploaded to Cloudinary:", uploadResponse.secure_url);
+
+    // Remove temp file
     fs.unlinkSync(file.path);
+    console.log("🧹 Temp file deleted from server");
 
+    // Save URL to rider profile
     findRider.YourQrCodeToMakeOnline = uploadResponse.secure_url;
-
     await findRider.save();
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "Documents uploaded successfully",
-        data: uploadResponse,
-      });
+    console.log("📦 Rider document updated with QR");
+
+    return res.status(201).json({
+      success: true,
+      message: "QR code uploaded successfully",
+      data: uploadResponse,
+    });
+
   } catch (error) {
-    console.error("Error uploading documents:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Documents upload failed",
-        error: error.message,
-      });
+    console.error("🚨 Error uploading QR code:", error);
+    return res.status(500).json({
+      success: false,
+      message: "QR code upload failed",
+      error: error.message,
+    });
   }
 };
 
@@ -824,19 +835,21 @@ exports.getMyAllDetails = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const findRideDetails = await rideRequestModel.find({
-      rider: user_id,
-      rideStatus: "completed",
+    const findRideDetails = await NewRideModelModel.find({
+      driver: user_id,
+      ride_status: "completed",
     });
+
+
 
     const totalRides = findRideDetails.length;
     const totalEarnings = findRideDetails.reduce(
-      (acc, cur) => acc + Number(cur.kmOfRide),
+      (acc, cur) => acc + Number(cur.pricing?.total_fare),
       0
     );
 
     const totalRatings = findRideDetails.reduce(
-      (acc, cur) => acc + (cur.RatingOfRide || 0),
+      (acc, cur) => acc + (cur.driver_rating?.rating || 0),
       0
     );
     const averageRating = totalRides > 0 ? totalRatings / totalRides : 0;
@@ -860,8 +873,8 @@ exports.getMyAllRides = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const findRideDetails = await rideRequestModel
-      .find({ rider: user_id })
+    const findRideDetails = await NewRideModelModel
+      .find({ driver: user_id })
       .sort({
         createdAt: -1,
       });
@@ -975,7 +988,7 @@ exports.markPaid = async (req, res) => {
   try {
     const { rechargePlan, expireData, approveRecharge, riderBh } =
       req.body || {};
-    console.log("rbody", req.body);
+
     // Find the rider by ID
     const findRider = await Rider.findOne({ BH: riderBh });
 

@@ -25,6 +25,7 @@ export default function Report({ isRefresh }) {
                         Authorization: `Bearer ${token}`,
                     },
                 });
+                console.log("🚀 Report Data:", response.data);
                 setReportData(response.data);
             } catch (err) {
                 console.error("Error fetching report data:", err);

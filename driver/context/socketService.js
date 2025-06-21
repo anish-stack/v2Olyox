@@ -218,12 +218,7 @@ export const fetchUserData = async () => {
             }
         );
         
-        log.success("User data fetched successfully", { 
-            userId: response.data.partner?.id || response.data.partner?._id,
-            userName: response.data.partner?.name,
-            status: response.data.partner?.status
-        });
-        
+ 
         return response.data.partner;
     } catch (error) {
         if (error.code === 'ECONNABORTED') {
@@ -261,12 +256,12 @@ export const initializeSocket = async ({ userType = "driver", userId }) => {
     // Check network state before connecting
     try {
         const networkState = await NetInfo.fetch();
-        log.network("Current network state", {
-            isConnected: networkState.isConnected,
-            isInternetReachable: networkState.isInternetReachable,
-            type: networkState.type,
-            details: networkState.details
-        });
+        // log.network("Current network state", {
+        //     isConnected: networkState.isConnected,
+        //     isInternetReachable: networkState.isInternetReachable,
+        //     type: networkState.type,
+        //     details: networkState.details
+        // });
 
         if (!networkState.isConnected) {
             log.error("Cannot initialize socket - no network connection");

@@ -9,7 +9,7 @@ export const NewRidePooling = async (riderId) => {
             `${API_BASE_URL}/new/pooling-rides-for-rider?riderId=${riderId}`
         );
         const ridesData = response.data.data;
-        console.log("I am Ride Data", ridesData)
+        // console.log("I am Ride Data", ridesData)
         if (!ridesData) {
             return null
         } else {

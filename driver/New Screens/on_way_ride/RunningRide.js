@@ -12,19 +12,19 @@ import {
     Linking,
     Dimensions,
     Image,
+    FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import HeaderNew from "../components/Header/HeaderNew";
 import React, { useEffect, useState, useCallback } from "react";
-import { CommonActions, useNavigation, useRoute } from "@react-navigation/native";
+import { CommonActions, useNavigation, useRoute, useFocusEffect, useNavigationState } from "@react-navigation/native";
 import axios from "axios";
 import { useFetchUserDetails } from "../../hooks/New Hookes/RiderDetailsHooks";
 import NewMap from "../components/running-ride/NewMap";
-import { MaterialIcons } from '@expo/vector-icons';
-import QRCode from 'react-native-qrcode-svg';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, colors } from "../NewConstant";
 
-const { width } = Dimensions.get('window');
+const { width ,height } = Dimensions.get('window');
 
 export default function RunningRide() {
     const route = useRoute();
@@ -38,7 +38,10 @@ export default function RunningRide() {
     const [error, setError] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
-
+    const [cancelReasons, setCancelReasons] = useState([])
+    const [showCancelModal, setCancelModal] = useState(false)
+    const [selectedReason, setSelectedReason] = useState(null)
+    const [cancelling, setCancelling] = useState(false)
     // New states for enhanced functionality
     const [rideStep, setRideStep] = useState('pickup'); // pickup, otp, drop, payment
     const [showOtpModal, setShowOtpModal] = useState(false);
@@ -82,7 +85,7 @@ export default function RunningRide() {
                 if (response.data?.data) {
                     setActiveRideData(response.data.data);
                     setRetryCount(0);
-                    console.log("✅ Ride details fetched successfully", response.data.data);
+                    // console.log("✅ Ride details fetched successfully", response.data.data);
 
                     // Set ride step based on ride status
                     const status = response.data.data.ride_status;
@@ -124,6 +127,58 @@ export default function RunningRide() {
         }
     }, [userData?.on_ride_id, retryCount]);
 
+
+    const fetchCancelReasons = useCallback(async () => {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`)
+            if (response.data?.data) {
+                setCancelReasons(response.data.data)
+            }
+        } catch (err) {
+            Alert.alert("Error", "Failed to fetch cancel reasons")
+        }
+    }, [])
+
+
+    // 1. Fix the handleCancel function - use activeRideData._id instead of undefined ride_id
+    const handleCancel = useCallback(async () => {
+        if (!selectedReason || !activeRideData?._id) return
+
+        setCancelling(true)
+        try {
+            // Use activeRideData._id instead of ride_id
+            await axios.post(`${API_BASE_URL}/new/ride/cancel`, {
+                ride: activeRideData._id,
+                cancelBy: 'driver',
+                reason_id: selectedReason._id,
+                reason: selectedReason.name,
+            })
+
+            Alert.alert("Success", "Ride cancelled successfully", [
+                {
+                    text: "OK",
+                    onPress: () => {
+                        setCancelModal(false)
+                        setSelectedReason(null) // Reset selected reason
+                        // Navigate back or to appropriate screen
+                        navigate.dispatch(
+                            CommonActions.reset({
+                                index: 0,
+                                routes: [{ name: 'Home' }],
+                            })
+                        );
+                    },
+                },
+            ])
+        } catch (err) {
+            console.error("Cancel ride error:", err.response?.data || err.message)
+            Alert.alert("Error", err.response?.data?.message || "Failed to cancel ride. Please try again.")
+        } finally {
+            setCancelling(false)
+        }
+    }, [selectedReason, activeRideData?._id])
+
+
     // Manual retry function
     const handleRetry = useCallback(() => {
         setRetryCount(0);
@@ -155,56 +210,76 @@ export default function RunningRide() {
 
 
 
-useEffect(() => {
-  console.log("📡 Ride status polling started");
+    useFocusEffect(
+        useCallback(() => {
+            const currentRouteName = navigate.getState()?.routes?.[navigate.getState().index]?.name;
+            console.log("🔍 Current route name:", currentRouteName);
 
-  const interval = setInterval(async () => {
-    console.log("⏱️ Checking ride status...", activeRideData?.ride_status);
+            if (currentRouteName !== 'start') {
+                console.log("🔕 Current route is not 'Start'. Skipping polling.");
+                return;
+            }
 
-    try {
-      await fetchActiveRideDetails();
-      console.log("✅ Ride details refreshed");
+            console.log("📡 Ride status polling started At Screen Start");
 
-      if (activeRideData?.ride_status === 'cancelled' || activeRideData?.ride_status === 'completed') {
-        console.log(`🚨 Ride status is ${activeRideData.ride_status}. Showing alert and resetting navigation.`);
+            const pollingInterval =
+                activeRideData?.ride_status === 'in_progress' ? 20000 : 5000;
 
-        Alert.alert(
-          "Ride Status",
-          activeRideData?.ride_status === 'cancelled'
-            ? "Your ride has been cancelled."
-            : "Your ride has been completed.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                console.log("🔄 Navigating to Home screen...");
-                navigate.dispatch(
-                  CommonActions.reset({
-                    index: 0,
-                    routes: [{ name: 'Home' }],
-                  })
-                );
-              },
-            },
-          ],
-          { cancelable: false }
-        );
+            console.log(`⏱️ Setting polling interval to ${pollingInterval / 1000} seconds`);
 
-        clearInterval(interval);
-        console.log("🛑 Polling stopped after ride status was handled");
-      }
-    } catch (err) {
-      console.error("❌ Error while polling ride status:", err);
-    }
-  }, 5000);
+            const interval = setInterval(async () => {
+                console.log("⏱️ Checking ride status...", activeRideData?.ride_status);
 
-  return () => {
-    console.log("🧹 Cleanup: clearing ride status polling interval");
-    clearInterval(interval);
-  };
-}, [activeRideData?.ride_status]);
+                try {
+                    await fetchActiveRideDetails();
+                    console.log("✅ Ride details refreshed");
 
+                    const rideStatus = activeRideData?.ride_status;
+                    const paymentStatus = activeRideData?.payment_status;
 
+                    const isCancelled = rideStatus === 'cancelled';
+                    const isCompletedWithPayment =
+                        rideStatus === 'completed' && paymentStatus === 'completed';
+
+                    if (isCancelled || isCompletedWithPayment) {
+                        console.log(`🚨 Ride status is ${rideStatus}. Showing alert and resetting navigation.`);
+
+                        Alert.alert(
+                            "Ride Status",
+                            isCancelled
+                                ? "Your ride has been cancelled."
+                                : "Your ride has been completed successfully.",
+                            [
+                                {
+                                    text: "OK",
+                                    onPress: () => {
+                                        console.log("🔄 Navigating to Home screen...");
+                                        navigate.dispatch(
+                                            CommonActions.reset({
+                                                index: 0,
+                                                routes: [{ name: 'Home' }],
+                                            })
+                                        );
+                                    },
+                                },
+                            ],
+                            { cancelable: false }
+                        );
+
+                        clearInterval(interval);
+                        console.log("🛑 Polling stopped after ride status was handled");
+                    }
+                } catch (err) {
+                    console.error("❌ Error while polling ride status:", err);
+                }
+            }, pollingInterval);
+
+            return () => {
+                console.log("🧹 Cleanup: clearing ride status polling interval");
+                clearInterval(interval);
+            };
+        }, [activeRideData?.ride_status, activeRideData?.payment_status, navigate])
+    );
     // Fetch ride details when userData is available
     useEffect(() => {
         if (userData && !userLoading) {
@@ -215,28 +290,33 @@ useEffect(() => {
 
     // Handle isReached callback
     const handleIsReached = useCallback(() => {
-        console.log("🎯 Driver has reached pickup location");
+
         setIsReached(true);
     }, []);
 
     // API calls
     const markReached = async () => {
         try {
-            //          const validStatus = ['driver_arrived', 'completed', 'cancelled'];
-
             const data = {
                 riderId: userData?._id,
                 rideId: activeRideData?._id,
                 status: 'driver_arrived'
             }
 
-            console.log("data send", data)
+
             const response = await axios.post(`${API_BASE_URL}/new/change-ride-status`, data);
             if (response.data.success) {
                 setRideStep('otp');
                 setShowOtpModal(true);
                 await onRefresh()
-                Alert.alert('Success', 'Pickup location reached!');
+                Alert.alert('Success', 'Pickup location reached!', [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            navigate.replace(route.name, route.params); // Reloads screen
+                        },
+                    },
+                ]);
             }
         } catch (error) {
             console.log(error.response.data)
@@ -262,7 +342,15 @@ useEffect(() => {
                 setOtp('');
                 setShowOtpModal(false);
                 setRideStep('drop');
-                Alert.alert('Success', 'OTP verified! Ride started.');
+                  Alert.alert('Success', 'OTP verified! Ride started!', [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            navigate.replace(route.name, route.params); // Reloads screen
+                        },
+                    },
+                ]);
+            
                 fetchActiveRideDetails();
             }
         } catch (error) {
@@ -357,6 +445,10 @@ useEffect(() => {
         }
     };
 
+
+
+
+
     // Render tab content
     const renderTabContent = () => {
         if (!activeRideData) return null;
@@ -432,6 +524,18 @@ useEffect(() => {
                                 <Text style={styles.detailLabel}>Payment Method:</Text>
                                 <Text style={styles.detailValue}>{activeRideData.payment_method}</Text>
                             </View>
+
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={() => {
+                                    fetchCancelReasons()
+                                    setCancelModal(true) // Add this line to show the modal
+                                }}
+                            >
+                                <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
+                                <Text style={[styles.menuText, { color: "#FF3B30" }]}>Cancel Ride</Text>
+                            </TouchableOpacity>
+
                         </View>
                     </View>
                 );
@@ -625,6 +729,61 @@ useEffect(() => {
                     </TouchableOpacity>
                 </View>
             )}
+            <Modal visible={showCancelModal} transparent animationType="slide" onRequestClose={() => setCancelModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Cancel Ride</Text>
+                            <TouchableOpacity onPress={() => {
+
+                                fetchCancelReasons()
+                                setCancelModal(true)
+                            }}>
+                                <Ionicons name="close" size={24} color="#333" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.modalSubtitle}>Please select a reason for cancellation:</Text>
+
+                        <FlatList
+                            data={cancelReasons}
+                            keyExtractor={(item) => item._id}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[styles.reasonItem, selectedReason?._id === item._id && styles.selectedReason]}
+                                    onPress={() => setSelectedReason(item)}
+                                >
+                                    <View style={styles.radioButton}>
+                                        {selectedReason?._id === item._id && <View style={styles.radioSelected} />}
+                                    </View>
+                                    <View style={styles.reasonContent}>
+                                        <Text style={styles.reasonName}>{item.name}</Text>
+                                        <Text style={styles.reasonDescription}>{item.description}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            )}
+                            style={styles.reasonsList}
+                        />
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelModalButton} onPress={() => setCancelModal(false)}>
+                                <Text style={styles.cancelModalText}>Back</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.confirmButton, !selectedReason && styles.disabledButton]}
+                                onPress={handleCancel}
+                                disabled={!selectedReason || cancelling}
+                            >
+                                {cancelling ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.confirmButtonText}>Confirm Cancel</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* OTP Modal */}
             <Modal
@@ -1235,5 +1394,161 @@ const styles = StyleSheet.create({
         color: "#adb5bd",
         marginTop: 8,
         textAlign: 'center',
+    },
+    menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#ffe5e5',
+        marginBottom: 10,
+    },
+    menuText: {
+        fontSize: 16,
+        fontWeight: '500',
+        marginLeft: 10,
+        color: '#333',
+    },
+     modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "flex-end",
+    },
+    modalContent: {
+        backgroundColor: "#fff",
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: height * 0.8,
+    },
+    modalHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "#f0f0f0",
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: "600",
+        color: "#333",
+    },
+    modalSubtitle: {
+        fontSize: 16,
+        color: "#666",
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+    },
+    reasonsList: {
+        maxHeight: height * 0.4,
+    },
+    reasonItem: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "#f8f8f8",
+    },
+    selectedReason: {
+        backgroundColor: "#E3F2FD",
+    },
+    radioButton: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: "#007AFF",
+        justifyContent: "center",
+        alignItems: "center",
+        marginTop: 2,
+    },
+    radioSelected: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: "#007AFF",
+    },
+    reasonContent: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    reasonName: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#333",
+    },
+    reasonDescription: {
+        fontSize: 14,
+        color: "#666",
+        marginTop: 4,
+    },
+    modalActions: {
+        flexDirection: "row",
+        paddingHorizontal: 20,
+        paddingVertical: 20,
+        borderTopWidth: 1,
+        borderTopColor: "#f0f0f0",
+    },
+    cancelModalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#ddd",
+        alignItems: "center",
+        marginRight: 8,
+    },
+    cancelModalText: {
+        fontSize: 16,
+        color: "#333",
+        fontWeight: "500",
+    },
+    confirmButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        backgroundColor: "#FF3B30",
+        alignItems: "center",
+        marginLeft: 8,
+    },
+    disabledButton: {
+        backgroundColor: "#ccc",
+    },
+    confirmButtonText: {
+        fontSize: 16,
+        color: "#fff",
+        fontWeight: "600",
+    },
+    errorContainer: {
+        position: "absolute",
+        top: 100,
+        left: 16,
+        right: 16,
+        backgroundColor: "#FF3B30",
+        padding: 16,
+        borderRadius: 12,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    errorText: {
+        color: "#fff",
+        fontSize: 14,
+        flex: 1,
+    },
+    retryButton: {
+        backgroundColor: "#fff",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    retryText: {
+        color: "#FF3B30",
+        fontWeight: "600",
     },
 })

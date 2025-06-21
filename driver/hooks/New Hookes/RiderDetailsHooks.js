@@ -45,6 +45,7 @@ export const useFetchUserDetails = () => {
                     setUserData(response.data.partner);
 
                     const isAvailable = response.data.partner.isAvailable === true;
+                    console.log("User availability status:", isAvailable);
                     setIsOnline(isAvailable);
                     setLoading(false);
                     return response.data.partner;
@@ -65,7 +66,6 @@ export const useFetchUserDetails = () => {
     }, [makeAuthenticatedRequest]);
 
 
-    
 
     return {
         userData,

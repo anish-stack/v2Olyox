@@ -11,6 +11,8 @@ import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import * as Notifications from 'expo-notifications';
 import * as BackgroundFetch from 'expo-background-fetch';
+
+import * as TaskManager from 'expo-task-manager';
 import * as Sentry from '@sentry/react-native';
 import './context/firebaseConfig';
 
@@ -18,12 +20,13 @@ import { name as appName } from './app.json';
 import { store } from './redux/store';
 import { SocketProvider } from './context/SocketContext';
 import { LocationProvider } from './context/LocationContext';
-import { registerBackgroundSocketTask } from './context/backgroundTasks/socketTask';
+import { registerBackgroundSocketTask, testBackgroundTaskNow } from './context/backgroundTasks/socketTask';
 
 import Loading from './components/Loading';
 import ActiveRideButton from './ActiveRideButton';
 import ErrorBoundaryWrapper from './ErrorBoundary';
 
+const TASK_NAME = 'BACKGROUND_NOTIFICATION_TASK';
 // Screens
 import OnboardingScreen from './screens/onboarding/OnboardingScreen';
 import RegistrationForm from './screens/onboarding/registration/RegistrationForm';
@@ -69,6 +72,15 @@ Sentry.init({
   tracesSampleRate: 1.0,
 });
 
+TaskManager.defineTask(TASK_NAME, async ({ data, error, executionInfo }) => {
+  if (error) {
+    console.log('❌ Background Task Error:', error);
+    return;
+  }
+
+  console.log('📥 Background notification received From App.js:', data ? data : null);
+});
+
 export async function getExpoPushToken() {
   const tokenData = await Notifications.getExpoPushTokenAsync();
   console.log("Expo Push Token:", tokenData.data);
@@ -84,10 +96,10 @@ const App = () => {
   const [currentRoute, setCurrentRoute] = useState(null);
 
   // Use the notification hook
-  const { 
-    permissionStatus, 
-    isGranted, 
-    requestPermission, 
+  const {
+    permissionStatus,
+    isGranted,
+    requestPermission,
     fcmToken,
     getToken,
     showNotification,
@@ -171,19 +183,16 @@ const App = () => {
     updateTokenOnServer();
   }, [fcmToken]);
 
-  // Handle notification responses (when user taps on notification)
   useEffect(() => {
     if (lastNotification) {
       console.log('📱 Handling notification:', lastNotification);
-      // Handle notification tap - navigate to appropriate screen
       const data = lastNotification.request?.content?.data || {};
-      
+
       if (data.type === 'ride_request') {
         navigationRef.navigate('NewRideScreen', { rideId: data.ride_id });
       } else if (data.type === 'ride_update') {
         navigationRef.navigate('start', { rideId: data.ride_id });
       }
-      // Add more navigation logic based on your notification types
     }
   }, [lastNotification, navigationRef]);
 
@@ -192,7 +201,7 @@ const App = () => {
     if (lastFcmMessage) {
       console.log('🔥 Handling FCM message:', lastFcmMessage);
       const data = lastFcmMessage.data || {};
-      
+
       // You can add custom logic here based on FCM message data
       if (data.type === 'ride_status_update') {
         // Refresh ride data or update UI
@@ -214,18 +223,102 @@ const App = () => {
     return () => clearTimeout(timeout);
   }, [navigationRef]);
 
-  // useEffect(() => {
-  //   const setupBackgroundTask = async () => {
-  //     const status = await BackgroundFetch.getStatusAsync();
-  //     if (status === BackgroundFetch.BackgroundFetchStatus.Available || status === BackgroundFetch.BackgroundFetchStatus.Restricted) {
-  //       await registerBackgroundSocketTask();
-  //     } else {
-  //       console.warn('⛔️ Background fetch not permitted');
-  //     }
-  //   };
+  // Helper function to check active ride status when app comes back
+  const checkActiveRideStatus = async () => {
+    try {
+      const token = await SecureStore.getItemAsync('auth_token_cab');
+      if (token) {
+        console.log('🔄 Checking active ride status after app return...');
+        const response = await axios.get(
+          'https://www.appapi.olyox.com/api/v1/rider/user-details',
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
 
-  //   setupBackgroundTask();
-  // }, []);
+        const partner = response.data.partner;
+        if (partner.hasOwnProperty('on_ride_id') && partner.on_ride_id != null) {
+          console.log('🚗 Active ride found after app return');
+          setActiveRide(true);
+          await foundRideDetails(partner.on_ride_id);
+        } else {
+          console.log('✅ No active ride after app return');
+          setActiveRide(false);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking ride status after app return:', error);
+    }
+  };
+
+  // APP STATE MONITORING - This will log "I am back app" when app returns from background
+  useEffect(() => {
+    let previousAppState = AppState.currentState;
+
+    const handleAppStateChange = (nextAppState) => {
+      console.log(`📱 App state transition: ${previousAppState} → ${nextAppState}`);
+
+      // Main functionality - When app returns to active from background or inactive
+      if (previousAppState.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('🎉 I am back app - App returned to foreground!');
+
+        // Additional actions when app comes back:
+        // 1. Check for active rides
+        checkActiveRideStatus();
+
+        // 2. Update FCM token if needed
+        if (fcmToken) {
+          updateFCMTokenOnReturn();
+        }
+
+        // 3. Refresh location services if needed
+        console.log('📍 Refreshing location services...');
+
+        // 4. You can add more custom logic here:
+        // - Sync offline data
+        // - Check for app updates
+        // - Reconnect websockets
+        // - Refresh user balance/wallet
+      } else if (nextAppState === 'background') {
+        console.log('📱 App went to background - Saving state...');
+        checkActiveRideStatus();
+        
+        // You can save important data here before app goes to background
+      } else if (nextAppState === 'inactive') {
+        console.log('📱 App became inactive');
+      }
+
+      previousAppState = nextAppState;
+    };
+
+    // Add the event listener
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Log initial app state
+    console.log('📱 Initial app state:', AppState.currentState);
+
+    // Cleanup function to remove the event listener
+    return () => {
+      if (subscription?.remove) {
+        subscription.remove();
+      }
+    };
+  }, [fcmToken]); // Dependencies: fcmToken so it updates when token changes
+
+  // Helper function to update FCM token when app returns
+  const updateFCMTokenOnReturn = async () => {
+    try {
+      const authToken = await SecureStore.getItemAsync('auth_token_cab');
+      if (authToken && fcmToken) {
+        await axios.post(
+          'https://www.appapi.olyox.com/api/v1/rider/update-fcm-token',
+          { fcm_token: fcmToken },
+          { headers: { Authorization: `Bearer ${authToken}` } }
+        );
+        console.log('✅ FCM token refreshed on app return');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing FCM token on app return:', error);
+    }
+  };
 
   if (loading) return <Loading />;
 
@@ -246,7 +339,7 @@ const App = () => {
                       <Stack.Screen name="Wait_Screen" component={Wait_Screen} />
                       <Stack.Screen name="Home" component={HomeScreen} />
                       {/* <Stack.Screen name="start" component={RideDetailsScreen} /> old */}
-                      <Stack.Screen name="start" component={RunningRide} /> 
+                      <Stack.Screen name="start" component={RunningRide} />
                       <Stack.Screen name="support" component={SupportScreen} />
                       <Stack.Screen name="collect_money" component={MoneyPage} />
                       <Stack.Screen name="AllRides" component={AllRides} />
@@ -262,7 +355,7 @@ const App = () => {
                       <Stack.Screen name="WorkingData" component={WorkingData} />
                       <Stack.Screen name="referral-history" component={ReferalHistory} />
                       <Stack.Screen name="withdraw" component={Withdraw} />
-                      
+
                       {/* Parcel Rides */}
                       <Stack.Screen name="ParcelDetails" component={NewParcelLive} />
                       <Stack.Screen name="DeliveryTracking" options={{ headerShown: false }} component={DeliveryTracking} />

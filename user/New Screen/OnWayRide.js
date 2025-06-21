@@ -37,9 +37,9 @@ export default function OnWayRide() {
     const route = useRoute()
     const { driver: ride_id } = route.params || {}
     const { location } = useLocation()
-    const {clearCurrentRide} = useRide()
+    const { clearCurrentRide } = useRide()
     const navigation = useNavigation()
-    const {lastNotification} = useNotificationPermission()
+    const { lastNotification } = useNotificationPermission()
     // State management
     const [activeRideData, setActiveRideData] = useState(null)
     const [loading, setLoading] = useState(false)
@@ -110,8 +110,8 @@ export default function OnWayRide() {
         try {
             // Replace with your actual cancel API endpoint
             await axios.post(`${API_BASE_URL}/api/v1/new/ride/cancel`, {
-                ride:ride_id,
-                cancelBy:'user',
+                ride: ride_id,
+                cancelBy: 'user',
                 reason_id: selectedReason._id,
                 reason: selectedReason.name,
             })
@@ -176,17 +176,21 @@ export default function OnWayRide() {
     }, [fetchRideDetails])
 
     useEffect(() => {
-        if (activeRideData?.ride_status === 'cancelled' || activeRideData?.ride_status === 'completed') {
+        if (!activeRideData?.ride_status) return;
+
+        const rideStatus = activeRideData.ride_status;
+        const paymentStatus = activeRideData.payment_status;
+
+        // Cancelled ride alert
+        if (rideStatus === 'cancelled') {
             Alert.alert(
                 "Ride Status",
-                activeRideData?.ride_status === 'cancelled'
-                    ? "Your ride has been cancelled."
-                    : "Your ride has been completed.",
+                "Your ride has been cancelled.",
                 [
                     {
                         text: "OK",
                         onPress: () => {
-                        clearCurrentRide()
+                            clearCurrentRide();
                             navigation.dispatch(
                                 CommonActions.reset({
                                     index: 0,
@@ -198,8 +202,51 @@ export default function OnWayRide() {
                 ],
                 { cancelable: false }
             );
+            return;
         }
-    }, [activeRideData?.ride_status]);
+
+        // Ride completed but payment pending
+        if (rideStatus === 'completed' && paymentStatus !== 'completed') {
+            Alert.alert(
+                "Ride Completed",
+                "Your ride has been completed. Please proceed with payment.",
+                [{ text: "OK" }],
+                { cancelable: false }
+            );
+            return;
+        }
+
+        // Ride and payment both completed
+        if (rideStatus === 'completed' && paymentStatus === 'completed') {
+            Alert.alert(
+                "🎉 Thank You!",
+                "Thank you for completing your ride!",
+                [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            clearCurrentRide();
+                            navigation.dispatch(
+                                CommonActions.reset({
+                                    index: 0,
+                                    routes: [
+                                        {
+                                            name: 'RateRiderOrRide',
+                                            params: {
+                                                rideId: activeRideData?._id,
+                                            },
+                                        },
+                                    ],
+                                })
+                            );
+                        },
+
+                    },
+                ],
+                { cancelable: false }
+            );
+        }
+    }, [activeRideData?.ride_status, activeRideData?.payment_status]);
 
 
     useEffect(() => {

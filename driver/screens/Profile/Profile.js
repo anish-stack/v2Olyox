@@ -105,7 +105,7 @@ const VehicleDetailsModal = ({ visible, onClose, vehicleInfo }) => (
           <DetailItem label="Vehicle Type" value={vehicleInfo?.vehicleType} />
           <DetailItem label="Vehicle Number" value={vehicleInfo?.VehicleNumber} />
           <DetailItem label="Model" value={vehicleInfo?.vehicleName} />
-          <DetailItem label="RC Expires On" value={vehicleInfo?.RcExpireDate} />
+          {/* <DetailItem label="RC Expires On" value={vehicleInfo?.RcExpireDate} /> */}
         </ScrollView>
         <TouchableOpacity
           style={styles.closeButton}
@@ -330,9 +330,9 @@ export default function Profile() {
           extraLabel="Make a Withdraw"
           onClick={navigateToWithdraw}
         />
-        <View style={styles.statDivider} />
+        {/* <View style={styles.statDivider} /> */}
         
-        <StatItem value={userData?.BH || 0} label="BH ID" />
+        {/* <StatItem value={userData?.BH || 0} label="BH ID" /> */}
       </View>
 
       {/* Menu Section */}

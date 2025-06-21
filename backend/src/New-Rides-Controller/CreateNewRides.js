@@ -492,6 +492,7 @@ const saveRideToRedis = async (redisClient, rideId, rideData) => {
 };
 
 const saveRidersToRedis = async (redisClient, rideId, riders) => {
+    console.log("rideId", rideId)
     try {
         if (!redisClient) {
             console.warn("Redis client not available, skipping save to Redis");
@@ -793,19 +794,58 @@ const initiateDriverSearch = async (rideId, req, res) => {
 
 
 
-const processRiders = async (redisClient, rideId, riders) => {
+const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
     try {
-        console.info(`Processing ${riders.length} riders for ride ${rideId}`);
+        console.info(`🚀 Processing ${riders.length} riders for ride ${rideId}`);
 
+        // Log rider details
         riders.forEach((rider, index) => {
-            console.info(`Rider ${index + 1}: ${rider.name} (${rider._id}) - Distance: ${Math.round(rider.distance)}m, Rating: ${rider.rating || 'N/A'}`);
+            console.info(
+                `Rider ${index + 1}: ${rider.name} (${rider._id}) - Distance: ${Math.round(rider.distance || 0)}m, Rating: ${rider.rating || 'N/A'}`
+            );
         });
 
+        // Send notifications in parallel
+        const notificationPromises = riders.map(async (rider) => {
+            console.log("rider",rider?.fcmToken)
+            if (!rider?.fcmToken) {
+                console.warn(`⚠️ Rider ${rider._id} has no FCM token, skipping notification.`);
+                return;
+            }
+
+            const payload = {
+                event: 'NEW_RIDE_REQUEST',
+                rideId,
+                eta: rider.distance ? Math.ceil(rider.distance / 300) : 5, // example ETA calc
+                pickup: rideDetails.pickup || '',
+                priority: "high",
+                sound: 'sound',
+                drop: rideDetails.drop || '',
+                vehicleType: rideDetails.vehicleType || '',
+                pricing: rideDetails.pricing || {},
+                screen: 'RideRequestModal', // suggested screen in rider app
+            };
+
+            console.info(`📨 Sending ride request to Rider ${rider._id}`);
+
+            return sendNotification.sendNotification(
+                rider.fcmToken,
+                "🚖 New Ride Request",
+                "You have a new ride nearby. Tap to view details.",
+                payload
+            );
+        });
+
+        await Promise.all(notificationPromises);
+
+        // Update ride in Redis
         await updateRideStatus(redisClient, rideId, 'searching', {
             notifications_sent_to: riders.length,
             notified_riders: riders.map(r => r._id),
-            notification_sent_at: new Date()
+            notification_sent_at: new Date(),
         });
+
+        console.info(`✅ Notifications sent to ${riders.length} riders`);
 
         return {
             success: true,
@@ -814,10 +854,11 @@ const processRiders = async (redisClient, rideId, riders) => {
         };
 
     } catch (error) {
-        console.error(`Failed to process riders for ride ${rideId}:`, error.message);
+        console.error(`❌ Failed to process riders for ride ${rideId}:`, error.message);
         throw error;
     }
 };
+
 
 exports.ride_status_after_booking = async (req, res) => {
     try {
@@ -843,7 +884,7 @@ exports.ride_status_after_booking = async (req, res) => {
 
         const ride = await RideBooking.findOne({ _id: rideId }).populate("driver");
 
-        console.log("Fetched Ride:", ride);
+        // console.log("Fetched Ride:", ride);
 
         if (!ride) {
             return res.status(404).json({ message: "Ride not found." });
@@ -1098,121 +1139,204 @@ exports.cleanupRedisRideCache = async (req, res) => {
 exports.riderActionAcceptOrRejectRide = async (req, res) => {
     try {
         const { riderId, rideId, action } = req.body;
+        console.log("🚦 Rider Action Request:", { riderId, rideId, action });
+
+        // Basic validation
         if (!riderId || !rideId || !action) {
-            return res.status(400).json({ message: "Rider ID, Ride ID, and action are required." });
+            return res.status(400).json({
+                message: "Rider ID, Ride ID, and action are required.",
+            });
         }
-        if (!['accept', 'reject'].includes(action.toLowerCase())) {
-            return res.status(400).json({ message: "Invalid action. Must be 'accept' or 'reject'." });
+
+        if (!["accept", "reject"].includes(action.toLowerCase())) {
+            return res.status(400).json({
+                message: "Invalid action. Must be 'accept' or 'reject'.",
+            });
         }
-        const rider = await RiderModel.findById(riderId);
+
+        // Convert string IDs to ObjectId if needed
+        const riderObjectId = typeof riderId === 'string' ? new mongoose.Types.ObjectId(riderId) : riderId;
+        const rideObjectId = typeof rideId === 'string' ? new mongoose.Types.ObjectId(rideId) : rideId;
+
+        const rider = await RiderModel.findById(riderObjectId);
         if (!rider) {
             return res.status(404).json({ message: "Rider not found." });
         }
+
         if (!rider.isAvailable || rider.on_ride_id) {
-            return res.status(400).json({ message: "Rider is not available or is already on a ride." });
+            return res.status(400).json({
+                message: "Rider is not available or is already on a ride.",
+            });
         }
-        const ride = await RideBooking.findById(rideId).populate('user driver');
+
+        const ride = await RideBooking.findById(rideObjectId).populate("user driver");
         if (!ride) {
             return res.status(404).json({ message: "Ride not found." });
         }
-        if (ride.ride_status !== 'searching') {
-            return res.status(400).json({ message: `Ride is in ${ride.ride_status} status, cannot perform action.` });
+
+        if (ride.ride_status !== "searching") {
+            return res.status(400).json({
+                message: `Ride is in ${ride.ride_status} status, cannot perform action.`,
+            });
         }
+
         const redisClient = getRedisClient(req);
-        if (action.toLowerCase() === 'reject') {
-            // Add rider to rejected_by_drivers list
+
+        // ----------------------------
+        // 🚫 REJECT FLOW
+        // ----------------------------
+        if (action.toLowerCase() === "reject") {
             await RideBooking.findByIdAndUpdate(
-                rideId,
-                { $addToSet: { rejected_by_drivers: riderId } },
+                rideObjectId,
+                { $addToSet: { rejected_by_drivers: riderObjectId } },
                 { new: true }
             );
-            // Remove rider from Redis riders list
+
+            // Remove from Redis rider list
             let cachedRiders = await getRidersFromRedis(redisClient, rideId);
             if (cachedRiders) {
-                cachedRiders = cachedRiders.filter(r => r._id.toString() !== riderId);
+                cachedRiders = cachedRiders.filter((r) => {
+                    const rId = typeof r === "string" ? r : r._id?.toString();
+                    return rId !== riderId;
+                });
+
                 await saveRidersToRedis(redisClient, rideId, cachedRiders);
             }
-            console.info(`Rider ${riderId} rejected ride ${rideId}`);
+
+            console.info(`🚫 Rider ${riderId} rejected ride ${rideId}`);
             return res.status(200).json({
                 success: true,
-                message: "Ride rejected successfully."
-            });
-        } else {
-            // Accept ride
-            const updatedRide = await updateRideStatus(redisClient, rideId, 'driver_assigned', {
-                rider: riderId,
-                driver_assigned_at: new Date(),
-                eta: 5 // Default ETA, can be calculated based on distance
-            }, riderId);
-            // Update rider status
-            await RiderModel.findByIdAndUpdate(riderId, {
-                $set: {
-                    isAvailable: false,
-                    on_ride_id: rideId
-                }
-            });
-            // Notify user
-            if (updatedRide.user && updatedRide.user.fcmToken) {
-                await sendNotification.sendNotification(
-                    updatedRide.user.fcmToken,
-                    "Ride Accepted",
-                    "Your ride request has been accepted!",
-                    {
-                        event: 'RIDE_ACCEPTED',
-                        eta: 5,
-                        message: 'Your ride request has been accepted!',
-                        rideDetails: {
-                            rideId: updatedRide._id,
-                            pickup: updatedRide.pickup_address,
-                            drop: updatedRide.drop_address,
-                            vehicleType: updatedRide.vehicle_type,
-                            pricing: updatedRide.pricing,
-                            driverName: rider.name,
-                            vehicleDetails: rider.rideVehicleInfo
-                        },
-                        screen: 'TrackRider',
-                        riderId: rider.name,
-                    }
-                );
-            }
-            // Notify other riders to remove this ride from their pool
-            let cachedRiders = await getRidersFromRedis(redisClient, rideId);
-            if (cachedRiders) {
-                const otherRiders = cachedRiders.filter(r => r._id.toString() !== riderId);
-                for (const otherRider of otherRiders) {
-                    if (otherRider.fcmToken) {
-                        await sendNotification.sendNotification(
-                            otherRider.fcmToken,
-                            "Ride Unavailable",
-                            "The ride you were considering is no longer available.",
-                            {
-                                event: 'RIDE_UNAVAILABLE',
-                                rideId: rideId,
-                                message: 'The ride you were considering is no longer available.',
-                                screen: 'RiderDashboard'
-                            }
-                        );
-                    }
-                }
-                // Clear riders from Redis
-                await redisClient.del(`riders:${rideId}`);
-            }
-            console.info(`Rider ${riderId} accepted ride ${rideId}`);
-            return res.status(200).json({
-                success: true,
-                message: "Ride accepted successfully.",
-                data: {
-                    rideId: updatedRide._id,
-                    pickup: updatedRide.pickup_address,
-                    drop: updatedRide.drop_address,
-                    vehicleType: updatedRide.vehicle_type,
-                    pricing: updatedRide.pricing,
-                }
+                message: "Ride rejected successfully.",
             });
         }
+
+        // ----------------------------
+        // ✅ ACCEPT FLOW
+        // ----------------------------
+
+        // Method 1: Direct MongoDB update (Recommended)
+        const updatedRide = await RideBooking.findByIdAndUpdate(
+            rideObjectId,
+            {
+                $set: {
+                    ride_status: "driver_assigned",
+                    driver: riderObjectId, // Use ObjectId instead of string
+                    driver_assigned_at: new Date(),
+                    eta: 5,
+                    updated_at: new Date()
+                }
+            },
+            { new: true, runValidators: true }
+        ).populate("user driver");
+
+        // Alternative Method 2: If you must use updateRideStatus function
+        // Make sure it accepts proper ObjectIds
+        /*
+        const updatedRide = await updateRideStatus(
+          redisClient,
+          rideObjectId, // Pass ObjectId instead of string
+          "driver_assigned",
+          {
+            driver: riderObjectId, // Use ObjectId instead of string
+            driver_assigned_at: new Date(),
+            eta: 5,
+          },
+          riderObjectId // Pass ObjectId instead of string
+        );
+        */
+
+        if (!updatedRide) {
+            return res.status(500).json({
+                message: "Failed to update ride status.",
+            });
+        }
+
+        // Update rider status
+        await RiderModel.findByIdAndUpdate(riderObjectId, {
+            $set: {
+                isAvailable: false,
+                on_ride_id: rideObjectId,
+            },
+        });
+
+        // Notify user
+        if (updatedRide.user?.fcmToken) {
+            await sendNotification.sendNotification(
+                updatedRide.user.fcmToken,
+                "Ride Accepted",
+                "Your ride request has been accepted!",
+                {
+                    event: "RIDE_ACCEPTED",
+                    eta: 5,
+                    message: "Your ride request has been accepted!",
+                    rideDetails: {
+                        rideId: updatedRide._id.toString(),
+                        pickup: updatedRide.pickup_address,
+                        drop: updatedRide.drop_address,
+                        vehicleType: updatedRide.vehicle_type,
+                        pricing: updatedRide.pricing,
+                        driverName: rider.name,
+                        vehicleDetails: rider.rideVehicleInfo,
+                    },
+                    screen: "TrackRider",
+                    riderId: rider.name,
+                }
+            );
+        }
+
+        // Notify other riders and clear Redis
+        let cachedRiders = await getRidersFromRedis(redisClient, rideId);
+        if (cachedRiders) {
+            const otherRiders = cachedRiders.filter((r) => {
+                const rId = typeof r === "string" ? r : r._id?.toString();
+                return rId !== riderId;
+            });
+
+            for (const otherRider of otherRiders) {
+                const token =
+                    typeof otherRider === "string" ? null : otherRider.fcmToken;
+
+                if (token) {
+                    await sendNotification.sendNotification(
+                        token,
+                        "Ride Unavailable",
+                        "The ride you were considering is no longer available.",
+                        {
+                            event: "RIDE_UNAVAILABLE",
+                            rideId: rideId,
+                            message: "The ride you were considering is no longer available.",
+                            screen: "RiderDashboard",
+                        }
+                    );
+                }
+            }
+
+            await redisClient.del(`riders:${rideId}`);
+        }
+
+        console.info(`✅ Rider ${riderId} accepted ride ${rideId}`);
+        return res.status(200).json({
+            success: true,
+            message: "Ride accepted successfully.",
+            data: {
+                rideId: updatedRide._id.toString(),
+                pickup: updatedRide.pickup_address,
+                drop: updatedRide.drop_address,
+                vehicleType: updatedRide.vehicle_type,
+                pricing: updatedRide.pricing,
+                driverName: rider.name,
+                vehicleDetails: rider.rideVehicleInfo,
+            },
+        });
     } catch (error) {
-        console.error(`Error in rider action for ride ${req.query.rideId}:`, error.message);
-        return res.status(500).json({ message: "Server error while processing rider action." });
+        console.error(
+            `❌ Error in rider action for ride ${req.body.rideId || "unknown"}:`,
+            error.message,
+            error.stack
+        );
+        return res
+            .status(500)
+            .json({ message: "Server error while processing rider action." });
     }
 };
 
@@ -1750,95 +1874,140 @@ exports.collectPayment = async (req, res) => {
 
 
 exports.cancelRideByPoll = async (req, res) => {
-  const session = await mongoose.startSession();
+    const session = await mongoose.startSession();
 
-  try {
-    const { ride, cancelBy, reason_id, reason } = req.body;
-    console.log("📥 Cancel Ride Request Body:", req.body);
+    try {
+        const { ride, cancelBy, reason_id, reason } = req.body;
+        console.log("📥 Cancel Ride Request Body:", req.body);
 
-    if (!ride || !cancelBy) {
-      console.log("❌ Missing ride or cancelBy");
-      return res.status(400).json({
-        success: false,
-        message: "Ride ID and cancelBy are required.",
-      });
-    }
-
-    await session.withTransaction(async () => {
-      const rideData = await RideBooking.findById(ride)
-        .populate('driver user')
-        .session(session);
-
-      if (!rideData) {
-        throw new Error("Ride not found");
-      }
-
-      if (rideData.ride_status === "cancelled" || rideData.ride_status === "completed") {
-        throw new Error(`Ride is already ${rideData.ride_status}`);
-      }
-
-      console.log("🚨 Cancelling ride...");
-      rideData.ride_status = "cancelled";
-      rideData.payment_status = "cancelled";
-      rideData.cancelled_by = cancelBy;
-      rideData.cancelled_at = new Date();
-      rideData.cancellation_reason = reason || null;
-
-      if (rideData?.driver) {
-        console.log("♻️ Resetting driver ride status");
-        const driver = await RiderModel.findById(rideData.driver._id).session(session);
-        driver.on_ride_id = null;
-        driver.isAvailable = true;
-        await driver.save({ session });
-
-        // Send notification to driver if user cancelled
-        if (cancelBy === 'user' && driver?.fcmToken) {
-          console.log("🔔 Sending notification to driver...");
-          await sendNotification.sendNotification(
-            driver.fcmToken,
-            "Ride Cancelled by User",
-            "The user has cancelled the ride request.",
-            {
-              event: 'RIDE_CANCELLED',
-              rideId: rideData._id,
-              message: 'The user has cancelled the ride request.',
-              screen: 'DriverHome',
-            }
-          );
+        if (!ride || !cancelBy) {
+            console.log("❌ Missing ride or cancelBy");
+            return res.status(400).json({
+                success: false,
+                message: "Ride ID and cancelBy are required.",
+            });
         }
-      }
 
-      await rideData.save({ session });
+        await session.withTransaction(async () => {
+            const rideData = await RideBooking.findById(ride)
+                .populate('driver user')
+                .session(session);
 
-      // Send notification to user if driver cancelled
-      if (cancelBy === 'driver' && rideData?.user?.fcmToken) {
-        console.log("🔔 Sending notification to user...");
-        await sendNotification.sendNotification(
-          rideData.user.fcmToken,
-          "Ride Cancelled by Driver",
-          "The driver has cancelled your ride.",
-          {
-            event: 'RIDE_CANCELLED',
-            rideId: rideData._id,
-            message: 'The driver has cancelled your ride.',
-            screen: 'RideHistory',
-          }
-        );
-      }
-    });
+            if (!rideData) {
+                throw new Error("Ride not found");
+            }
 
-    return res.status(200).json({
-      success: true,
-      message: "Ride has been cancelled successfully.",
-    });
+            if (rideData.ride_status === "cancelled" || rideData.ride_status === "completed") {
+                throw new Error(`Ride is already ${rideData.ride_status}`);
+            }
 
-  } catch (error) {
-    console.log("❌ Error cancelling ride:", error.message || error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Internal server error.",
-    });
-  } finally {
-    await session.endSession();
-  }
+            console.log("🚨 Cancelling ride...");
+            rideData.ride_status = "cancelled";
+            rideData.payment_status = "cancelled";
+            rideData.cancelled_by = cancelBy;
+            rideData.cancelled_at = new Date();
+            rideData.cancellation_reason = reason || null;
+
+            if (rideData?.driver) {
+                console.log("♻️ Resetting driver ride status");
+                const driver = await RiderModel.findById(rideData.driver._id).session(session);
+                driver.on_ride_id = null;
+                driver.isAvailable = true;
+                await driver.save({ session });
+
+                // Send notification to driver if user cancelled
+                if (cancelBy === 'user' && driver?.fcmToken) {
+                    console.log("🔔 Sending notification to driver...");
+                    await sendNotification.sendNotification(
+                        driver.fcmToken,
+                        "Ride Cancelled by User",
+                        "The user has cancelled the ride request.",
+                        {
+                            event: 'RIDE_CANCELLED',
+                            rideId: rideData._id,
+                            message: 'The user has cancelled the ride request.',
+                            screen: 'DriverHome',
+                        }
+                    );
+                }
+            }
+
+            await rideData.save({ session });
+
+            // Send notification to user if driver cancelled
+            if (cancelBy === 'driver' && rideData?.user?.fcmToken) {
+                console.log("🔔 Sending notification to user...");
+                await sendNotification.sendNotification(
+                    rideData.user.fcmToken,
+                    "Ride Cancelled by Driver",
+                    "The driver has cancelled your ride.",
+                    {
+                        event: 'RIDE_CANCELLED',
+                        rideId: rideData._id,
+                        message: 'The driver has cancelled your ride.',
+                        screen: 'RideHistory',
+                    }
+                );
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Ride has been cancelled successfully.",
+        });
+
+    } catch (error) {
+        console.log("❌ Error cancelling ride:", error.message || error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error.",
+        });
+    } finally {
+        await session.endSession();
+    }
+};
+
+
+exports.RateYourRider = async (req, res) => {
+    try {
+        const { rideId } = req.params;
+        console.log("📥 Rate Your Rider Request Params:", req.params);
+        const { rating, feedback } = req.body;
+        console.log("📥 Rate Your Rider Request Body:", req.body);
+
+        // Validate inputs
+        if (!rideId || !rating) {
+            return res.status(400).json({ message: "Ride ID and rating are required." });
+        }
+
+        // Find ride and ensure it's completed
+        const rideData = await RideBooking.findById(rideId)
+            .populate('user')
+            .populate('driver');
+
+        if (!rideData) {
+            return res.status(404).json({ message: "Ride not found." });
+        }
+
+        if (rideData.ride_status !== 'completed') {
+            return res.status(400).json({ message: "Ride has not been completed." });
+        }
+
+        // Update driver_rating field
+        rideData.driver_rating = {
+            rating,
+            feedback: feedback || '',
+            created_at: new Date(),
+        };
+
+        await rideData.save();
+
+        return res.status(200).json({
+            message: "Rating submitted successfully.",
+            data: rideData.driver_rating,
+        });
+    } catch (error) {
+        console.error("❌ Error rating rider:", error);
+        return res.status(500).json({ message: "Internal Server Error." });
+    }
 };

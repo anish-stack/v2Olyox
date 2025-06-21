@@ -81,7 +81,7 @@ const redisOptions = {
 (async () => {
     try {
         await sendNotification.sendNotification(
-            'd-wdag-rTdKKABGjpH_IMt:APA91bEqVfLyag8qEj7lg2xTY8U9GDhKcQBPOJoo7B4afgm7hoLlFYU0Uj11F_3ASSELrpSkDKSTZFYc_TOP__ObRJCOMI-YURl1OgmdhGeD4yVIqMQ27Gc',
+            'fG0lCjKpTcilZ602ydIH-X:APA91bHiwfQfB4y3Nihnz0PPQBjnWSLF5QQICU2JkQ5jJxrV0LblxNvJomIcoPImsY0QjauMElMf62I5U3-LxkPe6DfCaAr8VkC7FO7Q7X6NYoC9D-5qCBw',
             "Ride Accepted",
             "Your ride request has been accepted!",
             {
@@ -161,7 +161,7 @@ app.use(cors({ origin: '*', credentials: true }));
 
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 500,
+    max: 300000,
     standardHeaders: true,
     legacyHeaders: false,
     message: 'Too many requests from this IP, please try again later.',

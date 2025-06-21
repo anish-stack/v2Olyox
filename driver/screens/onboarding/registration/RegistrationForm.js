@@ -517,14 +517,14 @@ export default function RegistrationForm() {
       </View>
 
 
-      <TextInput
+      {/* <TextInput
         label="RC Expiry Date"
         value={rcExpireDate ? formatDate(rcExpireDate) : ""}
         editable={false}
         mode="outlined"
         placeholder="YYYY-MM-DD"
         style={styles.input}
-      />
+      /> */}
 
 
       <Button

@@ -25,7 +25,7 @@ const storage = multer.diskStorage({
       cb(error);  // Pass the error to multer callback
     }
   },
-  
+
   filename: function (req, file, cb) {
     try {
       const uniqueSuffix = Date.now() + '-' + file.originalname;
@@ -79,5 +79,5 @@ router.post('/recharge-verify/:BHID', verify_recharge)
 
 router.put('/update_rider_document_verify/:id', updateRiderDocumentVerify);
 
-router.delete('/delete_rider_vendor/:id',deleteRider)
+router.delete('/delete_rider_vendor/:id', deleteRider)
 module.exports = router;

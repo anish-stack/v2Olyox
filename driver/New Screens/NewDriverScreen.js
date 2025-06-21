@@ -5,6 +5,7 @@ import HeaderNew from './components/Header/HeaderNew';
 import RiderDataAndRechargeInfo from './components/HomeScreen/RiderDataAndRechargeInfo';
 import RideSearching from './components/HomeScreen/RideSearching';
 import Report from '../screens/Report/Report';
+import Bonus from '../screens/Bonus/Bonus';
 
 export default function NewHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
@@ -36,7 +37,7 @@ export default function NewHomeScreen() {
         <RideSearching refreshing={refreshing} />
         <RiderDataAndRechargeInfo refreshing={refreshing} />
         <Report isRefresh={refreshing} />
-
+        <Bonus/>
         {/* Add more components if needed */}
       </ScrollView>
     </SafeAreaView>

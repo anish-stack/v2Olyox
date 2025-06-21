@@ -39,7 +39,7 @@ export const SocketProvider = ({ children }) => {
     };
 
     loadAndConnectSocket();
-    // registerBackgroundSocketTask(); // Register background reconnect task
+    registerBackgroundSocketTask(); // Register background reconnect task
 
     return () => {
       cleanupSocket();

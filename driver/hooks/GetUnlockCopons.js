@@ -19,7 +19,7 @@ const useGetCoupons = () => {
       const couponData = response.data?.data || [];
       setCoupons(couponData);
     } catch (error) {
-      console.error("Error fetching coupons:", error);
+      // console.error("Error fetching coupons:", error.response.data);
     } finally {
       setLoading(false);
     }

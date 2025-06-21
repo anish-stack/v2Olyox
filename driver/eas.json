@@ -15,16 +15,8 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production",
-      "android": {
-        "credentialsSource": "local",
-        "keystore": {
-          "keystorePath": "./android/app/keystore.jks",
-          "keystorePassword": "6d1a9cd097df4da8c30a9c9aac69fd9c",
-          "keyAlias": "e33c8c4f8d9f47353d9a0a5d53400b10",
-          "keyPassword": "74853f4a57cb2aa945195c7ebec2f40c"
-        }
-      }
+      "channel": "production"
+     
     }
   },
   "submit": {

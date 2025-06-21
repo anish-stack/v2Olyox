@@ -12,7 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useNavigationState } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import {
@@ -204,6 +204,7 @@ const HeaderNew = () => {
         "Toggle Status Error:",
         error?.response?.data?.message || error.message
       );
+       setIsOnline(null);
 
       Alert.alert(
         "Toggle Status Failed",
@@ -255,7 +256,7 @@ const HeaderNew = () => {
         );
 
         if (response.data) {
-
+          // console.log("Active ride details fetched successfully:", response.data.data);
           setActiveRideData(response.data);
         }
       } else {
@@ -299,33 +300,37 @@ const HeaderNew = () => {
     fetchUserDetails();
   }, [fetchUserDetails]);
 
-  // Effect to check for active rides when user data changes
 useEffect(() => {
   let interval;
 
-  if (user_data) {
-    console.log("✅ User data available, starting interval to fetch active ride details");
+  const currentRouteName = navigation.getState()?.routes?.[navigation.getState().index]?.name;
+  console.log("Current route name:", currentRouteName);
 
-    // Immediately fetch once
+  const shouldFetch =
+    user_data?.on_ride_id && currentRouteName === 'Home';
+
+  if (shouldFetch) {
+    console.log("✅ On 'Home' screen with active ride. Starting interval to fetch ride details");
+
+    // Fetch once immediately
     fetchActiveRideDetails();
 
-    // Set interval to run every 4 seconds
+    // Then every 4 seconds
     interval = setInterval(() => {
       console.log("⏱️ Fetching active ride details every 4 seconds");
       fetchActiveRideDetails();
     }, 4000);
+  } else {
+    console.log("🔕 Conditions not met. Skipping ride detail polling.");
   }
 
-  // Cleanup on unmount or when user_data changes
   return () => {
     if (interval) {
       console.log("🧹 Clearing interval");
       clearInterval(interval);
     }
   };
-}, [user_data, fetchActiveRideDetails]);
-
-
+}, [user_data?.on_ride_id, fetchActiveRideDetails, navigation]);
 
 
   // Handle active ride button press
@@ -384,6 +389,28 @@ useEffect(() => {
                 />
               </View>
               <Text style={styles.menuText}>Profile</Text>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                navigation.navigate("BackgroundDemo");
+              }}
+            >
+              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
+                <MaterialCommunityIcons
+                  name="demo"
+                  size={20}
+                  color={colors.red400}
+                />
+              </View>
+              <Text style={styles.menuText}>Background</Text>
               <MaterialCommunityIcons
                 name="chevron-right"
                 size={20}
@@ -497,23 +524,29 @@ useEffect(() => {
         {/* Center - Online/Offline Switch */}
 
         {!activeRideData ? (
+          // No active ride view
           <Animated.View style={[styles.centerSection, { opacity: fadeAnim }]}>
             <View style={styles.statusContainer}>
-              <View style={[
-                styles.statusIndicator,
-                { backgroundColor: isOnline ? colors.success : colors.red300 }
-              ]} />
-              <Text style={[
-                styles.statusText,
-                { color: isOnline ? colors.success : colors.red400 }
-              ]}>
-                {isOnline ? 'Online' : 'Offline'}
+              <View
+                style={[
+                  styles.statusIndicator,
+                  { backgroundColor: isOnline ? colors.success : colors.red300 },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: isOnline ? colors.success : colors.red400 },
+                ]}
+              >
+                {isOnline ? 'On Duty' : 'Off Duty'}
               </Text>
             </View>
+
             <Switch
               trackColor={{
                 false: colors.red100,
-                true: colors.success
+                true: colors.success,
               }}
               thumbColor={isOnline ? colors.backgroundPaper : colors.red200}
               ios_backgroundColor={colors.red100}
@@ -521,16 +554,13 @@ useEffect(() => {
               value={isOnline}
               disabled={loading}
             />
+
             {/* Notification Bell */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={handleNotificationPress}
             >
-              <FontAwesome
-                name="bell"
-                size={18}
-                color={colors.red400}
-              />
+              <FontAwesome name="bell" size={18} color={colors.red400} />
             </TouchableOpacity>
 
             {/* Menu Button */}
@@ -538,19 +568,16 @@ useEffect(() => {
               style={[styles.iconButton, styles.menuButton]}
               onPress={() => setMenuVisible(true)}
             >
-              <FontAwesome
-                name="bars"
-                size={18}
-                color={colors.textLight}
-              />
+              <FontAwesome name="bars" size={18} color={colors.textLight} />
             </TouchableOpacity>
           </Animated.View>
         ) : (
-
+          // Active ride view (only if not completed with payment)
           <View style={styles.rightSection}>
-            {/* Active Ride Button */}
-            {activeRideData && (
+            {activeRideData?.data?.ride_status !== 'completed' ||
+              activeRideData?.data?.payment_status !== 'completed' ? (
               <>
+                {/* Active Ride Button */}
                 <TouchableOpacity
                   style={styles.activeRideButton}
                   onPress={handleActiveRidePress}
@@ -563,15 +590,13 @@ useEffect(() => {
                   <Text style={styles.activeRideText}>Active</Text>
                   <View style={styles.pulseDot} />
                 </TouchableOpacity>
+
+                {/* Notification Bell */}
                 <TouchableOpacity
                   style={styles.iconButton}
                   onPress={handleNotificationPress}
                 >
-                  <FontAwesome
-                    name="bell"
-                    size={18}
-                    color={colors.red400}
-                  />
+                  <FontAwesome name="bell" size={18} color={colors.red400} />
                 </TouchableOpacity>
 
                 {/* Menu Button */}
@@ -579,19 +604,10 @@ useEffect(() => {
                   style={[styles.iconButton, styles.menuButton]}
                   onPress={() => setMenuVisible(true)}
                 >
-                  <FontAwesome
-                    name="bars"
-                    size={18}
-                    color={colors.textLight}
-                  />
+                  <FontAwesome name="bars" size={18} color={colors.textLight} />
                 </TouchableOpacity>
               </>
-
-
-
-            )}
-
-
+            ) : null}
           </View>
         )}
 

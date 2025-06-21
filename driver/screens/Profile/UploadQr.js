@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,13 +9,14 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { Text, Button, Card } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFetchUserDetails } from '../../hooks/New Hookes/RiderDetailsHooks';
 
 const API_URL = 'http://192.168.1.6:3100/api/v1/rider/rider-uploadPaymentQr';
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
@@ -25,7 +26,16 @@ export default function UploadQr() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showUploader, setShowUploader] = useState(false);
   const navigation = useNavigation();
+  const { userData, fetchUserDetails } = useFetchUserDetails();
+
+  // Check if user has existing QR code on component mount
+  useEffect(() => {
+    if (userData && !userData.YourQrCodeToMakeOnline) {
+      setShowUploader(true);
+    }
+  }, [userData]);
 
   const checkImageSize = async (uri) => {
     try {
@@ -79,7 +89,7 @@ export default function UploadQr() {
       setError('Please select an image first');
       return;
     }
-    console.log(image)
+
     try {
       setLoading(true);
       setError(null);
@@ -91,7 +101,6 @@ export default function UploadQr() {
 
       const formData = new FormData();
 
-      // Get the file extension from the URI
       const uriParts = image.split('.');
       const fileType = uriParts[uriParts.length - 1];
 
@@ -117,11 +126,15 @@ export default function UploadQr() {
       if (response.data.success) {
         Alert.alert(
           'Success',
-          'QR code uploaded successfully! Please login now.',
+          'QR code uploaded successfully!',
           [
             {
               text: 'OK',
-              onPress: () => navigation.navigate('Home'),
+              onPress: () => {
+                fetchUserDetails(); // Refresh user data
+                setShowUploader(false); // Hide uploader
+                setImage(null); // Clear selected image
+              },
             },
           ]
         );
@@ -129,7 +142,7 @@ export default function UploadQr() {
         throw new Error(response.data.message || 'Upload failed');
       }
     } catch (err) {
-      console.log(err.response.data)
+      console.log(err.response?.data);
       const errorMessage = err.response?.data?.message || err.message || 'Failed to upload QR code';
       setError(errorMessage);
       Alert.alert('Error', errorMessage);
@@ -139,12 +152,93 @@ export default function UploadQr() {
     }
   };
 
+  const handleChangeQr = () => {
+    setShowUploader(true);
+    setImage(null);
+    setError(null);
+  };
+
+  const handleCancelChange = () => {
+    setShowUploader(false);
+    setImage(null);
+    setError(null);
+  };
+
+  useEffect(()=>{
+    fetchUserDetails()
+  },[])
+
+  // Show existing QR code if available and uploader is not shown
+  if (userData?.YourQrCodeToMakeOnline && !showUploader) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.content}>
+            <Text style={styles.title}>Your Payment QR Code</Text>
+            <Text style={styles.subtitle}>This is your current payment QR code</Text>
+
+            <Card style={styles.qrCard}>
+              <Card.Content style={styles.cardContent}>
+                <Image 
+                  source={{ uri: userData.YourQrCodeToMakeOnline }} 
+                  style={styles.existingQrImage}
+                  resizeMode="contain"
+                />
+                
+                <View style={styles.statusContainer}>
+                  <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
+                  <Text style={styles.statusText}>QR Code Active</Text>
+                </View>
+              </Card.Content>
+            </Card>
+
+            <Button
+              mode="outlined"
+              onPress={handleChangeQr}
+              style={styles.changeButton}
+              icon="qrcode-edit"
+            >
+              Change QR Code
+            </Button>
+
+            <Button
+              mode="contained"
+              onPress={() => navigation.navigate('Home')}
+              style={styles.homeButton}
+            >
+              Continue to Home
+            </Button>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Show uploader (either first time or changing existing QR)
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>Upload Payment QR Code</Text>
-          <Text style={styles.subtitle}>Please upload a clear image of your payment QR code</Text>
+          <Text style={styles.title}>
+            {userData?.YourQrCodeToMakeOnline ? 'Update Payment QR Code' : 'Upload Payment QR Code'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {userData?.YourQrCodeToMakeOnline 
+              ? 'Upload a new QR code to replace your current one'
+              : 'Please upload a clear image of your payment QR code'
+            }
+          </Text>
+
+          {userData?.YourQrCodeToMakeOnline && (
+            <View style={styles.currentQrContainer}>
+              <Text style={styles.currentQrLabel}>Current QR Code:</Text>
+              <Image 
+                source={{ uri: userData.YourQrCodeToMakeOnline }} 
+                style={styles.currentQrPreview}
+                resizeMode="contain"
+              />
+            </View>
+          )}
 
           <TouchableOpacity
             style={styles.uploadArea}
@@ -156,7 +250,9 @@ export default function UploadQr() {
             ) : (
               <View style={styles.placeholder}>
                 <MaterialCommunityIcons name="qrcode" size={48} color="#6366F1" />
-                <Text style={styles.placeholderText}>Tap to select QR code</Text>
+                <Text style={styles.placeholderText}>
+                  {userData?.YourQrCodeToMakeOnline ? 'Tap to select new QR code' : 'Tap to select QR code'}
+                </Text>
                 <Text style={styles.sizeLimit}>Maximum size: 2MB</Text>
               </View>
             )}
@@ -178,15 +274,28 @@ export default function UploadQr() {
             </View>
           )}
 
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            disabled={!image || loading}
-            style={[styles.submitButton, (!image || loading) && styles.submitButtonDisabled]}
-            loading={loading}
-          >
-            Upload QR Code
-          </Button>
+          <View style={styles.buttonContainer}>
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              disabled={!image || loading}
+              style={[styles.submitButton, (!image || loading) && styles.submitButtonDisabled]}
+              loading={loading}
+            >
+              {userData?.YourQrCodeToMakeOnline ? 'Update QR Code' : 'Upload QR Code'}
+            </Button>
+
+            {userData?.YourQrCodeToMakeOnline && (
+              <Button
+                mode="outlined"
+                onPress={handleCancelChange}
+                style={styles.cancelButton}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+            )}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -217,6 +326,60 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 24,
     textAlign: 'center',
+  },
+  qrCard: {
+    width: '100%',
+    marginBottom: 24,
+    elevation: 2,
+  },
+  cardContent: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  existingQrImage: {
+    width: '100%',
+    height: 250,
+    marginBottom: 16,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  statusText: {
+    marginLeft: 8,
+    color: '#10B981',
+    fontWeight: '600',
+  },
+  changeButton: {
+    width: '100%',
+    marginBottom: 16,
+    borderColor: '#6366F1',
+  },
+  homeButton: {
+    width: '100%',
+    paddingVertical: 8,
+    backgroundColor: '#6366F1',
+  },
+  currentQrContainer: {
+    width: '100%',
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  currentQrLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  currentQrPreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   uploadArea: {
     width: '100%',
@@ -274,6 +437,10 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 14,
   },
+  buttonContainer: {
+    width: '100%',
+    gap: 12,
+  },
   submitButton: {
     width: '100%',
     paddingVertical: 8,
@@ -281,5 +448,9 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     backgroundColor: '#E5E7EB',
+  },
+  cancelButton: {
+    width: '100%',
+    borderColor: '#9CA3AF',
   },
 });
