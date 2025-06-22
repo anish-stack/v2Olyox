@@ -350,6 +350,32 @@ app.post('/webhook/cab-receive-location', async (req, res, next) => {
     }
 });
 
+app.post('/webhook/receive-location', Protect, async (req, res) => {
+    try {
+        console.log("user hits", req.user)
+        const { latitude, longitude } = req.body;
+        const userId = req.user.userId;
+
+        const data = await Parcel_boy_Location.findOneAndUpdate(
+            { _id: userId },
+            {
+                location: {
+                    type: 'Point',
+                    coordinates: [longitude, latitude]
+                },
+                lastUpdated: new Date()
+            },
+            { upsert: true, new: true }
+        );
+        // console.log("data", data)
+
+        res.status(200).json({ message: 'Location updated successfully' });
+    } catch (error) {
+        console.error('Error updating location:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Root Endpoint
 app.get('/', (req, res) => {
     res.status(200).json({
