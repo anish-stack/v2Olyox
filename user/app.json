@@ -2,7 +2,7 @@
   "expo": {
     "name": "Olyox",
     "slug": "olyox",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/appicon.png",
     "userInterfaceStyle": "light",
@@ -74,7 +74,7 @@
       ],
       "package": "com.happy_coding.olyox",
       "googleServicesFile": "./google-services.json",
-      "runtimeVersion": "1.0.0"
+      "runtimeVersion": "1.0.3"
     },
 
     "web": {

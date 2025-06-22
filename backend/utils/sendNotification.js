@@ -140,7 +140,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     if (error instanceof NotificationError) {
       return null;
     }
-    throw error;
+   return 
   }
 };
 

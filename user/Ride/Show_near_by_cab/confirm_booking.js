@@ -1,664 +1,517 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from 'react';
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    ScrollView,
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Platform,
-    StatusBar,
-    ToastAndroid,
-    Dimensions,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import * as Location from "expo-location";
-import axios from "axios";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ToastAndroid,
+  Dimensions,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import * as Location from 'expo-location';
+import axios from 'axios';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
+import { tokenCache } from '../../Auth/cache';
+import { useLocation } from '../../context/LocationContext';
+import { useRide } from '../../context/RideContext';
+import useNotificationPermission from '../../hooks/notification';
 
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
-
-import { tokenCache } from "../../Auth/cache";
-import { useLocation } from "../../context/LocationContext";
-import { useRide } from "../../context/RideContext";
-import useNotificationPermission from "../../hooks/notification";
-
 const POLLING_INTERVAL = 8000;
-const BOOKING_TIMEOUT = 120000; // 2 minutes
+const BOOKING_TIMEOUT = 120000;
 
-// Modern Color Palette
-const COLORS = {
-    primary: "#6366F1", // Indigo
-    primaryLight: "#A5B4FC",
-    primaryDark: "#4338CA",
-
-    secondary: "#F59E0B", // Amber
-    secondaryLight: "#FDE68A",
-
-    success: "#10B981", // Emerald
-    successLight: "#D1FAE5",
-
-    danger: "#EF4444", // Red
-    dangerLight: "#FEE2E2",
-
-    warning: "#F59E0B", // Amber
-    warningLight: "#FEF3C7",
-
-    text: {
-        primary: "#111827",
-        secondary: "#6B7280",
-        tertiary: "#9CA3AF",
-        inverse: "#FFFFFF",
-    },
-
-    background: {
-        primary: "#FFFFFF",
-        secondary: "#F9FAFB",
-        tertiary: "#F3F4F6",
-    },
-
-    border: {
-        light: "#E5E7EB",
-        medium: "#D1D5DB",
-        dark: "#9CA3AF",
-    },
-
-    overlay: "rgba(0, 0, 0, 0.5)",
-};
-
-// Helper function for platform-specific notifications
-const showNotification = (title, message, type = "info") => {
-    const displayMessage = `${title ? title + "\n" : ""}${message}`;
-    let notificationTitle = title || "Notification";
-
-    if (Platform.OS === 'android') {
-        let duration = ToastAndroid.SHORT;
-        if (type === 'error' || message.length > 60) {
-            duration = ToastAndroid.LONG;
-        }
-        ToastAndroid.show(displayMessage, duration);
-    } else {
-        if (type === 'success') notificationTitle = title || "Success!";
-        if (type === 'error') notificationTitle = title || "Error!";
-        Alert.alert(notificationTitle, message);
-    }
+const showNotification = (title, message, type = 'info') => {
+  const displayMessage = `${title ? title + '\n' : ''}${message}`;
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(displayMessage, type === 'error' || message.length > 60 ? ToastAndroid.LONG : ToastAndroid.SHORT);
+  } else {
+    Alert.alert(title || (type === 'success' ? 'Success!' : type === 'error' ? 'Error!' : 'Notification'), message);
+  }
 };
 
 export default function BookingConfirmation() {
-    const route = useRoute();
-    const navigation = useNavigation();
-    const { location: contextLocation } = useLocation();
-    const { saveRide, updateRideStatus: updateRideContextStatus } = useRide();
-    const { fcmToken } = useNotificationPermission();
+  const route = useRoute();
+  const navigation = useNavigation();
+  const { location: contextLocation } = useLocation();
+  const { saveRide, updateRideStatus } = useRide();
+  const { fcmToken } = useNotificationPermission();
 
-    const { origin, destination, selectedRide, dropoff, pickup } = route.params || {};
+  const { origin, destination, selectedRide, dropoff, pickup } = route.params || {};
 
-    const [currentLocation, setCurrentLocation] = useState(null);
-    const [isLoadingLocation, setIsLoadingLocation] = useState(true);
-    const [isCreatingRide, setIsCreatingRide] = useState(false);
-    const [isBookingInProgress, setIsBookingInProgress] = useState(false);
-    const [bookingStatusMessage, setBookingStatusMessage] = useState("Preparing your ride...");
-    const [currentRideStatus, setCurrentRideStatus] = useState("pending");
-    const [rideOtp, setRideOtp] = useState(null);
-    const [paymentMethod, setPaymentMethod] = useState("Cash");
-    const [createdRideId, setCreatedRideId] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  const [isCreatingRide, setIsCreatingRide] = useState(false);
+  const [isBookingInProgress, setIsBookingInProgress] = useState(false);
+  const [bookingStatusMessage, setBookingStatusMessage] = useState('Preparing your ride...');
+  const [currentRideStatus, setCurrentRideStatus] = useState('pending');
+  const [rideOtp, setRideOtp] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [createdRideId, setCreatedRideId] = useState(null);
+  const [coordinates, setCoordinates] = useState([]);
 
-    const pollingRef = useRef(null);
-    const bookingTimeoutRef = useRef(null);
-    const mapRef = useRef(null);
+  const pollingRef = useRef(null);
+  const bookingTimeoutRef = useRef(null);
+  const mapRef = useRef(null);
 
-    useEffect(() => {
-        const fetchLocation = async () => {
-            setIsLoadingLocation(true);
-            try {
-                if (contextLocation?.coords) {
-                    setCurrentLocation(contextLocation.coords);
-                } else {
-                    const { status } = await Location.requestForegroundPermissionsAsync();
-                    if (status !== "granted") {
-                        showNotification("Permission Denied", "Location permission is required to book a ride.", "error");
-                        setIsLoadingLocation(false);
-                        return;
-                    }
-                    const position = await Location.getCurrentPositionAsync({
-                        accuracy: Location.Accuracy.High,
-                    });
-                    setCurrentLocation(position.coords);
-                }
-            } catch (err) {
-                console.error("Error getting location:", err);
-                showNotification("Location Error", "Unable to get your current location. Please try again.", "error");
-            }
+  const fetchDirections = async () => {
+    if (!origin || !destination) return;
+    try {
+      console.log('Fetching directions...');
+      const response = await axios.get(
+        `https://maps.googleapis.com/maps/api/directions/json`,
+        {
+          params: {
+            origin: `${origin.latitude},${origin.longitude}`,
+            destination: `${destination.latitude},${destination.longitude}`,
+            key: GOOGLE_MAPS_APIKEY,
+            mode: 'driving',
+          },
+          timeout: 10000,
+        }
+      );
+      if (response.data.routes.length > 0) {
+        const points = decodePolyline(response.data.routes[0].overview_polyline.points);
+        const coords = points.map(point => ({
+          latitude: point[0],
+          longitude: point[1],
+        }));
+        setCoordinates(coords);
+      }
+    } catch (error) {
+      console.error('Error fetching directions:', error);
+      showNotification('Route Error', 'Unable to fetch route directions.', 'error');
+    }
+  };
+
+  // Polyline decoding function
+  const decodePolyline = (encoded) => {
+    let points = [];
+    let index = 0, len = encoded.length;
+    let lat = 0, lng = 0;
+    while (index < len) {
+      let b, shift = 0, result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+      points.push([lat / 1e5, lng / 1e5]);
+    }
+    return points;
+  };
+
+  useEffect(() => {
+    fetchDirections();
+  }, [origin, destination]);
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      setIsLoadingLocation(true);
+      try {
+        if (contextLocation?.coords) {
+          setCurrentLocation(contextLocation.coords);
+        } else {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') {
+            showNotification('Permission Denied', 'Location permission required.', 'error');
             setIsLoadingLocation(false);
-        };
-        fetchLocation();
-    }, [contextLocation]);
-
-    useEffect(() => {
-        if (!createdRideId || !isBookingInProgress) {
             return;
+          }
+          const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          setCurrentLocation(position.coords);
         }
-
-        const pollRideStatus = async () => {
-            try {
-                const token = await tokenCache.getToken("auth_token_db");
-                if (!token) {
-                    showNotification("Authentication Error", "Please log in again.", "error");
-                    stopBookingProcess("AUTH_ERROR_POLL");
-                    return;
-                }
-
-                const response = await axios.get(
-                    `https://www.appv2.olyox.com/api/v1/new/status/${createdRideId}`,
-                    {
-                        headers: { Authorization: `Bearer ${token}` },
-                        timeout: POLLING_INTERVAL - 1000,
-                    }
-                );
-                console.log("response.data", response.data)
-                const { status: newStatus, rideDetails: polledRideDetails, message: pollMessage } = response.data;
-                setCurrentRideStatus(newStatus);
-                setBookingStatusMessage(pollMessage || `Ride status: ${newStatus}`);
-
-                switch (newStatus) {
-                    case 'driver_assigned':
-                        showNotification("Driver Assigned!", pollMessage || "Your ride is on the way.", "success");
-                        saveRide({ ...polledRideDetails, ride_otp: rideOtp });
-                        updateRideContextStatus("confirmed");
-                        stopBookingProcess("DRIVER_ASSIGNED");
-                        navigation.replace("RideStarted", {
-                            driver: polledRideDetails?._id,
-                            origin,
-                            destination,
-                        });
-                        break;
-                    case 'cancelled':
-                        showNotification("Ride Cancelled", pollMessage || "Your ride has been cancelled.", "info");
-                        stopBookingProcess("CANCELLED_BY_SYSTEM");
-                        break;
-                    case 'completed':
-                        showNotification("Ride Completed!", pollMessage || "Thank you for riding with us.", "success");
-                        stopBookingProcess("COMPLETED");
-                        break;
-                    case 'pending':
-                    case 'searching':
-                    case 'driver_arrived':
-                    case 'in_progress':
-                        break;
-                    default:
-                        console.warn("Unhandled ride status from polling:", newStatus);
-                        break;
-                }
-            } catch (err) {
-                console.error("Error polling ride status:", err.response?.data || err.message);
-                if (err.response && (err.response.status === 401 || err.response.status === 404)) {
-                    showNotification("Status Check Error", "Could not verify ride status. Please try again or contact support.", "error");
-                    stopBookingProcess("POLL_API_ERROR");
-                }
-            }
-        };
-
-        pollingRef.current = setInterval(pollRideStatus, POLLING_INTERVAL);
-        pollRideStatus();
-
-        return () => {
-            clearInterval(pollingRef.current);
-        };
-    }, [createdRideId, isBookingInProgress, navigation, saveRide, updateRideContextStatus, origin, destination, rideOtp]);
-
-    const stopBookingProcess = (reason) => {
-        console.log("Stopping booking process, reason:", reason);
-        setIsBookingInProgress(false);
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        if (bookingTimeoutRef.current) clearTimeout(bookingTimeoutRef.current);
+      } catch (err) {
+        console.error('Error getting location:', err);
+        showNotification('Location Error', 'Unable to get location.', 'error');
+      }
+      setIsLoadingLocation(false);
     };
+    fetchLocation();
+  }, [contextLocation]);
 
-    const handleCreateRide = async () => {
-        if (!currentLocation || !origin || !destination || !selectedRide || !fcmToken) {
-            showNotification("Missing Information", "Please ensure location is enabled and all ride details are selected.", "error");
-            return;
+  useEffect(() => {
+    if (!createdRideId || !isBookingInProgress) return;
+
+    const pollRideStatus = async () => {
+      try {
+        const token = await tokenCache.getToken('auth_token_db');
+        if (!token) {
+          showNotification('Authentication Error', 'Please log in again.', 'error');
+          stopBookingProcess('AUTH_ERROR_POLL');
+          return;
         }
-
-        setIsCreatingRide(true);
-        setIsBookingInProgress(true);
-        setBookingStatusMessage("Requesting your ride...");
-        setCurrentRideStatus("pending");
-
-        try {
-            const token = await tokenCache.getToken("auth_token_db");
-            if (!token) {
-                showNotification("Authentication Error", "Please log in again to book a ride.", "error");
-                stopBookingProcess("AUTH_ERROR_CREATE");
-                setIsCreatingRide(false);
-                return;
-            }
-
-            const farePayload = {
-                base_fare: selectedRide.pricing?.baseFare || 0,
-                distance_fare: selectedRide.pricing?.distanceCost || 0,
-                time_fare: selectedRide.pricing?.timeCost || 0,
-                platform_fee: selectedRide.pricing?.fuelSurcharge || 0,
-                night_charge: selectedRide.pricing?.nightSurcharge || 0,
-                rain_charge: selectedRide.conditions?.rain ? (selectedRide.pricing?.rainCharge || 10) : 0,
-                toll_charge: selectedRide.pricing?.tollCost || 0,
-                discount: selectedRide.pricing?.discount || 0,
-                total_fare: selectedRide.totalPrice,
-                currency: selectedRide.pricing?.currency || 'INR',
-            };
-
-            const rideData = {
-                vehicleType: selectedRide.vehicleType || selectedRide.vehicleName,
-                pickupLocation: { latitude: origin.latitude, longitude: origin.longitude },
-                dropLocation: { latitude: destination.latitude, longitude: destination.longitude },
-                currentLocation: { latitude: currentLocation.latitude, longitude: currentLocation.longitude },
-                pick_desc: pickup?.description,
-                drop_desc: dropoff?.description,
-                fare: farePayload,
-                fcmToken: fcmToken,
-                paymentMethod: paymentMethod,
-                platform: Platform.OS,
-                scheduledAt: null,
-                pickupAddress: pickup?.address || {},
-                dropAddress: dropoff?.address || {},
-            };
-
-            const response = await axios.post(
-                "https://www.appv2.olyox.com/api/v1/new/new-ride",
-                rideData,
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 20000,
-                }
-            );
-
-            if (response.data && response.data.success && response.data.data && response.data.data.rideId) {
-                const rideDetailsFromCreate = response.data.data;
-                setCreatedRideId(rideDetailsFromCreate.rideId);
-                if (rideDetailsFromCreate.ride_otp) {
-                    setRideOtp(rideDetailsFromCreate.ride_otp);
-                }
-                showNotification("Ride Requested!", response.data.message || "Searching for drivers...", "success");
-                setBookingStatusMessage("Searching for nearby drivers...");
-                setCurrentRideStatus(rideDetailsFromCreate.ride_status || "searching");
-
-                bookingTimeoutRef.current = setTimeout(() => {
-                    if (isBookingInProgress && currentRideStatus !== 'driver_assigned') {
-                        showNotification("No Drivers Found", "We couldn't find a driver for you at this moment. Please try again later.", "info");
-                        stopBookingProcess("TIMEOUT");
-                    }
-                }, BOOKING_TIMEOUT);
-            } else {
-                const errorMessage = response.data?.message || "Invalid response from server when creating ride.";
-                throw new Error(errorMessage);
-            }
-        } catch (err) {
-            console.error("Error creating ride:", err.response?.data?.error || err.response?.data.message || err);
-            const apiErrorMessage = err.response?.data?.error || err.response?.data.message || err || "Failed to create ride request.";
-            showNotification("Booking Failed", apiErrorMessage, "error");
-            stopBookingProcess("CREATE_RIDE_API_ERROR");
-        } finally {
-            setIsCreatingRide(false);
-        }
-    };
-
-    const handleCancelBooking = () => {
-        Alert.alert(
-            "Cancel Booking?",
-            "Are you sure you want to cancel this booking request?",
-            [
-                { text: "No", style: "cancel" },
-                {
-                    text: "Yes, Cancel",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            stopBookingProcess("USER_CANCELLED");
-                            showNotification(
-                                "Booking Cancelled",
-                                "Your ride request has been cancelled.",
-                                "info"
-                            );
-
-                            if (createdRideId) {
-                                const cancelUrl = `https://www.appv2.olyox.com/api/v1/new/cancel-before/${createdRideId}`;
-
-                                console.log("🚨 Cancelling ride with ID:", createdRideId);
-
-                                const response = await axios.post(cancelUrl); // or axios.post if your API expects POST
-
-                                console.log("✅ Ride cancelled:", response.data);
-                                showNotification("Success", response.data.message || "Ride cancelled.", "success");
-                            }
-
-                            setCreatedRideId(null);
-                            setRideOtp(null);
-                        } catch (error) {
-                            console.error("❌ Failed to cancel ride:", error.response?.data || error.message);
-                            showNotification(
-                                "Cancel Failed",
-                                error.response?.data?.message || "Something went wrong while cancelling the ride.",
-                                "error"
-                            );
-                        }
-                    },
-                },
-            ]
+        const response = await axios.get(
+          `https://www.appv2.olyox.com/api/v1/new/status/${createdRideId}`,
+          { headers: { Authorization: `Bearer ${token}` }, timeout: POLLING_INTERVAL - 1000 }
         );
-    };
+        const { status: newStatus, rideDetails, message } = response.data;
+        setCurrentRideStatus(newStatus);
+        setBookingStatusMessage(message || `Ride status: ${newStatus}`);
 
-    const handleChangePayment = () => {
-        Alert.alert(
-            "Select Payment Method",
-            "Choose your preferred payment method:",
-            [
-                { text: "Cash", onPress: () => setPaymentMethod("Cash") },
-                { text: "UPI", onPress: () => setPaymentMethod("UPI") },
-                { text: "Online", onPress: () => setPaymentMethod("Online") },
-                { text: "Cancel", style: "cancel" },
-            ],
-            { cancelable: true }
-        );
-    };
-
-    const getPaymentIcon = () => {
-        switch (paymentMethod) {
-            case "Cash": return "cash-multiple";
-            case "UPI": return "cellphone-link";
-            case "Online": return "credit-card-outline";
-            default: return "credit-card-settings-outline";
+        switch (newStatus) {
+          case 'driver_assigned':
+            showNotification('Driver Assigned!', message || 'Your ride is on the way.', 'success');
+            saveRide({ ...rideDetails, ride_otp: rideOtp });
+            updateRideStatus('confirmed');
+            stopBookingProcess('DRIVER_ASSIGNED');
+            navigation.replace('RideStarted', { driver: rideDetails?._id, origin, destination });
+            break;
+          case 'cancelled':
+            showNotification('Ride Cancelled', message || 'Ride cancelled.', 'info');
+            stopBookingProcess('CANCELLED_BY_SYSTEM');
+            break;
+          case 'completed':
+            showNotification('Ride Completed!', message || 'Thank you for riding.', 'success');
+            stopBookingProcess('COMPLETED');
+            break;
         }
-    };
-
-    const fitMapToMarkers = () => {
-        if (mapRef.current && origin && destination) {
-            const coordinates = [
-                { latitude: origin.latitude, longitude: origin.longitude },
-                { latitude: destination.latitude, longitude: destination.longitude }
-            ];
-
-            mapRef.current.fitToCoordinates(coordinates, {
-                edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-                animated: true,
-            });
+      } catch (err) {
+        console.error('Error polling ride status:', err);
+        if (err.response?.status === 401 || err.response?.status === 404) {
+          showNotification('Status Error', 'Could not verify ride status.', 'error');
+          stopBookingProcess('POLL_API_ERROR');
         }
+      }
     };
 
-    const Header = () => (
-        <View style={styles.headerContainer}>
-            <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => {
-                    if (isBookingInProgress) {
-                        handleCancelBooking();
-                    } else {
-                        navigation.goBack();
-                    }
-                }}
-            >
-                <Icon name="arrow-left" size={24} color={COLORS.text.primary} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Book Your Ride</Text>
-            <View style={styles.headerButton} />
-        </View>
-    );
+    pollingRef.current = setInterval(pollRideStatus, POLLING_INTERVAL);
+    pollRideStatus();
 
-    const MapSection = () => (
-        <View style={styles.mapContainer}>
-            {origin && destination ? (
-                <MapView
-                    ref={mapRef}
-                    style={styles.map}
-                    provider={PROVIDER_GOOGLE}
-                    initialRegion={{
-                        latitude: (origin.latitude + destination.latitude) / 2,
-                        longitude: (origin.longitude + destination.longitude) / 2,
-                        latitudeDelta: Math.abs(origin.latitude - destination.latitude) * 2 || 0.01,
-                        longitudeDelta: Math.abs(origin.longitude - destination.longitude) * 2 || 0.01,
-                    }}
-                    onMapReady={fitMapToMarkers}
-                >
-                    {/* Pickup Marker */}
-                    <Marker
-                        coordinate={{
-                            latitude: origin.latitude,
-                            longitude: origin.longitude,
-                        }}
-                        title="Pickup Location"
-                        description={pickup?.description || "Your pickup location"}
-                        pinColor={COLORS.success}
-                    >
-                        <View style={styles.customMarker}>
-                            <Icon name="map-marker-circle" size={30} color={COLORS.success} />
-                        </View>
-                    </Marker>
+    return () => clearInterval(pollingRef.current);
+  }, [createdRideId, isBookingInProgress, navigation, saveRide, updateRideStatus, origin, destination, rideOtp]);
 
-                    {/* Drop Marker */}
-                    <Marker
-                        coordinate={{
-                            latitude: destination.latitude,
-                            longitude: destination.longitude,
-                        }}
-                        title="Drop Location"
-                        description={dropoff?.description || "Your destination"}
-                        pinColor={COLORS.danger}
-                    >
-                        <View style={styles.customMarker}>
-                            <Icon name="flag-checkered" size={30} color={COLORS.danger} />
-                        </View>
-                    </Marker>
+  const stopBookingProcess = (reason) => {
+    console.log('Stopping booking process:', reason);
+    setIsBookingInProgress(false);
+    clearInterval(pollingRef.current);
+    clearTimeout(bookingTimeoutRef.current);
+  };
 
-                    {/* Route Direction */}
-                    <MapViewDirections
-                        origin={{
-                            latitude: origin.latitude,
-                            longitude: origin.longitude,
-                        }}
-                        destination={{
-                            latitude: destination.latitude,
-                            longitude: destination.longitude,
-                        }}
-                        apikey={GOOGLE_MAPS_APIKEY}
-                        strokeWidth={4}
-                        strokeColor={COLORS.primary}
-                        optimizeWaypoints={true}
-                        onError={(errorMessage) => {
-                            console.log('Direction error: ', errorMessage);
-                        }}
-                    />
-                </MapView>
-            ) : (
-                <View style={styles.mapPlaceholder}>
-                    <Icon name="map-outline" size={48} color={COLORS.text.tertiary} />
-                    <Text style={styles.mapPlaceholderText}>Map loading...</Text>
-                </View>
-            )}
-        </View>
-    );
-
-    const LocationCard = () => (
-        <View style={styles.locationCard}>
-            <View style={styles.locationRow}>
-                <View style={styles.locationIconContainer}>
-                    <View style={[styles.locationDot, { backgroundColor: COLORS.success }]} />
-                </View>
-                <View style={styles.locationTextContainer}>
-                    <Text style={styles.locationLabel}>PICKUP</Text>
-                    <Text style={styles.locationText} numberOfLines={2}>
-                        {pickup?.description || "Current Location"}
-                    </Text>
-                </View>
-            </View>
-
-            <View style={styles.routeLine} />
-
-            <View style={styles.locationRow}>
-                <View style={styles.locationIconContainer}>
-                    <View style={[styles.locationDot, { backgroundColor: COLORS.danger }]} />
-                </View>
-                <View style={styles.locationTextContainer}>
-                    <Text style={styles.locationLabel}>DROP-OFF</Text>
-                    <Text style={styles.locationText} numberOfLines={2}>
-                        {dropoff?.description || "Selected Destination"}
-                    </Text>
-                </View>
-            </View>
-        </View>
-    );
-
-    const RideDetailsCard = () => (
-        <View style={styles.card}>
-            <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Ride Details</Text>
-                {selectedRide?.durationInMinutes && (
-                    <View style={styles.durationBadge}>
-                        <Icon name="clock-outline" size={16} color={COLORS.primary} />
-                        <Text style={styles.durationText}>
-                            {selectedRide.durationInMinutes.toFixed(0)} min
-                        </Text>
-                    </View>
-                )}
-            </View>
-
-            <View style={styles.vehicleInfo}>
-                <Icon name="car" size={24} color={COLORS.text.secondary} />
-                <Text style={styles.vehicleText}>
-                    {selectedRide?.vehicleName || "Standard Vehicle"}
-                </Text>
-            </View>
-
-            <View style={styles.fareSection}>
-                <Text style={styles.fareSectionTitle}>Fare Breakdown</Text>
-                <View style={styles.fareRow}>
-                    <Text style={styles.fareLabel}>Base Fare</Text>
-                    <Text style={styles.fareValue}>
-                        ₹{selectedRide?.totalPrice?.toFixed(0) || "0"}
-                    </Text>
-                </View>
-
-
-                <View style={styles.totalFareRow}>
-                    <Text style={styles.totalFareLabel}>Total Fare</Text>
-                    <Text style={styles.totalFareValue}>
-                        ₹{selectedRide?.totalPrice?.toFixed(0) || "0"}
-                    </Text>
-                </View>
-            </View>
-
-            <Text style={styles.disclaimer}>
-                * Final fare may vary based on actual distance, traffic conditions, and tolls.
-            </Text>
-        </View>
-    );
-
-    const BookingProgressCard = () => (
-        <View style={styles.progressCard}>
-            <View style={styles.progressHeader}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.progressTitle}>Finding Your Driver</Text>
-                <Text style={styles.progressMessage}>{bookingStatusMessage}</Text>
-            </View>
-
-            <View style={styles.statusIndicator}>
-                <View style={styles.statusRow}>
-                    <View style={[
-                        styles.statusDot,
-                        (currentRideStatus === 'pending' || currentRideStatus === 'searching') && styles.statusDotActive
-                    ]} />
-                    <Text style={styles.statusText}>Searching for drivers</Text>
-                </View>
-                <View style={styles.statusConnector} />
-                <View style={styles.statusRow}>
-                    <View style={[
-                        styles.statusDot,
-                        currentRideStatus === 'driver_assigned' && styles.statusDotActive
-                    ]} />
-                    <Text style={styles.statusText}>Driver assigned</Text>
-                </View>
-            </View>
-
-            {rideOtp && (
-                <View style={styles.otpSection}>
-                    <Text style={styles.otpLabel}>Your Ride OTP</Text>
-                    <Text style={styles.otpValue}>{rideOtp}</Text>
-                </View>
-            )}
-
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelBooking}>
-                <Icon name="close-circle-outline" size={20} color={COLORS.danger} />
-                <Text style={styles.cancelButtonText}>Cancel Request</Text>
-            </TouchableOpacity>
-        </View>
-    );
-
-    if (isLoadingLocation) {
-        return (
-            <SafeAreaView style={styles.safeArea}>
-                <StatusBar barStyle="dark-content" backgroundColor={COLORS.background.primary} />
-                <Header />
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                    <Text style={styles.loadingText}>Getting your location...</Text>
-                </View>
-            </SafeAreaView>
-        );
+  const handleCreateRide = async () => {
+    if (!currentLocation || !origin || !destination || !selectedRide || !fcmToken) {
+      showNotification('Missing Information', 'Ensure location and ride details are selected.', 'error');
+      return;
     }
 
+    setIsCreatingRide(true);
+    setIsBookingInProgress(true);
+    setBookingStatusMessage('Requesting your ride...');
+    setCurrentRideStatus('pending');
+
+    try {
+      const token = await tokenCache.getToken('auth_token_db');
+      if (!token) {
+        showNotification('Authentication Error', 'Please log in again.', 'error');
+        stopBookingProcess('AUTH_ERROR_CREATE');
+        setIsCreatingRide(false);
+        return;
+      }
+
+      const farePayload = {
+        base_fare: selectedRide.pricing?.baseFare || 0,
+        distance_fare: selectedRide.pricing?.distanceCost || 0,
+        time_fare: selectedRide.pricing?.timeCost || 0,
+        platform_fee: selectedRide.pricing?.fuelSurcharge || 0,
+        night_charge: selectedRide.pricing?.nightSurcharge || 0,
+        rain_charge: selectedRide.conditions?.rain ? (selectedRide.pricing?.rainCharge || 10) : 0,
+        toll_charge: selectedRide.pricing?.tollCost || 0,
+        discount: selectedRide.pricing?.discount || 0,
+        total_fare: selectedRide.totalPrice,
+        currency: selectedRide.pricing?.currency || 'INR',
+      };
+
+      const rideData = {
+        vehicleType: selectedRide.vehicleType || selectedRide.vehicleName,
+        pickupLocation: { latitude: origin.latitude, longitude: origin.longitude },
+        dropLocation: { latitude: destination.latitude, longitude: destination.longitude },
+        currentLocation: { latitude: currentLocation.latitude, longitude: currentLocation.longitude },
+        pick_desc: pickup?.description,
+        drop_desc: dropoff?.description,
+        fare: farePayload,
+        fcmToken,
+        paymentMethod,
+        platform: Platform.OS,
+        scheduledAt: null,
+        pickupAddress: pickup?.address || {},
+        dropAddress: dropoff?.address || {},
+      };
+
+      const response = await axios.post(
+        'https://www.appv2.olyox.com/api/v1/new/new-ride',
+        rideData,
+        { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 }
+      );
+
+      if (response.data?.success && response.data.data?.rideId) {
+        const rideDetails = response.data.data;
+        setCreatedRideId(rideDetails.rideId);
+        if (rideDetails.ride_otp) setRideOtp(rideDetails.ride_otp);
+        showNotification('Ride Requested!', response.data.message || 'Searching for drivers...', 'success');
+        setBookingStatusMessage('Searching for drivers...');
+        setCurrentRideStatus(rideDetails.ride_status || 'searching');
+
+        bookingTimeoutRef.current = setTimeout(() => {
+          if (isBookingInProgress && currentRideStatus !== 'driver_assigned') {
+            showNotification('No Drivers Found', 'Could not find a driver. Try again later.', 'info');
+            stopBookingProcess('TIMEOUT');
+          }
+        }, BOOKING_TIMEOUT);
+      } else {
+        throw new Error(response.data?.message || 'Invalid server response.');
+      }
+    } catch (err) {
+      console.error('Error creating ride:', err);
+      showNotification('Booking Failed', err.response?.data?.message || 'Failed to create ride.', 'error');
+      stopBookingProcess('CREATE_RIDE_API_ERROR');
+    } finally {
+      setIsCreatingRide(false);
+    }
+  };
+
+  const handleCancelBooking = () => {
+    Alert.alert('Cancel Booking?', 'Are you sure?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            stopBookingProcess('USER_CANCELLED');
+            showNotification('Booking Cancelled', 'Ride request cancelled.', 'info');
+            if (createdRideId) {
+              await axios.post(`https://www.appv2.olyox.com/api/v1/new/cancel-before/${createdRideId}`);
+              showNotification('Success', 'Ride cancelled.', 'success');
+            }
+            setCreatedRideId(null);
+            setRideOtp(null);
+          } catch (error) {
+            console.error('Failed to cancel ride:', error);
+            showNotification('Cancel Failed', 'Error cancelling ride.', 'error');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleChangePayment = () => {
+    Alert.alert('Select Payment Method', 'Choose payment method:', [
+      { text: 'Cash', onPress: () => setPaymentMethod('Cash') },
+      { text: 'UPI', onPress: () => setPaymentMethod('UPI') },
+      { text: 'Online', onPress: () => setPaymentMethod('Online') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const getPaymentIcon = () => {
+    switch (paymentMethod) {
+      case 'Cash':
+        return 'cash-multiple';
+      case 'UPI':
+        return 'cellphone-link';
+      case 'Online':
+        return 'credit-card-outline';
+      default:
+        return 'credit-card-settings-outline';
+    }
+  };
+
+  const fitMapToMarkers = () => {
+    if (mapRef.current && origin && destination) {
+      mapRef.current.fitToCoordinates(
+        [
+          { latitude: origin.latitude, longitude: origin.longitude },
+          { latitude: destination.latitude, longitude: destination.longitude },
+        ],
+        { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 }, animated: true }
+      );
+    }
+  };
+
+  const Header = () => (
+    <View>
+      <TouchableOpacity onPress={() => (isBookingInProgress ? handleCancelBooking() : navigation.goBack())}>
+        <Icon name="arrow-left" size={24} />
+      </TouchableOpacity>
+      <Text>Book Your Ride</Text>
+    </View>
+  );
+
+  const MapSection = () => (
+    <View>
+      {origin && destination ? (
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          initialRegion={{
+            latitude: (origin.latitude + destination.latitude) / 2,
+            longitude: (origin.longitude + destination.longitude) / 2,
+            latitudeDelta: Math.abs(origin.latitude - destination.latitude) * 2 || 0.01,
+            longitudeDelta: Math.abs(origin.longitude - destination.longitude) * 2 || 0.01,
+          }}
+          onMapReady={fitMapToMarkers}
+        >
+          <Marker
+            coordinate={{ latitude: origin.latitude, longitude: origin.longitude }}
+            title="Pickup"
+            description={pickup?.description || 'Pickup location'}
+          >
+            <Icon name="map-marker-circle" size={30} />
+          </Marker>
+          <Marker
+            coordinate={{ latitude: destination.latitude, longitude: destination.longitude }}
+            title="Drop-off"
+            description={dropoff?.description || 'Destination'}
+          >
+            <Icon name="flag-checkered" size={30} />
+          </Marker>
+          {Platform.OS === 'ios' && coordinates.length > 0 && (
+            <Polyline coordinates={coordinates} strokeWidth={4} strokeColor="#2196F3" />
+          )}
+          {Platform.OS !== 'ios' && coordinates.length > 0 && (
+            <Polyline coordinates={coordinates} strokeWidth={4} strokeColor="#2196F3" />
+          )}
+        </MapView>
+      ) : (
+        <View>
+          <Icon name="map-outline" size={48} />
+          <Text>Map loading...</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const LocationCard = () => (
+    <View>
+      <View>
+        <Text>PICKUP</Text>
+        <Text>{pickup?.description || 'Current Location'}</Text>
+      </View>
+      <View>
+        <Text>DROP-OFF</Text>
+        <Text>{dropoff?.description || 'Selected Destination'}</Text>
+      </View>
+    </View>
+  );
+
+  const RideDetailsCard = () => (
+    <View>
+      <View>
+        <Text>Ride Details</Text>
+        {selectedRide?.durationInMinutes && (
+          <View>
+            <Icon name="clock-outline" size={16} />
+            <Text>{selectedRide.durationInMinutes.toFixed(0)} min</Text>
+          </View>
+        )}
+      </View>
+      <View>
+        <Icon name="car" size={24} />
+        <Text>{selectedRide?.vehicleName || 'Standard Vehicle'}</Text>
+      </View>
+      <View>
+        <Text>Fare Breakdown</Text>
+        <View>
+          <Text>Base Fare</Text>
+          <Text>₹{selectedRide?.totalPrice?.toFixed(0) || '0'}</Text>
+        </View>
+        <View>
+          <Text>Total Fare</Text>
+          <Text>₹{selectedRide?.totalPrice?.toFixed(0) || '0'}</Text>
+        </View>
+      </View>
+      <Text>* Fare may vary based on distance, traffic, and tolls.</Text>
+    </View>
+  );
+
+  const BookingProgressCard = () => (
+    <View>
+      <View>
+        <ActivityIndicator size="large" />
+        <Text>Finding Your Driver</Text>
+        <Text>{bookingStatusMessage}</Text>
+      </View>
+      <View>
+        <View>
+          <Text>Searching for drivers</Text>
+        </View>
+        <View>
+          <Text>Driver assigned</Text>
+        </View>
+      </View>
+      {rideOtp && (
+        <View>
+          <Text>Your Ride OTP</Text>
+          <Text>{rideOtp}</Text>
+        </View>
+      )}
+      <TouchableOpacity onPress={handleCancelBooking}>
+        <Icon name="close-circle-outline" size={20} />
+        <Text>Cancel Request</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (isLoadingLocation) {
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="dark-content" backgroundColor={COLORS.background.primary} />
-            <Header />
-
-            <ScrollView
-                style={styles.scrollView}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContainer}
-            >
-                <MapSection />
-                <LocationCard />
-
-                {isBookingInProgress ? (
-                    <BookingProgressCard />
-                ) : (
-                    <RideDetailsCard />
-                )}
-            </ScrollView>
-
-            {!isBookingInProgress && (
-                <View style={styles.footer}>
-                    <TouchableOpacity style={styles.paymentSelector} onPress={handleChangePayment}>
-                        <Icon name={getPaymentIcon()} size={24} color={COLORS.primary} />
-                        <Text style={styles.paymentText}>{paymentMethod}</Text>
-                        <Icon name="chevron-down" size={20} color={COLORS.text.secondary} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[
-                            styles.bookButton,
-                            (!selectedRide || !currentLocation || isCreatingRide) && styles.bookButtonDisabled,
-                        ]}
-                        onPress={handleCreateRide}
-                        disabled={!selectedRide || !currentLocation || isCreatingRide}
-                    >
-                        {isCreatingRide ? (
-                            <ActivityIndicator color={COLORS.text.inverse} size="small" />
-                        ) : (
-                            <>
-                                <Text style={styles.bookButtonText}>Book Ride</Text>
-                                <Text style={styles.bookButtonSubtext}>
-                                    ₹{selectedRide?.totalPrice?.toFixed(0) || "0"}
-                                </Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            )}
-        </SafeAreaView>
+      <SafeAreaView>
+        <Header />
+        <View>
+          <ActivityIndicator size="large" />
+          <Text>Getting your location...</Text>
+        </View>
+      </SafeAreaView>
     );
+  }
+
+  return (
+    <SafeAreaView>
+      <Header />
+      <ScrollView>
+        <MapSection />
+        <LocationCard />
+        {isBookingInProgress ? <BookingProgressCard /> : <RideDetailsCard />}
+      </ScrollView>
+      {!isBookingInProgress && (
+        <View>
+          <TouchableOpacity onPress={handleChangePayment}>
+            <Icon name={getPaymentIcon()} size={24} />
+            <Text>{paymentMethod}</Text>
+            <Icon name="chevron-down" size={20} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleCreateRide}
+            disabled={!selectedRide || !currentLocation || isCreatingRide}
+          >
+            {isCreatingRide ? (
+              <ActivityIndicator size="small" />
+            ) : (
+              <>
+                <Text>Book Ride</Text>
+                <Text>₹{selectedRide?.totalPrice?.toFixed(0) || '0'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
