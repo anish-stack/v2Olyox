@@ -34,7 +34,7 @@ export default function WaitScreen() {
             const token = await SecureStore.getItemAsync('auth_token_cab');
             if (token) {
                 const response = await axios.get(
-                    'https://appapi.olyox.com/api/v1/rider/user-details',
+                    'https://www.appv2.olyox.com/api/v1/rider/user-details',
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
 

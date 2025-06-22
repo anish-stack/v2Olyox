@@ -92,7 +92,7 @@ const App = () => {
         return;
       }
 
-      const response = await axios.get('https://appapi.olyox.com/api/v1/rider/user-details', {
+      const response = await axios.get('https://www.appv2.olyox.com/api/v1/rider/user-details', {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -121,7 +121,7 @@ const App = () => {
 
   const fetchRideDetails = useCallback(async (rideId) => {
     try {
-      const response = await axios.get(`https://appapi.olyox.com/rider/${rideId}`);
+      const response = await axios.get(`https://www.appv2.olyox.com/rider/${rideId}`);
       setActiveRideData(response.data);
     } catch (error) {
       console.error('Error fetching ride details:', error?.response?.data);
@@ -134,7 +134,7 @@ const App = () => {
   //     const authToken = await SecureStore.getItemAsync('auth_token_cab');
   //     if (authToken) {
   //       await axios.post(
-  //         'https://appapi.olyox.com/api/v1/rider/update-fcm-token',
+  //         'https://www.appv2.olyox.com/api/v1/rider/update-fcm-token',
   //         { fcm_token: fcmToken },
   //         { headers: { Authorization: `Bearer ${authToken}` } }
   //       );
@@ -150,7 +150,7 @@ const App = () => {
       const token = await SecureStore.getItemAsync('auth_token_cab');
       if (!token) return;
 
-      const response = await axios.get('https://appapi.olyox.com/api/v1/rider/user-details', {
+      const response = await axios.get('https://www.appv2.olyox.com/api/v1/rider/user-details', {
         headers: { Authorization: `Bearer ${token}` },
       });
 

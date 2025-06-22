@@ -6,7 +6,7 @@ import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
-const API_END_POINT_URL = `https://appapi.olyox.com/api/v1/parcel`;
+const API_END_POINT_URL = `https://www.appv2.olyox.com/api/v1/parcel`;
 const { width } = Dimensions.get('window');
 
 export default function AvailableOrder() {

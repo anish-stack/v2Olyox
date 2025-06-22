@@ -41,7 +41,7 @@ export default function Parcel_Orders() {
       }
       
       const response = await axios.get(
-        `https://appapi.olyox.com/api/v1/heavy/get-my-all-parcel/${user.user._id}`
+        `https://www.appv2.olyox.com/api/v1/heavy/get-my-all-parcel/${user.user._id}`
       )
       
       if (response.data.success) {
@@ -85,7 +85,7 @@ export default function Parcel_Orders() {
               
               // Replace with your actual cancel API endpoint
               const response = await axios.post(
-                `https://appapi.olyox.com/api/v1/heavy/cancel-parcel/${parcelId}`,
+                `https://www.appv2.olyox.com/api/v1/heavy/cancel-parcel/${parcelId}`,
                 { userId: user?.user?._id }
               )
               

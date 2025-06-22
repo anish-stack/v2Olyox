@@ -25,7 +25,7 @@ export default function AllRides() {
       }
 
       const response = await axios.get(
-        'https://appapi.olyox.com/api/v1/rider/getMyAllRides',
+        'https://www.appv2.olyox.com/api/v1/rider/getMyAllRides',
         {
           headers: {
             Authorization: `Bearer ${token}`,

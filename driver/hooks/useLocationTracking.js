@@ -16,7 +16,7 @@ TaskManager.defineTask(TASK_NAME, async () => {
 
     if (token && coords) {
       await axios.post(
-        "https://appapi.olyox.com/webhook/cab-receive-location",
+        "https://www.appv2.olyox.com/webhook/cab-receive-location",
         {
           latitude: coords.latitude,
           longitude: coords.longitude,

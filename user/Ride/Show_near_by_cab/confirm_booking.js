@@ -154,7 +154,7 @@ export default function BookingConfirmation() {
                 }
 
                 const response = await axios.get(
-                    `https://appapi.olyox.com/api/v1/new/status/${createdRideId}`,
+                    `https://www.appv2.olyox.com/api/v1/new/status/${createdRideId}`,
                     {
                         headers: { Authorization: `Bearer ${token}` },
                         timeout: POLLING_INTERVAL - 1000,
@@ -268,7 +268,7 @@ export default function BookingConfirmation() {
             };
 
             const response = await axios.post(
-                "https://appapi.olyox.com/api/v1/new/new-ride",
+                "https://www.appv2.olyox.com/api/v1/new/new-ride",
                 rideData,
                 {
                     headers: { Authorization: `Bearer ${token}` },
@@ -325,7 +325,7 @@ export default function BookingConfirmation() {
                             );
 
                             if (createdRideId) {
-                                const cancelUrl = `https://appapi.olyox.com/api/v1/new/cancel-before/${createdRideId}`;
+                                const cancelUrl = `https://www.appv2.olyox.com/api/v1/new/cancel-before/${createdRideId}`;
 
                                 console.log("🚨 Cancelling ride with ID:", createdRideId);
 

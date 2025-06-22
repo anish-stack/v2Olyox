@@ -77,7 +77,7 @@ export default function RunningRide() {
                 console.log("📦 Fetching ride details for ride ID:", userData.on_ride_id);
 
                 const response = await axios.get(
-                    `https://appapi.olyox.com/rider/${userData.on_ride_id}`,
+                    `https://www.appv2.olyox.com/rider/${userData.on_ride_id}`,
                     {
                         timeout: 10000,
                     }

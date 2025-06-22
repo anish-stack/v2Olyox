@@ -20,7 +20,7 @@ export default function Report({ isRefresh }) {
                     return;
                 }
 
-                const response = await axios.get('https://appapi.olyox.com/api/v1/rider/getMyAllDetails', {
+                const response = await axios.get('https://www.appv2.olyox.com/api/v1/rider/getMyAllDetails', {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },

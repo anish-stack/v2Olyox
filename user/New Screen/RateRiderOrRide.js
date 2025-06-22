@@ -17,7 +17,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import axios from 'axios';
 
 const { width } = Dimensions.get('window');
-const API_BASE_URL = 'https://appapi.olyox.com/api/v1/new/ride/rate-your-ride';
+const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1/new/ride/rate-your-ride';
 
 export default function RateRiderOrRide() {
   const route = useRoute();

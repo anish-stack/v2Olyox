@@ -1422,7 +1422,7 @@ exports.FetchAllBookedRides = async (req, res) => {
                 path: 'rejected_by_drivers.driver', // Populate driver inside rejected_by_drivers array
                 model: 'Rider',
                 select: 'name phone rideVehicleInfo isAvailable' // Select fields you want from the Rider model
-            });
+            }).sort({ requested_at: -1 }); // Sort by requested_at in descending order
 
         res.status(200).json({ success: true, Bookings });
     } catch (error) {

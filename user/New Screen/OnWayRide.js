@@ -23,7 +23,7 @@ import { useRide } from "../context/RideContext"
 import useNotificationPermission from "../hooks/notification"
 
 const { width, height } = Dimensions.get("window")
-const API_BASE_URL = "https://appapi.olyox.com"
+const API_BASE_URL = "https://www.appv2.olyox.com"
 
 const STATUS_CONFIG = {
     driver_assigned: { label: "Driver Assigned", color: "#FF6B35", icon: "car-outline" },
