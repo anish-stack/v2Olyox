@@ -8,7 +8,7 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true, // ✅ Play sound
-    shouldSetBadge: false,
+    shouldSetBadge: true,
   }),
 });
 
@@ -28,6 +28,10 @@ export default function useNotifications() {
         console.log('❌ Error playing sound:', error);
       }
     };
+
+
+
+    
   useEffect(() => {
     // Register for push notifications
     registerForPushNotificationsAsync().then((token) => {
@@ -40,9 +44,7 @@ export default function useNotifications() {
     // Listener for incoming notifications
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
       console.log("Notification Received fom hook:", notification);
-    if (AppState.currentState === 'active') {
-        playSound(); // ✅ only in foreground
-      }
+
     });
 
     // Listener for user interaction with notifications

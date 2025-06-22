@@ -23,19 +23,30 @@ const RidesSuggestionSchema = new Schema({
         type: String,
         required: true
     },
-    status:{
+    status: {
         type: Boolean,
         default: false
-      
+
     },
-    icons_image:{
-        url:{
+    icons_image: {
+        url: {
             type: String,
         },
-        public_id:{
+        public_id: {
             type: String,
         }
-    }
+    },
+    vehicleType: { type: String, required: true }, // e.g., "Bike", "Auto", etc.
+    avgMileage: { type: Number, required: true }, // in km/l
+    baseFare: { type: Number, required: true },
+    baseKM: { type: Number, required: true },
+    perKM: { type: Number, required: true },
+    perMin: { type: Number, required: true },
+    nightPercent: { type: Number, required: true }, // store as number, e.g., 15 for 15%
+    minFare: { type: Number, required: true },
+    tollExtra: { type: Boolean, required: true },
+    waitingChargePerMin: { type: Number, required: true },
+    fuelSurchargePerKM: { type: Number, required: true }
 });
 
 module.exports = mongoose.model('RidesSuggestion', RidesSuggestionSchema);

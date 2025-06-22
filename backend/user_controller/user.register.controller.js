@@ -9,6 +9,7 @@ const SendWhatsAppMessage = require("../utils/whatsapp_send");
 const { uploadSingleImage, deleteImage } = require("../utils/cloudinary");
 const generateOtp = require("../utils/Otp.Genreator");
 const SendWhatsAppMessageUser = require("../utils/forUserWhatsapp");
+const NewRideModelModel = require("../src/New-Rides-Controller/NewRideModel.model");
 
 exports.createUser = async (req, res) => {
     try {
@@ -394,7 +395,7 @@ exports.findAllOrders = async (req, res) => {
             .populate({ path: "items.foodItem_id" })  // Correct way to populate nested field inside an array
             .sort({ createdAt: -1 });
 
-        const RideData = await RideRequestSchema.find({ user: userData._id }).populate('rider').sort({ createdAt: -1 });
+        const RideData = await NewRideModelModel.find({ user: userData._id }).populate('driver').sort({ createdAt: -1 });
         const Parcel = await ParcelBooks.find({ customerId: userData._id }).sort({ createdAt: -1 });
         const Hotel = await HotelBookings.find({ guest_id: userData._id }).populate('HotelUserId').sort({ createdAt: -1 });
 

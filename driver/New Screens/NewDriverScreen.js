@@ -1,32 +1,38 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Updates from 'expo-updates'; // ✅ Import expo-updates
+
 import HeaderNew from './components/Header/HeaderNew';
 import RiderDataAndRechargeInfo from './components/HomeScreen/RiderDataAndRechargeInfo';
 import RideSearching from './components/HomeScreen/RideSearching';
 import Report from '../screens/Report/Report';
 import Bonus from '../screens/Bonus/Bonus';
+// import Demo from '../Demo';
 
 export default function NewHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     console.log("🔄 Refreshing Home Screen...");
     setRefreshing(true);
 
-    // Simulate an async refresh (e.g., fetch from server)
-    setTimeout(() => {
-      console.log("✅ Refresh complete");
-      setRefreshing(false);
+    setTimeout(async () => {
+      console.log("✅ Refresh complete, reloading app...");
+
+      try {
+        await Updates.reloadAsync(); // 🔁 Force app reload
+      } catch (e) {
+        console.error("❌ Error reloading app:", e);
+        setRefreshing(false); // fallback if reload fails
+      }
     }, 1500);
   }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header at the top */}
-      <HeaderNew />
+      <HeaderNew isRefresh={refreshing} />
 
-      {/* Main Content with Pull to Refresh */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
@@ -37,8 +43,7 @@ export default function NewHomeScreen() {
         <RideSearching refreshing={refreshing} />
         <RiderDataAndRechargeInfo refreshing={refreshing} />
         <Report isRefresh={refreshing} />
-        <Bonus/>
-        {/* Add more components if needed */}
+        <Bonus />
       </ScrollView>
     </SafeAreaView>
   );
@@ -47,7 +52,7 @@ export default function NewHomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f8f9fa', // Light gray background
+    backgroundColor: '#f8f9fa',
   },
   scrollContainer: {
     padding: 8,

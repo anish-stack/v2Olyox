@@ -57,9 +57,11 @@ const showExpoNotification = async (title, body, data = {}) => {
       body,
       data,
       vibrate: true,
-      sticky: true,
+      sticky: false,
+    
       sound: 'default'
     },
+  
     trigger: null, // Show immediately
   });
 };
@@ -192,19 +194,19 @@ const useNotificationPermission = () => {
     });
 
     // Set background handler (only once globally)
-    messaging().setBackgroundMessageHandler(async remoteMessage => {
-      console.log('📩 Message handled in background:', remoteMessage);
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: remoteMessage.notification?.title || 'New Message',
-          body: remoteMessage.notification?.body || '',
-         sound: 'sound',
-        },
-        trigger: null,
-      });
-      // Note: this won't update state directly as the app is in background
-      return remoteMessage;
-    });
+ messaging().setBackgroundMessageHandler(async remoteMessage => {
+  console.log('📩 Message handled in background:', remoteMessage);
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: remoteMessage.notification?.title || 'New Message',
+      body: remoteMessage.notification?.body || '',
+      sound: true, // Play the default system sound
+      // OR for custom sound: sound: 'custom_sound' (without extension)
+    },
+    trigger: null,
+  });
+  return remoteMessage;
+});
 
     // App state change listener to refresh token when app comes to foreground
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
@@ -232,7 +234,8 @@ const useNotificationPermission = () => {
         }
       };
       if (AppState.currentState === 'active') {
-        playSound(); // ✅ only in foreground
+        return 
+        // playSound(); // ✅ only in foreground
       } else {
         playSound(); // ✅ only in background
       }

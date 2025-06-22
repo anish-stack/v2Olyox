@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerRider, getAllRiders, changeLocation, login, resendOtp, verifyOtp, uploadDocuments, details, getMyAllDetails, getMyAllRides, toggleWorkStatusOfRider, verifyDocument, uploadPaymentQr, getMySessionsByUserId, riderDocumentsVerify, updateBlockStatus, getSingleRider, updateRiderDetails, updateRiderDocumentVerify, logoutRider, deleteRider } = require('../controllers/rider.controller');
+const { registerRider, getAllRiders, changeLocation, login, resendOtp, verifyOtp, uploadDocuments, details, getMyAllDetails, getMyAllRides, toggleWorkStatusOfRider, verifyDocument, uploadPaymentQr, getMySessionsByUserId, riderDocumentsVerify, updateBlockStatus, getSingleRider, updateRiderDetails, updateRiderDocumentVerify, logoutRider, deleteRider, AdmintoggleWorkStatusOfRider } = require('../controllers/rider.controller');
 const { calculateRidePriceForUser, rideEndByFallBack } = require('../controllers/ride.request');
 
 const router = express.Router();
@@ -56,6 +56,7 @@ router.put('/updateRiderBlock/:id', updateBlockStatus)
 router.get('/getMyAllDetails', Protect, getMyAllDetails);
 router.get('/getMyAllRides', Protect, getMyAllRides);
 router.post('/toggleWorkStatusOfRider', Protect, toggleWorkStatusOfRider);
+router.post('/AdmintoggleWorkStatusOfRider/:id', AdmintoggleWorkStatusOfRider);
 router.get('/getMySessionsByUserId', getMySessionsByUserId);
 router.put('/rider_document_verify/:id', riderDocumentsVerify)
 

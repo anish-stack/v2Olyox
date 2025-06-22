@@ -8,7 +8,7 @@ const RIDE_HISTORY_KEY = 'RIDE_HISTORY';
 
 export const RideProvider = ({ children }) => {
   const [currentRide, setCurrentRide] = useState(null);
-  const [rideStatus, setRideStatus] = useState('idle'); 
+  const [rideStatus, setRideStatus] = useState('idle');
   const [rideHistory, setRideHistory] = useState([]);
 
   // Load ride data from secure store on mount
@@ -50,10 +50,10 @@ export const RideProvider = ({ children }) => {
   const clearCurrentRide = async () => {
     setCurrentRide(null);
     setRideStatus('idle');
-    console.log("Cleanin")
+
     await SecureStore.deleteItemAsync(RIDE_KEY);
   };
- 
+
 
 
   return (

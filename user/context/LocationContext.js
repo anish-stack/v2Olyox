@@ -157,7 +157,7 @@ export const LocationProvider = ({ children }) => {
 
       setIsLoading(false);
     } catch (error) {
-      console.error("Error getting location:", error.message);
+      console.error("Error getting location form location context:", error.message);
       
       // Handle specific error cases
       if (error.message.includes('timed out')) {

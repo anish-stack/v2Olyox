@@ -21,7 +21,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 
 const { width, height } = Dimensions.get('window');
-const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8'; 
+const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
 
 import { tokenCache } from "../../Auth/cache";
 import { useLocation } from "../../context/LocationContext";
@@ -36,38 +36,38 @@ const COLORS = {
     primary: "#6366F1", // Indigo
     primaryLight: "#A5B4FC",
     primaryDark: "#4338CA",
-    
+
     secondary: "#F59E0B", // Amber
     secondaryLight: "#FDE68A",
-    
+
     success: "#10B981", // Emerald
     successLight: "#D1FAE5",
-    
+
     danger: "#EF4444", // Red
     dangerLight: "#FEE2E2",
-    
+
     warning: "#F59E0B", // Amber
     warningLight: "#FEF3C7",
-    
+
     text: {
         primary: "#111827",
         secondary: "#6B7280",
         tertiary: "#9CA3AF",
         inverse: "#FFFFFF",
     },
-    
+
     background: {
         primary: "#FFFFFF",
         secondary: "#F9FAFB",
         tertiary: "#F3F4F6",
     },
-    
+
     border: {
         light: "#E5E7EB",
         medium: "#D1D5DB",
         dark: "#9CA3AF",
     },
-    
+
     overlay: "rgba(0, 0, 0, 0.5)",
 };
 
@@ -154,7 +154,7 @@ export default function BookingConfirmation() {
                 }
 
                 const response = await axios.get(
-                    `http://192.168.1.6:3100/api/v1/new/status/${createdRideId}`,
+                    `https://appapi.olyox.com/api/v1/new/status/${createdRideId}`,
                     {
                         headers: { Authorization: `Bearer ${token}` },
                         timeout: POLLING_INTERVAL - 1000,
@@ -268,7 +268,7 @@ export default function BookingConfirmation() {
             };
 
             const response = await axios.post(
-                "http://192.168.1.6:3100/api/v1/new/new-ride",
+                "https://appapi.olyox.com/api/v1/new/new-ride",
                 rideData,
                 {
                     headers: { Authorization: `Bearer ${token}` },
@@ -316,13 +316,35 @@ export default function BookingConfirmation() {
                     text: "Yes, Cancel",
                     style: "destructive",
                     onPress: async () => {
-                        stopBookingProcess("USER_CANCELLED");
-                        showNotification("Booking Cancelled", "Your ride request has been cancelled.", "info");
-                        if (createdRideId) {
-                            console.log("TODO: Call API to cancel ride", createdRideId);
+                        try {
+                            stopBookingProcess("USER_CANCELLED");
+                            showNotification(
+                                "Booking Cancelled",
+                                "Your ride request has been cancelled.",
+                                "info"
+                            );
+
+                            if (createdRideId) {
+                                const cancelUrl = `https://appapi.olyox.com/api/v1/new/cancel-before/${createdRideId}`;
+
+                                console.log("🚨 Cancelling ride with ID:", createdRideId);
+
+                                const response = await axios.post(cancelUrl); // or axios.post if your API expects POST
+
+                                console.log("✅ Ride cancelled:", response.data);
+                                showNotification("Success", response.data.message || "Ride cancelled.", "success");
+                            }
+
+                            setCreatedRideId(null);
+                            setRideOtp(null);
+                        } catch (error) {
+                            console.error("❌ Failed to cancel ride:", error.response?.data || error.message);
+                            showNotification(
+                                "Cancel Failed",
+                                error.response?.data?.message || "Something went wrong while cancelling the ride.",
+                                "error"
+                            );
                         }
-                        setCreatedRideId(null);
-                        setRideOtp(null);
                     },
                 },
             ]
@@ -358,7 +380,7 @@ export default function BookingConfirmation() {
                 { latitude: origin.latitude, longitude: origin.longitude },
                 { latitude: destination.latitude, longitude: destination.longitude }
             ];
-            
+
             mapRef.current.fitToCoordinates(coordinates, {
                 edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
                 animated: true,
@@ -517,8 +539,8 @@ export default function BookingConfirmation() {
                         ₹{selectedRide?.totalPrice?.toFixed(0) || "0"}
                     </Text>
                 </View>
-               
-               
+
+
                 <View style={styles.totalFareRow}>
                     <Text style={styles.totalFareLabel}>Total Fare</Text>
                     <Text style={styles.totalFareValue}>
@@ -590,7 +612,7 @@ export default function BookingConfirmation() {
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.background.primary} />
             <Header />
-            
+
             <ScrollView
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
@@ -598,7 +620,7 @@ export default function BookingConfirmation() {
             >
                 <MapSection />
                 <LocationCard />
-                
+
                 {isBookingInProgress ? (
                     <BookingProgressCard />
                 ) : (
@@ -644,7 +666,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background.primary,
     },
-    
+
     // Header Styles
     headerContainer: {
         flexDirection: 'row',

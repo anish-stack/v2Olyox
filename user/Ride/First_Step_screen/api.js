@@ -43,7 +43,7 @@ export const fetchPastRidesData = async () => {
     const db_token = await tokenCache.getToken("auth_token_db")
     const token = db_token || gmail_token
 
-    const response = await axios.get("http://192.168.1.6:3100/api/v1/user/find-Orders-details", {
+    const response = await axios.get("https://appapi.olyox.com/api/v1/user/find-Orders-details", {
       headers: { Authorization: `Bearer ${token}` },
     })
 
@@ -57,7 +57,7 @@ export const fetchPastRidesData = async () => {
 // Fetch directions polyline
 export const fetchDirectionsPolyline = async (pickup, dropoff) => {
   try {
-    const response = await axios.post("http://192.168.1.6:3100/directions", {
+    const response = await axios.post("https://appapi.olyox.com/directions", {
       pickup: {
         latitude: pickup.latitude,
         longitude: pickup.longitude,
@@ -84,7 +84,7 @@ export const fetchDirectionsPolyline = async (pickup, dropoff) => {
       durationValue: json?.duration || null,
     }
   } catch (error) {
-    console.error("Error fetching directions:", error.response.data)
+    console.error("Error fetching direction at api.js:", error.response.data.message)
     throw new Error("Failed to fetch directions")
   }
 }

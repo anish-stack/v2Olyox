@@ -10,6 +10,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@bull-board/express": "^6.10.1",
     "@faker-js/faker": "^9.4.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "app_backend": "file:",
@@ -17,6 +18,7 @@
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.0",
+    "bull": "^4.16.5",
     "cloudinary": "^2.5.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

@@ -146,23 +146,7 @@ async function sendRideNotification(rides) {
     
     logWithTimestamp(`📱 Sending notification for ${rideCount} ride(s)`);
     
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: rideCount === 1 ? "New Ride Available!" : `${rideCount} New Rides Available!`,
-        body: rideCount === 1 
-          ? `Ride ID: ${rideId}` 
-          : `Multiple rides available. First: ${rideId}`,
-        data: {
-          event: 'NEW_RIDE_AVAILABLE',
-          rideCount: rideCount,
-          rideId: rideId,
-          rides: rides.map(r => r._id)
-        },
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-        sound: 'default',
-      },
-      trigger: null,
-    });
+
     
     logWithTimestamp(`✅ Notification sent successfully`, 'success');
   } catch (error) {

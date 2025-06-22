@@ -9,6 +9,12 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    currentRide: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: false,
+        default: null,
+        ref: 'RideRequestNew',
+    },
     otp: {
         type: String,
     },

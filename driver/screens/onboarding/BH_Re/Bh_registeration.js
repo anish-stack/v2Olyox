@@ -41,10 +41,7 @@ export default function RegisterWithBh() {
     password: '',
     category: '676ef9685c75082fcbc59c4f',
     address: {
-      area: '',
       street_address: '',
-      landmark: '',
-      pincode: '',
       location: {
         type: 'Point',
         coordinates: [78.2693, 25.369],
@@ -69,7 +66,7 @@ export default function RegisterWithBh() {
   const formatAadhar = (text) => {
     // Remove all spaces first
     const cleaned = text.replace(/\s/g, '');
-    
+
     // Add spaces after every 4 characters
     let formatted = '';
     for (let i = 0; i < cleaned.length && i < 12; i++) {
@@ -78,14 +75,14 @@ export default function RegisterWithBh() {
       }
       formatted += cleaned[i];
     }
-    
+
     return formatted;
   };
 
   // Validate a specific field
   const validateField = (field, value) => {
     let error = null;
-    
+
     switch (field) {
       case 'name':
         if (!value.trim()) error = 'Please enter your name.';
@@ -97,13 +94,7 @@ export default function RegisterWithBh() {
           error = 'Please enter a valid email address.';
         }
         break;
-      case 'reEmail':
-        if (!value.trim()) {
-          error = 'Please re-enter your email address.';
-        } else if (value !== formData.email) {
-          error = 'Emails do not match.';
-        }
-        break;
+
       case 'number':
         if (!value.trim()) {
           error = 'Please enter your phone number.';
@@ -131,42 +122,35 @@ export default function RegisterWithBh() {
         }
         break;
     }
-    
+
     return error;
   };
 
   // Handle input changes with validation
   const handleInputChange = (field, value) => {
     let newValue = value;
-    
+
     // Special formatting for Aadhaar
     if (field === 'aadharNumber') {
       newValue = formatAadhar(value);
     }
-    
+
     // Update form data
     setFormData(prev => ({
       ...prev,
       [field]: newValue
     }));
-    
+
     // Validate field
     const fieldError = validateField(field, newValue);
-    
+
     // Update errors
     setErrors(prev => ({
       ...prev,
       [field]: fieldError
     }));
-    
-    // For email confirmation, also check reEmail when email changes
-    if (field === 'email' && formData.reEmail) {
-      const reEmailError = validateField('reEmail', formData.reEmail);
-      setErrors(prev => ({
-        ...prev,
-        reEmail: reEmailError
-      }));
-    }
+
+
   };
 
   const showDatePicker = () => {
@@ -202,7 +186,7 @@ export default function RegisterWithBh() {
         ...prev,
         dob: newDate,
       }));
-      
+
       // Clear error if date is valid
       setErrors(prev => ({
         ...prev,
@@ -238,19 +222,19 @@ export default function RegisterWithBh() {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     // Validate all fields
     Object.keys(formData).forEach(field => {
-      if (field !== 'address' && field !== 'category' && field !== 'member_id' && 
-          field !== 'referral_code_which_applied' && field !== 'is_referral_applied') {
+      if (field !== 'address' && field !== 'category' && field !== 'member_id' &&
+        field !== 'referral_code_which_applied' && field !== 'is_referral_applied') {
         const error = validateField(field, formData[field]);
         if (error) newErrors[field] = error;
       }
     });
-    
+
     // Validate address fields
     if (!formData.address.pincode.trim()) newErrors.pincode = 'Please enter your pincode.';
-    
+
     // Check terms and conditions
     if (!termsAccepted) {
       newErrors.terms = 'You must accept the terms and conditions to proceed.';
@@ -275,10 +259,10 @@ export default function RegisterWithBh() {
           "Registration Successful",
           "An OTP has been sent to your WhatsApp. Please verify to continue.",
           [
-            { 
-              text: "OK", 
+            {
+              text: "OK",
               onPress: () => navigation.navigate('OtpVerify', {
-               	type: response.data.type,
+                type: response.data.type,
                 email: response.data.email,
                 expireTime: response.data.time,
                 number: response.data.number,
@@ -296,7 +280,7 @@ export default function RegisterWithBh() {
     }
   };
 
- 
+
   const formatDate = (date) => {
     if (!date) return "";
     const d = new Date(date);
@@ -372,14 +356,14 @@ export default function RegisterWithBh() {
         keyboardType="email-address"
       />
 
-      <FormInput
+      {/* <FormInput
         label="Re-enter Email"
         value={formData.reEmail}
         onChangeText={(text) => handleInputChange('reEmail', text)}
         error={errors.reEmail}
         placeholder="Re-enter your email"
         keyboardType="email-address"
-      />
+      /> */}
 
       <FormInput
         label="Phone Number"
@@ -431,7 +415,7 @@ export default function RegisterWithBh() {
 
       <TouchableOpacity
         style={[
-          styles.button, 
+          styles.button,
           (submitting || !termsAccepted) && styles.buttonDisabled
         ]}
         onPress={handleSubmit}

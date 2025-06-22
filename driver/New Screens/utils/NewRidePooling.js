@@ -2,11 +2,11 @@ import axios from "axios"
 import { API_BASE_URL } from "../NewConstant";
 
 
-
 export const NewRidePooling = async (riderId) => {
     try {
+      console.log("Fetching new pooling rides for riderId:", riderId);
         const response = await axios.get(
-            `${API_BASE_URL}/new/pooling-rides-for-rider?riderId=${riderId}`
+            `${API_BASE_URL}/new/pooling-rides-for-rider/${riderId}`
         );
         const ridesData = response.data.data;
         // console.log("I am Ride Data", ridesData)
@@ -17,7 +17,7 @@ export const NewRidePooling = async (riderId) => {
         }
 
     } catch (error) {
-        console.log(error?.response?.data)
+        console.log("Error Me Pooling",error?.response?.data)
         throw new Error(error?.response?.data)
     }
 }

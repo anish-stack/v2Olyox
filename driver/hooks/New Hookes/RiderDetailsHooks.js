@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const API_BASE_URL = 'http://192.168.1.6:3100/api/v1/rider';
+const API_BASE_URL = 'https://appapi.olyox.com/api/v1/rider';
 
 export const useFetchUserDetails = () => {
     const [userData, setUserData] = useState(null);

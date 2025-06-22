@@ -19,7 +19,7 @@ const ParcelBoyLocation = require('./models/Parcel_Models/Parcel_Boys_Location')
 const Settings = require('./models/Admin/Settings');
 const tempRideDetailsSchema = require('./models/tempRideDetailsSchema');
 const NewRideModel = require('./src/New-Rides-Controller/NewRideModel.model')
-
+const setupBullBoard = require('./bullboard');
 // Routes
 const router = require('./routes/routes');
 const rides = require('./routes/rides.routes');
@@ -78,23 +78,6 @@ const redisOptions = {
 };
 
 
-(async () => {
-    try {
-        await sendNotification.sendNotification(
-            'fG0lCjKpTcilZ602ydIH-X:APA91bHiwfQfB4y3Nihnz0PPQBjnWSLF5QQICU2JkQ5jJxrV0LblxNvJomIcoPImsY0QjauMElMf62I5U3-LxkPe6DfCaAr8VkC7FO7Q7X6NYoC9D-5qCBw',
-            "Ride Accepted",
-            "Your ride request has been accepted!",
-            {
-                event: 'RIDE_ACCEPTED',
-                eta: 5,
-                message: 'Your ride request has been accepted!',
-            }
-        );
-        console.log("✅ Notification sent successfully");
-    } catch (error) {
-        console.error("❌ Error sending notification:", error);
-    }
-})();
 
 
 // Global Redis client
@@ -158,7 +141,7 @@ const upload = multer({ storage: storage });
 
 // Middleware
 app.use(cors({ origin: '*', credentials: true }));
-
+setupBullBoard(app);
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 300000,
@@ -214,6 +197,75 @@ app.get('/updates/:userId/:userType', async (req, res) => {
     } catch (err) {
         console.error(`[${new Date().toISOString()}] Polling error for ${userType}:${userId}:`, err.message);
         res.status(500).json({ success: false, message: 'Polling failed' });
+    }
+});
+
+
+app.post('/directions', async (req, res) => {
+    try {
+        const data = req.body || {};
+
+        console.log(data)
+
+        if (!data?.pickup?.latitude || !data?.pickup?.longitude || !data?.dropoff?.latitude || !data?.dropoff?.longitude) {
+            return res.status(400).json({ error: 'Invalid pickup or dropoff location data' });
+        }
+
+        // Create a unique cache key based on coordinates
+        const cacheKey = `directions:${data.pickup.latitude},${data.pickup.longitude}:${data.dropoff.latitude},${data.dropoff.longitude}`;
+
+        const startTime = Date.now();
+
+        // Try fetching from Redis cache
+        const cachedData = await pubClient.get(cacheKey);
+        if (cachedData) {
+            const timeTakenMs = Date.now() - startTime;
+            const result = JSON.parse(cachedData);
+
+            console.log(`[${new Date().toISOString()}] Successfully fetched directions from cache for key: ${cacheKey} (took ${timeTakenMs} ms)`);
+            console.log('Passing cached result to client:', result);
+
+            return res.json({
+                ...result,
+                source: 'cache',
+                timeTakenMs
+            });
+        }
+
+        // If no cache, call Google Maps API
+        const googleMapsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${data?.pickup?.latitude},${data?.pickup?.longitude}&destination=${data?.dropoff?.latitude},${data?.dropoff?.longitude}&key=AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8`;
+        const apiStartTime = Date.now();
+        const response = await axios.get(googleMapsUrl);
+        const apiTimeTakenMs = Date.now() - apiStartTime;
+
+        if (response.data.routes && response.data.routes[0] && response.data.routes[0].legs) {
+            const leg = response.data.routes[0].legs[0];
+            const polyline = response.data.routes[0].overview_polyline.points;
+
+            const result = {
+                distance: leg.distance.text,
+                duration: leg.duration.text,
+                polyline,
+            };
+
+            // Save to Redis cache with expiration (e.g., 1 hour = 3600 seconds)
+            await pubClient.setEx(cacheKey, 3600, JSON.stringify(result));
+
+            console.log(`[${new Date().toISOString()}] Successfully fetched directions from Google API for key: ${cacheKey} (took ${apiTimeTakenMs} ms)`);
+            console.log('Passing API result to client:', result);
+
+            return res.json({
+                ...result,
+                source: 'google-api',
+                timeTakenMs: apiTimeTakenMs
+            });
+        } else {
+            return res.status(404).json({ error: 'No route found' });
+        }
+
+    } catch (error) {
+        console.error('Error fetching directions:', error);
+        return res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -581,13 +633,13 @@ async function startServer() {
 
         // Connect to Redis first
         await connectRedis();
-
         // Connect to databases
         await connectDatabases();
 
         // Start the server
         server.listen(PORT, () => {
             console.log(`[${new Date().toISOString()}] 🚀 Server running on port ${PORT}`);
+            console.log(`Bull Board available at http://localhost:${PORT}/admin/queues`);
             console.log(`[${new Date().toISOString()}] 🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`[${new Date().toISOString()}] ✅ All services connected successfully`);
         });

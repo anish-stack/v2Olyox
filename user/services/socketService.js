@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 
-const SOCKET_URL = "http://192.168.1.6:3100"; // Update this with your backend IP/host
+const SOCKET_URL = "https://appapi.olyox.com"; // Update this with your backend IP/host
 let socket = null;
 
 export const initializeSocket = ({ userType = "user", userId }) => {
@@ -40,9 +40,9 @@ export const initializeSocket = ({ userType = "user", userId }) => {
   });
 
   /** Connection Errors */
-  socket.on("connect_error", (err) => {
-    console.error("⚠️ Connection error:", err.message);
-  });
+  // socket.on("connect_error", (err) => {
+  //   console.error("⚠️ Connection error:", err.message);
+  // });
 
   /** Reconnection Events */
   socket.on("reconnect_attempt", (attempt) => {

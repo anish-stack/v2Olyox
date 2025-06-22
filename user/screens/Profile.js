@@ -601,7 +601,7 @@ export default function OlyoxUserProfile() {
             const db_token = await tokenCache.getToken('auth_token_db');
             const token = db_token || gmail_token;
 
-            const response = await axios.get('http://192.168.1.6:3100/api/v1/user/find-Orders-details', {
+            const response = await axios.get('https://appapi.olyox.com/api/v1/user/find-Orders-details', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setOrderData(response.data.data);
@@ -682,7 +682,7 @@ export default function OlyoxUserProfile() {
                 type: 'image/jpeg',
             });
 
-            const response = await axios.post('http://192.168.1.6:3100/api/v1/user/update-profile', form, {
+            const response = await axios.post('https://appapi.olyox.com/api/v1/user/update-profile', form, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`,
@@ -717,7 +717,7 @@ export default function OlyoxUserProfile() {
                 return;
             }
 
-            const response = await axios.post('http://192.168.1.6:3100/api/v1/user/update-profile', form, {
+            const response = await axios.post('https://appapi.olyox.com/api/v1/user/update-profile', form, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`,
@@ -738,7 +738,7 @@ export default function OlyoxUserProfile() {
     const deleteAccount = useCallback(async (id) => {
         try {
             setLoading(true);
-            const response = await axios.post(`http://192.168.1.6:3100/api/v1/user/delete-my-account/${id}`);
+            const response = await axios.post(`https://appapi.olyox.com/api/v1/user/delete-my-account/${id}`);
             Alert.alert('Account Deleted', response.data.message);
             await handleLogout();
         } catch (error) {
@@ -825,61 +825,75 @@ export default function OlyoxUserProfile() {
         </AnimatedTouchableOpacity>
     ), [expandedOrder]);
 
-    const renderRideCard = useCallback((ride) => (
-        <AnimatedTouchableOpacity
-            key={ride?._id.toString()}
-            style={styles.enhancedOrderCard}
-            onPress={() => setExpandedOrder(expandedOrder === ride._id ? null : ride._id)}
-        >
-            <View style={styles.orderCardContainer}>
-                <View style={styles.orderHeader}>
-                    <View style={styles.orderInfo}>
-                        <Text style={styles.orderId}>🚗 {ride.vehicleType} Ride</Text>
-                        <Text style={styles.orderDate}>
-                            {new Date(ride.createdAt).toLocaleDateString()}
-                        </Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: '#DCFCE7' }]}>
-                        <Text style={[styles.statusText, { color: '#166534' }]}>
-                            {ride.rideStatus}
-                        </Text>
-                    </View>
-                </View>
+const renderRideCard = useCallback((ride) => (
+  <AnimatedTouchableOpacity
+    key={ride?._id?.toString()}
+    style={styles.enhancedOrderCard}
+    onPress={() => setExpandedOrder(expandedOrder === ride._id ? null : ride._id)}
+  >
+    <View style={styles.orderCardContainer}>
+      <View style={styles.orderHeader}>
+        <View style={styles.orderInfo}>
+          <Text style={styles.orderId}>🚗 {ride.vehicle_type} Ride</Text>
+          <Text style={styles.orderDate}>
+            {new Date(ride.requested_at).toLocaleDateString()}
+          </Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: '#DCFCE7' }]}>
+          <Text style={[styles.statusText, { color: '#166534' }]}>
+            {ride.ride_status}
+          </Text>
+        </View>
+      </View>
 
-                {expandedOrder === ride._id && (
-                    <Animated.View style={styles.orderDetails}>
-                        <View style={styles.rideDetails}>
-                            <View style={styles.locationInfo}>
-                                <Ionicons name="location" size={20} color="#DC2626" />
-                                <Text style={styles.locationText}>{ride.pickup_desc}</Text>
-                            </View>
-                            <View style={styles.locationInfo}>
-                                <Ionicons name="location" size={20} color="#DC2626" />
-                                <Text style={styles.locationText}>{ride.drop_desc}</Text>
-                            </View>
-                            <View style={styles.rideStats}>
-                                <Text style={styles.statItem}>💰 Fare: ₹{ride.kmOfRide}</Text>
-                                <Text style={styles.statItem}>⏱️ ETA: {ride.EtaOfRide}</Text>
-                            </View>
-                            {ride.rideStatus !== "cancelled" && ride.rideStatus !== "completed" && (
-                                <TouchableOpacity
-                                    onPress={() => navigation.navigate("RideStarted", { driver: ride?.rider, ride: ride })}
-                                    style={styles.seeRideButton}
-                                >
-                                    <LinearGradient
-                                        colors={['#DC2626', '#B91C1C']}
-                                        style={styles.seeRideGradient}
-                                    >
-                                        <Text style={styles.seeRideText}>Track Ride 🚖</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </Animated.View>
-                )}
+      {expandedOrder === ride._id && (
+        <Animated.View style={styles.orderDetails}>
+          <View style={styles.rideDetails}>
+            <View style={styles.locationInfo}>
+              <Ionicons name="location" size={20} color="#DC2626" />
+              <Text style={styles.locationText}>
+                {ride.pickup_address?.formatted_address || 'Unknown Pickup'}
+              </Text>
             </View>
-        </AnimatedTouchableOpacity>
-    ), [expandedOrder, navigation]);
+
+            <View style={styles.locationInfo}>
+              <Ionicons name="location" size={20} color="#DC2626" />
+              <Text style={styles.locationText}>
+                {ride.drop_address?.formatted_address || 'Unknown Drop'}
+              </Text>
+            </View>
+
+            <View style={styles.rideStats}>
+              <Text style={styles.statItem}>
+                💰 Fare: ₹{ride.pricing?.total_fare?.toFixed(2) || 0}
+              </Text>
+
+            </View>
+
+            {/* Show "Track Ride" only if ride is not cancelled or completed */}
+            {ride.ride_status !== 'cancelled' && ride.ride_status !== 'completed' && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate("RideStarted", {
+                  driver: ride?.driver,
+                  ride: ride
+                })}
+                style={styles.seeRideButton}
+              >
+                <LinearGradient
+                  colors={['#DC2626', '#B91C1C']}
+                  style={styles.seeRideGradient}
+                >
+                  <Text style={styles.seeRideText}>Track Ride 🚖</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
+      )}
+    </View>
+  </AnimatedTouchableOpacity>
+), [expandedOrder, navigation]);
+
 
     const renderHotelCards = useCallback((hotelData) => (
         <AnimatedTouchableOpacity

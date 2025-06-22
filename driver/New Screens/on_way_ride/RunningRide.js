@@ -23,8 +23,9 @@ import { useFetchUserDetails } from "../../hooks/New Hookes/RiderDetailsHooks";
 import NewMap from "../components/running-ride/NewMap";
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, colors } from "../NewConstant";
+import * as Updates from 'expo-updates'; // ✅ Import expo-updates
 
-const { width ,height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function RunningRide() {
     const route = useRoute();
@@ -67,7 +68,7 @@ export default function RunningRide() {
     // Fetch ride details with proper error handling and retry
     const fetchActiveRideDetails = useCallback(async (isRetry = false) => {
         if (!isRetry) {
-            setLoading(true);
+            setLoading(false);
         }
         setError(null);
 
@@ -76,7 +77,7 @@ export default function RunningRide() {
                 console.log("📦 Fetching ride details for ride ID:", userData.on_ride_id);
 
                 const response = await axios.get(
-                    `http://192.168.1.6:3100/rider/${userData.on_ride_id}`,
+                    `https://appapi.olyox.com/rider/${userData.on_ride_id}`,
                     {
                         timeout: 10000,
                     }
@@ -161,6 +162,7 @@ export default function RunningRide() {
                         setCancelModal(false)
                         setSelectedReason(null) // Reset selected reason
                         // Navigate back or to appropriate screen
+
                         navigate.dispatch(
                             CommonActions.reset({
                                 index: 0,
@@ -170,6 +172,8 @@ export default function RunningRide() {
                     },
                 },
             ])
+            await Updates.reloadAsync(); // 🔁 Force app reload
+
         } catch (err) {
             console.error("Cancel ride error:", err.response?.data || err.message)
             Alert.alert("Error", err.response?.data?.message || "Failed to cancel ride. Please try again.")
@@ -223,7 +227,7 @@ export default function RunningRide() {
             console.log("📡 Ride status polling started At Screen Start");
 
             const pollingInterval =
-                activeRideData?.ride_status === 'in_progress' ? 20000 : 5000;
+                activeRideData?.ride_status === 'in_progress' ? 5000 : 10000;
 
             console.log(`⏱️ Setting polling interval to ${pollingInterval / 1000} seconds`);
 
@@ -252,7 +256,9 @@ export default function RunningRide() {
                             [
                                 {
                                     text: "OK",
-                                    onPress: () => {
+                                    onPress: async () => {
+                                        await Updates.reloadAsync(); // 🔁 Force app reload
+
                                         console.log("🔄 Navigating to Home screen...");
                                         navigate.dispatch(
                                             CommonActions.reset({
@@ -342,7 +348,7 @@ export default function RunningRide() {
                 setOtp('');
                 setShowOtpModal(false);
                 setRideStep('drop');
-                  Alert.alert('Success', 'OTP verified! Ride started!', [
+                Alert.alert('Success', 'OTP verified! Ride started!', [
                     {
                         text: 'OK',
                         onPress: () => {
@@ -350,7 +356,7 @@ export default function RunningRide() {
                         },
                     },
                 ]);
-            
+
                 fetchActiveRideDetails();
             }
         } catch (error) {
@@ -1412,7 +1418,7 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         color: '#333',
     },
-     modalOverlay: {
+    modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "flex-end",

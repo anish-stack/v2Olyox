@@ -36,4 +36,4 @@ export const colors = {
   activeRed: '#c40000',
 };
 
-export const API_BASE_URL = 'http://192.168.1.6:3100/api/v1';
+export const API_BASE_URL = 'https://appapi.olyox.com/api/v1';

@@ -143,7 +143,7 @@ const RideLocationSelector = () => {
           // setDuration(durationValue)
         }
       } catch (error) {
-        console.error("Error fetching directions:", error)
+        console.error("Error fetching directions at first step:", error)
       }
     }
 

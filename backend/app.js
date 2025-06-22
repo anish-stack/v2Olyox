@@ -112,7 +112,7 @@ app.post('/directions', async (req, res) => {
             return res.status(404).json({ error: 'No route found' });
         }
     } catch (error) {
-        console.error('Error fetching directions:', error);
+        console.error('Error fetching directions:', error.response.data.message);
         return res.status(500).json({ error: 'Internal server error' });
     }
 }); 

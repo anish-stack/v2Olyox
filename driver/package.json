@@ -28,6 +28,7 @@
     "expo-audio": "~0.3.5",
     "expo-av": "~15.0.2",
     "expo-background-fetch": "~13.0.6",
+    "expo-background-task": "~0.1.4",
     "expo-blur": "^14.0.3",
     "expo-dev-client": "~5.0.19",
     "expo-file-system": "~18.0.10",
@@ -47,6 +48,7 @@
     "react": "18.3.1",
     "react-native": "0.76.7",
     "react-native-background-actions": "^4.0.1",
+    "react-native-floating-bubble": "^1.0.12",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-ionicons": "^4.6.5",
     "react-native-maps": "1.18.0",
@@ -61,8 +63,7 @@
     "react-native-svg": "15.8.0",
     "react-redux": "^8.1.1",
     "socket.io-client": "^4.8.1",
-    "swr": "^2.3.3",
-    "expo-background-task": "~0.1.4"
+    "swr": "^2.3.3"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

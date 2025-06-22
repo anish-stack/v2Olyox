@@ -2,8 +2,6 @@ package com.olyoxpvt.OlyoxDriverApp
 
 import android.os.Build
 import android.os.Bundle
-import com.olyoxpvt.OlyoxDriverApp.BubbleModule; 
-import com.olyoxpvt.OlyoxDriverApp.BubblePackage 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled

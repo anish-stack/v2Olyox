@@ -243,7 +243,7 @@ const RideRequestSchema = new Schema({
     rejected_by_drivers: [{
         driver: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Driver'
+            ref: 'Rider'
         },
         rejected_at: {
             type: Date,

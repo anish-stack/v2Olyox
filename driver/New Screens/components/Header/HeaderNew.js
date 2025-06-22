@@ -24,9 +24,9 @@ import {
 import { colors } from '../../NewConstant';
 import { useFetchUserDetails } from '../../../hooks/New Hookes/RiderDetailsHooks';
 
-const API_BASE_URL = 'http://192.168.1.6:3100/api/v1/rider';
+const API_BASE_URL = 'https://appapi.olyox.com/api/v1/rider';
 
-const HeaderNew = () => {
+const HeaderNew = ({ isRefresh }) => {
   const navigation = useNavigation();
   const { fetchUserDetails: reCallMe } = useFetchUserDetails();
 
@@ -56,12 +56,19 @@ const HeaderNew = () => {
   }, []);
 
 
+  useEffect(() => {
+    reCallMe()
+    fetchUserDetails()
+  }, [isRefresh])
 
   // Enhanced logout function with proper error handling
   const handleLogout = useCallback(
     async (retryCount = 0, maxRetries = 3) => {
       try {
         setLoading(true);
+        if (isOnline === false) {
+          setIsOnline(true);
+        }
 
         // Always delete the token first
         await SecureStore.deleteItemAsync("auth_token_cab");
@@ -74,6 +81,7 @@ const HeaderNew = () => {
           });
           return;
         }
+        await toggleOnlineStatus();
 
         // Attempt the logout API call
         const response = await axios.get(
@@ -82,7 +90,7 @@ const HeaderNew = () => {
 
         console.log("Logout successful:", response.data);
 
-        // Reset navigation and exit app
+
         navigation.reset({
           index: 0,
           routes: [{ name: "Onboarding" }],
@@ -204,7 +212,7 @@ const HeaderNew = () => {
         "Toggle Status Error:",
         error?.response?.data?.message || error.message
       );
-       setIsOnline(null);
+      setIsOnline(null);
 
       Alert.alert(
         "Toggle Status Failed",
@@ -252,7 +260,7 @@ const HeaderNew = () => {
         console.log("Fetching ride details for ride ID:", user_data.on_ride_id);
 
         const response = await axios.get(
-          `http://192.168.1.6:3100/rider/${user_data.on_ride_id}`
+          `https://appapi.olyox.com/rider/${user_data.on_ride_id}`
         );
 
         if (response.data) {
@@ -300,37 +308,37 @@ const HeaderNew = () => {
     fetchUserDetails();
   }, [fetchUserDetails]);
 
-useEffect(() => {
-  let interval;
+  useEffect(() => {
+    let interval;
 
-  const currentRouteName = navigation.getState()?.routes?.[navigation.getState().index]?.name;
-  console.log("Current route name:", currentRouteName);
+    const currentRouteName = navigation.getState()?.routes?.[navigation.getState().index]?.name;
+    console.log("Current route name:", currentRouteName);
 
-  const shouldFetch =
-    user_data?.on_ride_id && currentRouteName === 'Home';
+    const shouldFetch =
+      user_data?.on_ride_id && currentRouteName === 'Home';
 
-  if (shouldFetch) {
-    console.log("✅ On 'Home' screen with active ride. Starting interval to fetch ride details");
+    if (shouldFetch) {
+      console.log("✅ On 'Home' screen with active ride. Starting interval to fetch ride details");
 
-    // Fetch once immediately
-    fetchActiveRideDetails();
-
-    // Then every 4 seconds
-    interval = setInterval(() => {
-      console.log("⏱️ Fetching active ride details every 4 seconds");
+      // Fetch once immediately
       fetchActiveRideDetails();
-    }, 4000);
-  } else {
-    console.log("🔕 Conditions not met. Skipping ride detail polling.");
-  }
 
-  return () => {
-    if (interval) {
-      console.log("🧹 Clearing interval");
-      clearInterval(interval);
+      // Then every 4 seconds
+      interval = setInterval(() => {
+        console.log("⏱️ Fetching active ride details every 4 seconds");
+        fetchActiveRideDetails();
+      }, 4000);
+    } else {
+      console.log("🔕 Conditions not met. Skipping ride detail polling.");
     }
-  };
-}, [user_data?.on_ride_id, fetchActiveRideDetails, navigation]);
+
+    return () => {
+      if (interval) {
+        console.log("🧹 Clearing interval");
+        clearInterval(interval);
+      }
+    };
+  }, [user_data?.on_ride_id, fetchActiveRideDetails, navigation]);
 
 
   // Handle active ride button press
@@ -396,27 +404,6 @@ useEffect(() => {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                navigation.navigate("BackgroundDemo");
-              }}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
-                <MaterialCommunityIcons
-                  name="demo"
-                  size={20}
-                  color={colors.red400}
-                />
-              </View>
-              <Text style={styles.menuText}>Background</Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
 
             <View style={styles.menuDivider} />
 

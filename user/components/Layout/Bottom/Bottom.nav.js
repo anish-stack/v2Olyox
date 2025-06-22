@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     StyleSheet,
@@ -12,263 +12,281 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS } from '../../../constants/colors';
 import { useFood } from '../../../context/Food_Context/Food_context';
 import { useGuest } from '../../../context/GuestLoginContext';
-import { useRide } from '../../../context/RideContext';
+import { find_me } from '../../../utils/helpers';
 
 const { width } = Dimensions.get('window');
-const tabWidth = width / 5;
 
 const BottomNav = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { isGuest } = useGuest();
-    const { currentRide } = useRide();
-    const [selectedTab, setSelectedTab] = React.useState(0);
-    const animatedValue = React.useRef(new Animated.Value(0)).current;
     const { cart } = useFood();
     
-    // Define base tabs
+    const [currentRide, setCurrentRide] = useState(null);
+    const [selectedTab, setSelectedTab] = useState(0);
+    const slideAnim = useRef(new Animated.Value(0)).current;
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    // Initialize ride data
+    useEffect(() => {
+        const fetchRideData = async () => {
+            try {
+                const data = await find_me();
+                console.log("Fetched ride data:", data?.user?.currentRide);
+                setCurrentRide(data?.user?.currentRide || null);
+            } catch (error) {
+                console.error('Error fetching ride data:', error);
+            }
+        };
+        fetchRideData();
+    }, []);
+
+    console.log("currentRide",currentRide)
+
+    // Base navigation tabs
     const baseTabs = [
         { name: 'Home', icon: '🏠', route: 'Home' },
-        { name: 'Active Order', icon: '🍕', route: 'Order_Process' },
-        { name: 'Cart', icon: '🛒', route: 'Checkout', numValue: cart.length || '' },
-        { name: isGuest ? 'Login' : 'Profile', icon: '👤', route: isGuest ? 'Onboarding' : 'Profile' },
+        { name: 'Orders', icon: '🍕', route: 'Order_Process' },
+        { name: 'Cart', icon: '🛒', route: 'Checkout', badge: cart.length },
+        { name: isGuest ? 'Login' : 'Profile', icon: '👤', route: isGuest ? 'Onboarding' : 'Profile' }
     ];
-    
-    // Add Running Ride tab if currentRide exists
+
+    // Add running ride tab if active
     const tabs = currentRide ? [
         ...baseTabs.slice(0, 2),
-        { name: 'Running Ride', icon: '🚗', route: 'RideStarted', highlight: true },
+        { name: 'Ride', icon: '🚗', route: 'RideStarted', isRide: true },
         ...baseTabs.slice(2)
     ] : baseTabs;
 
-    const handleCheckout = () => {
-        const newTotal = cart.reduce((sum, item) => sum + item.food_price * item.quantity, 0)
-        const restaurant_id = cart[0]?.restaurant_id?._id
+    const tabWidth = width / tabs.length;
 
-        const check_out_data_prepare = {
-            items: cart,
-            total_amount: newTotal,
-            restaurant: restaurant_id,
-        }
-        navigation.navigate("Checkout", { data: check_out_data_prepare || null })
-    }
-
-    const handleTabPress = (index, tabRoute) => {
-        Animated.sequence([
-            Animated.timing(animatedValue, {
+    const handleTabPress = (index, tab) => {
+        // Animate tab selection
+        Animated.parallel([
+            Animated.timing(scaleAnim, {
+                toValue: 0.9,
+                duration: 100,
+                useNativeDriver: true,
+            }),
+            Animated.timing(slideAnim, {
+                toValue: index * tabWidth,
+                duration: 250,
+                useNativeDriver: true,
+            })
+        ]).start(() => {
+            Animated.timing(scaleAnim, {
                 toValue: 1,
-                duration: 150,
+                duration: 100,
                 useNativeDriver: true,
-            }),
-            Animated.timing(animatedValue, {
-                toValue: 0,
-                duration: 150,
-                useNativeDriver: true,
-            }),
-        ]).start();
+            }).start();
+        });
 
         setSelectedTab(index);
-        if (tabRoute === 'Checkout') {
+
+        // Handle navigation
+        if (tab.route === 'Checkout') {
             handleCheckout();
-        } else if (tabRoute === 'RideStarted' && currentRide) {
-            // Navigate to RideStarted with driver and ride data
-            navigation.navigate("RideStarted", { driver: currentRide?._id, ride: currentRide });
+        } else if (tab.route === 'RideStarted' && currentRide) {
+            navigation.navigate('RideStarted', { 
+                driver: currentRide, 
+                ride: currentRide 
+            });
         } else {
-            navigation.navigate(tabRoute);
+            navigation.navigate(tab.route);
         }
+    };
+
+    const handleCheckout = () => {
+        if (cart.length === 0) return;
+        
+        const total = cart.reduce((sum, item) => sum + item.food_price * item.quantity, 0);
+        const restaurantId = cart[0]?.restaurant_id?._id;
+
+        navigation.navigate('Checkout', {
+            data: {
+                items: cart,
+                total_amount: total,
+                restaurant: restaurantId,
+            }
+        });
     };
 
     const renderTab = (tab, index) => {
         const isActive = route.name.toLowerCase() === tab.route.toLowerCase();
-        const isRideTab = tab.name === 'Running Ride';
-
-        const scale = isActive ?
-            animatedValue.interpolate({
-                inputRange: [0, 0.5, 1],
-                outputRange: [1, 1.2, 1],
-            }) : 1;
+        const isRideTab = tab.isRide;
 
         return (
             <TouchableOpacity
                 key={index}
-                style={[
-                    styles.tabItem,
-                    isRideTab && styles.rideTabItem
-                ]}
-                onPress={() => handleTabPress(index, tab.route)}
-                activeOpacity={0.7}
+                style={[styles.tab, isRideTab && styles.rideTab]}
+                onPress={() => handleTabPress(index, tab)}
+                activeOpacity={0.8}
             >
                 <Animated.View
                     style={[
                         styles.tabContent,
-                        isActive && styles.activeTabContent,
+                        isActive && styles.activeTab,
                         isRideTab && styles.rideTabContent,
-                        { transform: [{ scale }] }
+                        { transform: [{ scale: isActive ? scaleAnim : 1 }] }
                     ]}
                 >
                     <Text style={[
                         styles.tabIcon,
-                        isRideTab && styles.rideTabIcon
+                        isRideTab && styles.rideIcon
                     ]}>
                         {tab.icon}
                     </Text>
-                    <Text
-                        style={[
-                            styles.tabText,
-                            isActive && styles.activeTabText,
-                            isRideTab && styles.rideTabText,
-                            Platform.select({
-                                ios: styles.iosText,
-                                android: styles.androidText,
-                            })
-                        ]}
-                    >
+                    
+                    <Text style={[
+                        styles.tabLabel,
+                        isActive && styles.activeLabel,
+                        isRideTab && styles.rideLabel
+                    ]}>
                         {tab.name}
                     </Text>
-                    {tab.numValue && (
-                        <Text style={styles.tabNumValue}>{tab.numValue}</Text>
+
+                    {/* Badge for cart count */}
+                    {tab.badge > 0 && (
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{tab.badge}</Text>
+                        </View>
                     )}
 
-                    {isActive && <View style={[
-                        styles.activeIndicator,
-                        isRideTab && styles.rideActiveIndicator
-                    ]} />}
+                    {/* Active indicator */}
+                    {isActive && (
+                        <View style={[
+                            styles.activeIndicator,
+                            isRideTab && styles.rideIndicator
+                        ]} />
+                    )}
                 </Animated.View>
             </TouchableOpacity>
         );
     };
 
-    // Calculate new tab width based on number of tabs
-    const dynamicTabWidth = width / tabs.length;
-
     return (
-        <View style={[
-            styles.bottomNav,
-            Platform.select({
-                ios: styles.iosNav,
-                android: styles.androidNav,
-            })
-        ]}>
-            {tabs.map((tab, index) => renderTab(tab, index))}
+        <View style={styles.container}>
+            {/* Animated slider */}
             <Animated.View
                 style={[
                     styles.slider,
                     {
-                        width: dynamicTabWidth,
-                        transform: [{
-                            translateX: animatedValue.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [selectedTab * dynamicTabWidth, (selectedTab + 1) * dynamicTabWidth],
-                            }),
-                        }],
-                    },
+                        width: tabWidth * 0.6,
+                        transform: [{ translateX: slideAnim }],
+                        marginLeft: tabWidth * 0.2,
+                    }
                 ]}
             />
+            
+            {/* Tabs */}
+            <View style={styles.tabsContainer}>
+                {tabs.map((tab, index) => renderTab(tab, index))}
+            </View>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    bottomNav: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        backgroundColor: '#ffffff',
-        paddingVertical: Platform.OS === 'ios' ? 20 : 12,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 12,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+    container: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 10,
+        paddingTop: 12,
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: -4,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 10,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 15,
     },
-    iosNav: {
-        borderTopWidth: 0,
+    slider: {
+        position: 'absolute',
+        top: 8,
+        height: 3,
+        backgroundColor: COLORS.error,
+        borderRadius: 2,
+        zIndex: 1,
     },
-    androidNav: {
-        borderTopWidth: 0,
+    tabsContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingTop: 8,
     },
-    tabItem: {
+    tab: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
+        paddingVertical: 8,
     },
-    rideTabItem: {
-        flex: 1.2, // Make ride tab slightly wider
+    rideTab: {
+        flex: 1.1, // Slightly wider for ride tab
     },
     tabContent: {
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
-        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        minHeight: 50,
+        position: 'relative',
+    },
+    activeTab: {
+        backgroundColor: 'rgba(99, 102, 241, 0.08)',
     },
     rideTabContent: {
-        backgroundColor: 'rgba(255, 149, 0, 0.15)', // Orange background for ride tab
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-    },
-    activeTabContent: {
-        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        backgroundColor: 'rgba(255, 125, 0, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 125, 0, 0.3)',
     },
     tabIcon: {
-        fontSize: 13,
+        fontSize: 18,
         marginBottom: 4,
     },
-    rideTabIcon: {
-        fontSize: 14,
-        marginBottom: 4,
+    rideIcon: {
+        fontSize: 20,
     },
-    tabText: {
-        fontSize: 10,
+    tabLabel: {
+        fontSize: 11,
+        color: '#666',
+        fontWeight: '500',
         textAlign: 'center',
     },
-    rideTabText: {
-        color: '#FF7D00', // Orange text for ride tab
-        fontWeight: 'bold',
-    },
-    iosText: {
+    activeLabel: {
+        color: COLORS.error,
         fontWeight: '600',
     },
-    androidText: {
-        fontWeight: 'bold',
+    rideLabel: {
+        color: '#FF7D00',
+        fontWeight: '700',
     },
-    activeTabText: {
-        color: COLORS.error,
+    badge: {
+        position: 'absolute',
+        top: 2,
+        right: 8,
+        backgroundColor: '#FF4757',
+        borderRadius: 10,
+        minWidth: 18,
+        height: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
+    },
+    badgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
     activeIndicator: {
         position: 'absolute',
-        bottom: -8,
-        width: 4,
-        height: 4,
-        borderRadius: 2,
+        bottom: 2,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
         backgroundColor: COLORS.error,
     },
-    rideActiveIndicator: {
-        backgroundColor: '#FF7D00', // Orange indicator for ride tab
+    rideIndicator: {
+        backgroundColor: '#FF7D00',
     },
-    tabNumValue: {
-        fontSize: 10,
-        position: 'absolute',
-        top: 0,
-        textAlign: 'center',
-        width: 15,
-        color: '#fff',
-        borderRadius: 50,
-        height: 15,
-        right: -2,
-        backgroundColor: '#d54d57'
-    },
-    slider: {
-        position: 'absolute',
-        top: 0,
-        height: 2,
-        backgroundColor: COLORS.error,
-    }
 });
 
 export default BottomNav;

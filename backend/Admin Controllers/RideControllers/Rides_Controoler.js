@@ -3,32 +3,83 @@ const RideSubSuggestionModel = require('../../models/Admin/RideSubSuggestion.mod
 const { uploadSingleImage, deleteImage } = require('../../utils/cloudinary');
 
 exports.createSuggestion = async (req, res) => {
-    try {
-        const { name, type, description, time, priceRange } = req.body;
+  try {
+    const {
+      name,
+      type,
+      description,
+      time,
+      priceRange,
+      avgMileage,
+      baseFare,
+      baseKM,
+      perKM,
+      perMin,
+      nightPercent,
+      minFare,
+      tollExtra,
+      waitingChargePerMin,
+      fuelSurchargePerKM,
+    } = req.body;
 
-        if (!name || !type || !description || !time || !priceRange) {
-            return res.status(400).json({ success: false, message: "All fields are required" });
-        }
-
-        const newSuggestion = new RidesSuggestion({ name, type, description, time, priceRange });
-        // console.log("req.file)",req.file)
-        if (req.file) {
-            const imgUrl = await uploadSingleImage(req.file.buffer)
-            // console.log("imgUrl",imgUrl)
-            const { image, public_id } = imgUrl;
-            // console.log("image, public_id",image, public_id)
-            newSuggestion.icons_image.url = image;
-            newSuggestion.icons_image.public_id = public_id
-        }
-        await newSuggestion.save();
-
-        res.status(201).json({ success: true, message: "Ride suggestion created successfully", data: newSuggestion });
-
-    } catch (error) {
-        console.error("Error creating ride suggestion:", error);
-        res.status(500).json({ success: false, message: "Server Error" });
+    // Validate required fields
+    if (
+      !name || !type || !description || !time || !priceRange ||
+      avgMileage === undefined || baseFare === undefined || baseKM === undefined ||
+      perKM === undefined || perMin === undefined || nightPercent === undefined ||
+      minFare === undefined || tollExtra === undefined || waitingChargePerMin === undefined || fuelSurchargePerKM === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
     }
+
+    // Create new suggestion instance
+    const newSuggestion = new RidesSuggestion({
+      name,
+      type,
+      description,
+      time,
+      priceRange,
+      vehicleType:name,
+      avgMileage,
+      baseFare,
+      baseKM,
+      perKM,
+      perMin,
+      nightPercent,
+      minFare,
+      tollExtra,
+      waitingChargePerMin,
+      fuelSurchargePerKM,
+    });
+
+    // Upload image if provided
+    if (req.file) {
+      const imgUrl = await uploadSingleImage(req.file.buffer);
+      const { image, public_id } = imgUrl;
+      newSuggestion.icons_image.url = image;
+      newSuggestion.icons_image.public_id = public_id;
+    }
+
+    // Save to DB
+    await newSuggestion.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Ride suggestion created successfully",
+      data: newSuggestion,
+    });
+  } catch (error) {
+    console.error("Error creating ride suggestion:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
 };
+
 
 
 exports.getAllSuggestions = async (req, res) => {

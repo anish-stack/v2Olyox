@@ -40,12 +40,12 @@ export default function AddressForm({ address, onAddressChange, errors }) {
 
   return (
     <View style={styles.container}>
-      <FormInput
+      {/* <FormInput
         label="Area"
         value={address.area}
         onChangeText={(text) => onAddressChange('area', text)}
         placeholder="Enter your area"
-      />
+      /> */}
       <FormInput
         label="Street Address"
         value={address.street_address}
@@ -55,20 +55,20 @@ export default function AddressForm({ address, onAddressChange, errors }) {
         }}
         placeholder="Enter street address"
       />
-      <FormInput
+      {/* <FormInput
         label="Landmark"
         value={address.landmark}
         onChangeText={(text) => onAddressChange('landmark', text)}
         placeholder="Enter landmark"
-      />
-      <FormInput
+      /> */}
+      {/* <FormInput
         label="Pincode"
         value={address.pincode}
         onChangeText={(text) => onAddressChange('pincode', text)}
         placeholder="Enter pincode"
         keyboardType="numeric"
         error={errors.pincode}
-      />
+      /> */}
     </View>
   );
 }
