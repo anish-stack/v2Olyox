@@ -62,26 +62,24 @@ export default function BookingConfirmation() {
   const fetchDirections = async () => {
     if (!origin || !destination) return;
     try {
+      const pickup = {
+        latitude: origin.latitude,
+        longitude: origin.longitude
+      };
+      const dropoff = {
+        latitude: destination.latitude,
+        longitude: destination.longitude
+      };
       console.log('Fetching directions...');
-      const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/directions/json`,
-        {
-          params: {
-            origin: `${origin.latitude},${origin.longitude}`,
-            destination: `${destination.latitude},${destination.longitude}`,
-            key: GOOGLE_MAPS_APIKEY,
-            mode: 'driving',
-          },
-          timeout: 10000,
-        }
-      );
-      if (response.data.routes.length > 0) {
-        const points = decodePolyline(response.data.routes[0].overview_polyline.points);
-        const coords = points.map(point => ({
-          latitude: point[0],
-          longitude: point[1],
+      const response = await axios.post('https://appapi.olyox.com/directions', { pickup, dropoff });
+
+      const json = response.data;
+      if (json?.polyline) {
+        const decodedCoords = PolylineDecoder.decode(json.polyline).map(([lat, lng]) => ({
+          latitude: lat,
+          longitude: lng,
         }));
-        setCoordinates(coords);
+        setCoordinates(decodedCoords);
       }
     } catch (error) {
       console.error('Error fetching directions:', error);
@@ -515,425 +513,425 @@ export default function BookingConfirmation() {
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: COLORS.background.primary,
-    },
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+  },
 
-    // Header Styles
-    headerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: COLORS.background.primary,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border.light,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-    },
-    headerButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.background.secondary,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        textAlign: 'center',
-    },
+  // Header Styles
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border.light,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background.secondary,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    textAlign: 'center',
+  },
 
-    // Scroll View Styles
-    scrollView: {
-        flex: 1,
-    },
-    scrollContainer: {
-        paddingBottom: 20,
-    },
+  // Scroll View Styles
+  scrollView: {
+    flex: 1,
+  },
+  scrollContainer: {
+    paddingBottom: 20,
+  },
 
-    // Loading Styles
-    loadingContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 20,
-    },
-    loadingText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-    },
+  // Loading Styles
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: COLORS.text.secondary,
+    textAlign: 'center',
+  },
 
-    // Map Styles
-    mapContainer: {
-        height: height * 0.35,
-        margin: 16,
-        borderRadius: 16,
-        overflow: 'hidden',
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-    },
-    map: {
-        flex: 1,
-    },
-    mapPlaceholder: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.background.tertiary,
-    },
-    mapPlaceholderText: {
-        marginTop: 8,
-        fontSize: 14,
-        color: COLORS.text.tertiary,
-    },
-    customMarker: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+  // Map Styles
+  mapContainer: {
+    height: height * 0.35,
+    margin: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  map: {
+    flex: 1,
+  },
+  mapPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background.tertiary,
+  },
+  mapPlaceholderText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: COLORS.text.tertiary,
+  },
+  customMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
-    // Location Card Styles
-    locationCard: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: COLORS.background.primary,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-    },
-    locationIconContainer: {
-        marginRight: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 24,
-    },
-    locationDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-    },
-    routeLine: {
-        width: 2,
-        height: 32,
-        backgroundColor: COLORS.border.medium,
-        marginLeft: 11,
-        marginVertical: 8,
-    },
-    locationTextContainer: {
-        flex: 1,
-    },
-    locationLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: COLORS.text.tertiary,
-        marginBottom: 4,
-        letterSpacing: 0.5,
-    },
-    locationText: {
-        fontSize: 15,
-        color: COLORS.text.primary,
-        lineHeight: 20,
-    },
+  // Location Card Styles
+  locationCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  locationIconContainer: {
+    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 24,
+  },
+  locationDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  routeLine: {
+    width: 2,
+    height: 32,
+    backgroundColor: COLORS.border.medium,
+    marginLeft: 11,
+    marginVertical: 8,
+  },
+  locationTextContainer: {
+    flex: 1,
+  },
+  locationLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text.tertiary,
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  locationText: {
+    fontSize: 15,
+    color: COLORS.text.primary,
+    lineHeight: 20,
+  },
 
-    // Card Styles
-    card: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: COLORS.background.primary,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-    },
-    durationBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.primaryLight,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    durationText: {
-        marginLeft: 4,
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.primary,
-    },
+  // Card Styles
+  card: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  durationText: {
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
 
-    // Vehicle Info Styles
-    vehicleInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        backgroundColor: COLORS.background.secondary,
-        borderRadius: 12,
-    },
-    vehicleText: {
-        marginLeft: 12,
-        fontSize: 16,
-        fontWeight: '500',
-        color: COLORS.text.primary,
-    },
+  // Vehicle Info Styles
+  vehicleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: 12,
+  },
+  vehicleText: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+  },
 
-    // Fare Section Styles
-    fareSection: {
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border.light,
-        paddingTop: 16,
-    },
-    fareSectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        marginBottom: 12,
-    },
-    fareRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 8,
-    },
-    fareLabel: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-    },
-    fareValue: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.text.primary,
-    },
-    totalFareRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-        marginTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border.light,
-    },
-    totalFareLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-    },
-    totalFareValue: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: COLORS.primary,
-    },
-    disclaimer: {
-        fontSize: 12,
-        color: COLORS.text.tertiary,
-        textAlign: 'center',
-        marginTop: 12,
-        fontStyle: 'italic',
-        lineHeight: 16,
-    },
+  // Fare Section Styles
+  fareSection: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+    paddingTop: 16,
+  },
+  fareSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginBottom: 12,
+  },
+  fareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  fareLabel: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+  },
+  fareValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+  },
+  totalFareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+  },
+  totalFareLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
+  totalFareValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  disclaimer: {
+    fontSize: 12,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+    marginTop: 12,
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
 
-    // Progress Card Styles
-    progressCard: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: COLORS.background.primary,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        borderWidth: 2,
-        borderColor: COLORS.primaryLight,
-    },
-    progressHeader: {
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    progressTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        marginTop: 12,
-        marginBottom: 8,
-    },
-    progressMessage: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-    },
+  // Progress Card Styles
+  progressCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.primaryLight,
+  },
+  progressHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  progressMessage: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+    textAlign: 'center',
+  },
 
-    // Status Indicator Styles
-    statusIndicator: {
-        marginBottom: 20,
-    },
-    statusRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    statusDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: COLORS.border.medium,
-        marginRight: 12,
-    },
-    statusDotActive: {
-        backgroundColor: COLORS.primary,
-    },
-    statusText: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-    },
-    statusConnector: {
-        width: 2,
-        height: 20,
-        backgroundColor: COLORS.border.light,
-        marginLeft: 5,
-        marginVertical: 4,
-    },
+  // Status Indicator Styles
+  statusIndicator: {
+    marginBottom: 20,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.border.medium,
+    marginRight: 12,
+  },
+  statusDotActive: {
+    backgroundColor: COLORS.primary,
+  },
+  statusText: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+  },
+  statusConnector: {
+    width: 2,
+    height: 20,
+    backgroundColor: COLORS.border.light,
+    marginLeft: 5,
+    marginVertical: 4,
+  },
 
-    // OTP Section Styles
-    otpSection: {
-        backgroundColor: COLORS.successLight,
-        borderRadius: 12,
-        padding: 16,
-        alignItems: 'center',
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: COLORS.success,
-    },
-    otpLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.success,
-        marginBottom: 4,
-    },
-    otpValue: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: COLORS.success,
-        letterSpacing: 2,
-    },
+  // OTP Section Styles
+  otpSection: {
+    backgroundColor: COLORS.successLight,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  otpLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.success,
+    marginBottom: 4,
+  },
+  otpValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.success,
+    letterSpacing: 2,
+  },
 
-    // Cancel Button Styles
-    cancelButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.danger,
-        backgroundColor: COLORS.dangerLight,
-    },
-    cancelButtonText: {
-        marginLeft: 8,
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.danger,
-    },
+  // Cancel Button Styles
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    backgroundColor: COLORS.dangerLight,
+  },
+  cancelButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.danger,
+  },
 
-    // Footer Styles
-    footer: {
-        backgroundColor: COLORS.background.primary,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border.light,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
+  // Footer Styles
+  footer: {
+    backgroundColor: COLORS.background.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
 
-    // Payment Selector Styles
-    paymentSelector: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.background.secondary,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: COLORS.border.light,
-    },
-    paymentText: {
-        flex: 1,
-        marginLeft: 12,
-        fontSize: 16,
-        fontWeight: '500',
-        color: COLORS.text.primary,
-    },
+  // Payment Selector Styles
+  paymentSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.secondary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border.light,
+  },
+  paymentText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+  },
 
-    // Book Button Styles
-    bookButton: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 4,
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        minHeight: 56,
-    },
-    bookButtonDisabled: {
-        backgroundColor: COLORS.border.medium,
-        elevation: 0,
-        shadowOpacity: 0,
-    },
-    bookButtonText: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.inverse,
-        marginBottom: 2,
-    },
-    bookButtonSubtext: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.text.inverse,
-        opacity: 0.9,
-    },
+  // Book Button Styles
+  bookButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    minHeight: 56,
+  },
+  bookButtonDisabled: {
+    backgroundColor: COLORS.border.medium,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  bookButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.inverse,
+    marginBottom: 2,
+  },
+  bookButtonSubtext: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.inverse,
+    opacity: 0.9,
+  },
 });

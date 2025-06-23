@@ -2,7 +2,7 @@
   "expo": {
     "name": "Olyox",
     "slug": "olyox",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/appicon.png",
     "userInterfaceStyle": "light",
@@ -41,9 +41,7 @@
         "GMSApiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
       },
       "googleServicesFile": "./GoogleService-Info.plist",
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+     "runtimeVersion": "1.0.4"
     },
     "android": {
       "adaptiveIcon": {
@@ -74,7 +72,7 @@
       ],
       "package": "com.happy_coding.olyox",
       "googleServicesFile": "./google-services.json",
-      "runtimeVersion": "1.0.3"
+      "runtimeVersion": "1.0.4"
     },
 
     "web": {
