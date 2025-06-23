@@ -34,7 +34,7 @@ const { width, height } = Dimensions.get('window');
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 // Enhanced Delete Confirmation Modal Component
-const DeleteConfirmationModal = ({ visible, onClose, onConfirm, userName }) => {
+const DeleteConfirmationModal = ({ visible, onClose, onConfirm, userName, Navigator }) => {
     const [fadeAnim] = useState(new Animated.Value(0));
     const [scaleAnim] = useState(new Animated.Value(0.8));
 
@@ -135,6 +135,18 @@ const DeleteConfirmationModal = ({ visible, onClose, onConfirm, userName }) => {
                         <TouchableOpacity
                             style={styles.stayButton}
                             onPress={onClose}
+                        >
+                            <LinearGradient
+                                colors={['#DC2626', '#B91C1C']}
+                                style={styles.stayButtonGradient}
+                            >
+                                <Ionicons name="heart" size={20} color="#fff" />
+                                <Text style={styles.stayButtonText}>Stay With Olyox</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.stayButton}
+                            onPress={Navigator.navigate('open')}
                         >
                             <LinearGradient
                                 colors={['#DC2626', '#B91C1C']}
@@ -825,74 +837,74 @@ export default function OlyoxUserProfile() {
         </AnimatedTouchableOpacity>
     ), [expandedOrder]);
 
-const renderRideCard = useCallback((ride) => (
-  <AnimatedTouchableOpacity
-    key={ride?._id?.toString()}
-    style={styles.enhancedOrderCard}
-    onPress={() => setExpandedOrder(expandedOrder === ride._id ? null : ride._id)}
-  >
-    <View style={styles.orderCardContainer}>
-      <View style={styles.orderHeader}>
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderId}>🚗 {ride.vehicle_type} Ride</Text>
-          <Text style={styles.orderDate}>
-            {new Date(ride.requested_at).toLocaleDateString()}
-          </Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: '#DCFCE7' }]}>
-          <Text style={[styles.statusText, { color: '#166534' }]}>
-            {ride.ride_status}
-          </Text>
-        </View>
-      </View>
+    const renderRideCard = useCallback((ride) => (
+        <AnimatedTouchableOpacity
+            key={ride?._id?.toString()}
+            style={styles.enhancedOrderCard}
+            onPress={() => setExpandedOrder(expandedOrder === ride._id ? null : ride._id)}
+        >
+            <View style={styles.orderCardContainer}>
+                <View style={styles.orderHeader}>
+                    <View style={styles.orderInfo}>
+                        <Text style={styles.orderId}>🚗 {ride.vehicle_type} Ride</Text>
+                        <Text style={styles.orderDate}>
+                            {new Date(ride.requested_at).toLocaleDateString()}
+                        </Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: '#DCFCE7' }]}>
+                        <Text style={[styles.statusText, { color: '#166534' }]}>
+                            {ride.ride_status}
+                        </Text>
+                    </View>
+                </View>
 
-      {expandedOrder === ride._id && (
-        <Animated.View style={styles.orderDetails}>
-          <View style={styles.rideDetails}>
-            <View style={styles.locationInfo}>
-              <Ionicons name="location" size={20} color="#DC2626" />
-              <Text style={styles.locationText}>
-                {ride.pickup_address?.formatted_address || 'Unknown Pickup'}
-              </Text>
+                {expandedOrder === ride._id && (
+                    <Animated.View style={styles.orderDetails}>
+                        <View style={styles.rideDetails}>
+                            <View style={styles.locationInfo}>
+                                <Ionicons name="location" size={20} color="#DC2626" />
+                                <Text style={styles.locationText}>
+                                    {ride.pickup_address?.formatted_address || 'Unknown Pickup'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.locationInfo}>
+                                <Ionicons name="location" size={20} color="#DC2626" />
+                                <Text style={styles.locationText}>
+                                    {ride.drop_address?.formatted_address || 'Unknown Drop'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.rideStats}>
+                                <Text style={styles.statItem}>
+                                    💰 Fare: ₹{ride.pricing?.total_fare?.toFixed(2) || 0}
+                                </Text>
+
+                            </View>
+
+                            {/* Show "Track Ride" only if ride is not cancelled or completed */}
+                            {ride.ride_status !== 'cancelled' && ride.ride_status !== 'completed' && (
+                                <TouchableOpacity
+                                    onPress={() => navigation.navigate("RideStarted", {
+                                        driver: ride?.driver,
+                                        ride: ride
+                                    })}
+                                    style={styles.seeRideButton}
+                                >
+                                    <LinearGradient
+                                        colors={['#DC2626', '#B91C1C']}
+                                        style={styles.seeRideGradient}
+                                    >
+                                        <Text style={styles.seeRideText}>Track Ride 🚖</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </Animated.View>
+                )}
             </View>
-
-            <View style={styles.locationInfo}>
-              <Ionicons name="location" size={20} color="#DC2626" />
-              <Text style={styles.locationText}>
-                {ride.drop_address?.formatted_address || 'Unknown Drop'}
-              </Text>
-            </View>
-
-            <View style={styles.rideStats}>
-              <Text style={styles.statItem}>
-                💰 Fare: ₹{ride.pricing?.total_fare?.toFixed(2) || 0}
-              </Text>
-
-            </View>
-
-            {/* Show "Track Ride" only if ride is not cancelled or completed */}
-            {ride.ride_status !== 'cancelled' && ride.ride_status !== 'completed' && (
-              <TouchableOpacity
-                onPress={() => navigation.navigate("RideStarted", {
-                  driver: ride?.driver,
-                  ride: ride
-                })}
-                style={styles.seeRideButton}
-              >
-                <LinearGradient
-                  colors={['#DC2626', '#B91C1C']}
-                  style={styles.seeRideGradient}
-                >
-                  <Text style={styles.seeRideText}>Track Ride 🚖</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
-          </View>
-        </Animated.View>
-      )}
-    </View>
-  </AnimatedTouchableOpacity>
-), [expandedOrder, navigation]);
+        </AnimatedTouchableOpacity>
+    ), [expandedOrder, navigation]);
 
 
     const renderHotelCards = useCallback((hotelData) => (
@@ -977,7 +989,7 @@ const renderRideCard = useCallback((ride) => (
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
-                
+
                 style={styles.container}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
@@ -1141,6 +1153,7 @@ const renderRideCard = useCallback((ride) => (
                 {/* Modals */}
                 <DeleteConfirmationModal
                     visible={deleteModal}
+                    Navigator={navigation}
                     onClose={() => setDeleteModal(false)}
                     onConfirm={() => deleteAccount(userData?._id)}
                     userName={userData?.name || 'User'}

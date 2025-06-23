@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Button,
   Alert,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
@@ -17,10 +19,13 @@ import AddressForm from './AddressForm';
 import BhVerificationError from './BhVerificationError';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+const { width, height } = Dimensions.get('window');
+
 export default function RegisterWithBh() {
   const route = useRoute();
   const navigation = useNavigation();
   const { bh_id } = route.params || {};
+  
   const [date, setDate] = useState(new Date());
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [isBhVerify, setIsBhVerify] = useState(false);
@@ -29,9 +34,9 @@ export default function RegisterWithBh() {
   const [categories, setCategories] = useState([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errors, setErrors] = useState({});
-  const [showLogin, setShowLogin] = useState(false);
-  const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [loginErrors, setLoginErrors] = useState({});
+  const [bhVerifyLoading, setBhVerifyLoading] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -55,19 +60,21 @@ export default function RegisterWithBh() {
   });
 
   useEffect(() => {
-    checkBhId();
-    fetchCategory();
+    initializeComponent();
   }, [bh_id]);
+
+  const initializeComponent = async () => {
+    setLoading(true);
+    await Promise.all([checkBhId(), fetchCategory()]);
+    setLoading(false);
+  };
 
   // Aadhaar regex for format XXXX XXXX XXXX
   const aadharRegex = /^[2-9]{1}[0-9]{3}\s[0-9]{4}\s[0-9]{4}$/;
 
   // Format Aadhaar number as user types
   const formatAadhar = (text) => {
-    // Remove all spaces first
     const cleaned = text.replace(/\s/g, '');
-
-    // Add spaces after every 4 characters
     let formatted = '';
     for (let i = 0; i < cleaned.length && i < 12; i++) {
       if (i > 0 && i % 4 === 0) {
@@ -75,50 +82,63 @@ export default function RegisterWithBh() {
       }
       formatted += cleaned[i];
     }
-
     return formatted;
   };
 
-  // Validate a specific field
+  // Enhanced validation with more detailed error messages
   const validateField = (field, value) => {
     let error = null;
 
     switch (field) {
       case 'name':
-        if (!value.trim()) error = 'Please enter your name.';
+        if (!value.trim()) {
+          error = 'Name is required';
+        } else if (value.trim().length < 2) {
+          error = 'Name must be at least 2 characters';
+        } else if (!/^[a-zA-Z\s]+$/.test(value.trim())) {
+          error = 'Name can only contain letters and spaces';
+        }
         break;
+        
       case 'email':
         if (!value.trim()) {
-          error = 'Please provide your email address.';
+          error = 'Email address is required';
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-          error = 'Please enter a valid email address.';
+          error = 'Please enter a valid email address';
         }
         break;
 
       case 'number':
         if (!value.trim()) {
-          error = 'Please enter your phone number.';
+          error = 'Phone number is required';
         } else if (!/^\d{10}$/.test(value)) {
-          error = 'Phone number must be exactly 10 digits.';
+          error = 'Phone number must be exactly 10 digits';
+        } else if (!/^[6-9]/.test(value)) {
+          error = 'Phone number must start with 6, 7, 8, or 9';
         }
         break;
+        
       case 'password':
         if (!value.trim()) {
-          error = 'Please create a password.';
+          error = 'Password is required';
         } else if (value.length < 8) {
-          error = 'Password must be at least 8 characters long.';
+          error = 'Password must be at least 8 characters';
+        } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(value)) {
+          error = 'Password must contain uppercase, lowercase, and number';
         }
         break;
+        
       case 'aadharNumber':
         if (!value.trim()) {
-          error = 'Please enter your Aadhaar number.';
+          error = 'Aadhaar number is required';
         } else if (!aadharRegex.test(value)) {
-          error = 'Please enter a valid Aadhaar number (XXXX XXXX XXXX).';
+          error = 'Enter valid Aadhaar number (XXXX XXXX XXXX)';
         }
         break;
+        
       case 'dob':
         if (!value) {
-          error = 'Please enter your date of birth.';
+          error = 'Date of birth is required';
         }
         break;
     }
@@ -126,7 +146,7 @@ export default function RegisterWithBh() {
     return error;
   };
 
-  // Handle input changes with validation
+  // Handle input changes with real-time validation
   const handleInputChange = (field, value) => {
     let newValue = value;
 
@@ -141,16 +161,15 @@ export default function RegisterWithBh() {
       [field]: newValue
     }));
 
-    // Validate field
-    const fieldError = validateField(field, newValue);
+    // Clear submit error when user starts typing
+    if (submitError) setSubmitError('');
 
-    // Update errors
+    // Validate field and update errors
+    const fieldError = validateField(field, newValue);
     setErrors(prev => ({
       ...prev,
       [field]: fieldError
     }));
-
-
   };
 
   const showDatePicker = () => {
@@ -176,7 +195,15 @@ export default function RegisterWithBh() {
       }
 
       if (age < 18) {
-        Alert.alert("Age Restriction", "You must be at least 18 years old to register.");
+        Alert.alert(
+          "Age Restriction", 
+          "You must be at least 18 years old to register.",
+          [{ text: "OK" }]
+        );
+        setErrors(prev => ({
+          ...prev,
+          dob: 'Must be at least 18 years old'
+        }));
         hideDatePicker();
         return;
       }
@@ -200,44 +227,57 @@ export default function RegisterWithBh() {
   };
 
   const checkBhId = async () => {
+    if (!bh_id) {
+      setIsBhVerify(true);
+      return;
+    }
+
+    setBhVerifyLoading(true);
     try {
-      const { data } = await axios.post('https://www.api.olyox.com/api/v1/check-bh-id', { bh: bh_id });
+      const { data } = await axios.post('https://www.api.olyox.com/api/v1/check-bh-id', { 
+        bh: bh_id 
+      });
       setIsBhVerify(data.success);
     } catch (err) {
-      console.error(err);
+      console.error('BH verification error:', err);
       setIsBhVerify(false);
+    } finally {
+      setBhVerifyLoading(false);
     }
   };
 
   const fetchCategory = async () => {
+    setCategoryLoading(true);
     try {
       const { data } = await axios.get('https://www.api.olyox.com/api/v1/categories_get');
-      setCategories(data.data);
+      setCategories(data.data || []);
     } catch (err) {
       console.error('Error fetching categories:', err);
+      Alert.alert('Error', 'Failed to load categories. Please try again.');
     } finally {
-      setLoading(false);
+      setCategoryLoading(false);
     }
   };
 
   const validateForm = () => {
     const newErrors = {};
 
-    // Validate all fields
-    Object.keys(formData).forEach(field => {
-      if (field !== 'address' && field !== 'category' && field !== 'member_id' &&
-        field !== 'referral_code_which_applied' && field !== 'is_referral_applied') {
-        const error = validateField(field, formData[field]);
-        if (error) newErrors[field] = error;
-      }
+    // Validate all required fields
+    const fieldsToValidate = ['name', 'email', 'number', 'password', 'aadharNumber', 'dob'];
+    
+    fieldsToValidate.forEach(field => {
+      const error = validateField(field, formData[field]);
+      if (error) newErrors[field] = error;
     });
 
-    // Validate address fields
-    if (!formData.address.pincode.trim()) newErrors.pincode = 'Please enter your pincode.';
+    // Validate address
+    if (!formData.address.street_address.trim()) {
+      newErrors.address = 'Address is required';
+    }
 
-    // Check terms and conditions
+    // Validate terms
     if (!termsAccepted) {
-      newErrors.terms = 'You must accept the terms and conditions to proceed.';
+      newErrors.terms = 'You must accept the terms and conditions';
     }
 
     setErrors(newErrors);
@@ -245,13 +285,23 @@ export default function RegisterWithBh() {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    // Clear previous submit error
+    setSubmitError('');
+
+    if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please correct all errors before submitting.');
+      return;
+    }
 
     setSubmitting(true);
+    
     try {
       const response = await axios.post(
         'https://webapi.olyox.com/api/v1/register_vendor',
-        formData
+        formData,
+        {
+          timeout: 30000, // 30 second timeout
+        }
       );
 
       if (response.data?.success) {
@@ -270,16 +320,28 @@ export default function RegisterWithBh() {
             }
           ]
         );
+      } else {
+        throw new Error(response.data?.message || 'Registration failed');
       }
     } catch (error) {
-      console.log(error.response?.data);
-      const errorMessage = error.response?.data?.message || 'Registration failed';
+      console.error('Registration error:', error);
+      
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timeout. Please check your internet connection.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setSubmitError(errorMessage);
       Alert.alert("Registration Error", errorMessage);
     } finally {
       setSubmitting(false);
     }
   };
-
 
   const formatDate = (date) => {
     if (!date) return "";
@@ -290,17 +352,42 @@ export default function RegisterWithBh() {
     return `${day}-${month}-${year}`;
   };
 
+  // Loading Modal Component
+  const LoadingModal = ({ visible, message }) => (
+    <Modal
+      transparent={true}
+      animationType="fade"
+      visible={visible}
+      onRequestClose={() => {}}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.loadingModalContent}>
+          <ActivityIndicator size="large" color="#ff0000" />
+          <Text style={styles.loadingText}>{message}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
 
+  // Error Display Component
+  const ErrorDisplay = ({ error }) => {
+    if (!error) return null;
+    return <Text style={styles.errorText}>{error}</Text>;
+  };
 
-  if (!isBhVerify && bh_id) {
+  // Show BH verification error
+  if (!isBhVerify && bh_id && !bhVerifyLoading) {
     return <BhVerificationError />;
   }
 
-  if (loading) {
+  // Show initial loading
+  if (loading || bhVerifyLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text>Loading...</Text>
+        <ActivityIndicator size="large" color="#ff0000" />
+        <Text style={styles.loadingText}>
+          {bhVerifyLoading ? 'Verifying BH ID...' : 'Loading...'}
+        </Text>
       </View>
     );
   }
@@ -309,82 +396,79 @@ export default function RegisterWithBh() {
   const renderRegistrationForm = () => (
     <View style={styles.formContainer}>
       <Text style={styles.title}>Vendor Cab Registration</Text>
+      
+      {submitError ? (
+        <View style={styles.submitErrorContainer}>
+          <Text style={styles.submitErrorText}>{submitError}</Text>
+        </View>
+      ) : null}
 
       <FormInput
-        label="Name (as per Aadhaar Card)"
+        label="Name (as per Aadhaar Card) *"
         value={formData.name}
         onChangeText={(text) => handleInputChange('name', text)}
         error={errors.name}
-        placeholder="Enter your name"
+        placeholder="Enter your full name"
       />
 
       <FormInput
-        label="Aadhaar Number"
+        label="Aadhaar Number *"
         value={formData.aadharNumber}
         onChangeText={(text) => handleInputChange('aadharNumber', text)}
         error={errors.aadharNumber}
         placeholder="XXXX XXXX XXXX"
         keyboardType="numeric"
-        maxLength={14} // 12 digits + 2 spaces
+        maxLength={14}
       />
 
       <View style={styles.datePickerContainer}>
-        <Text style={styles.label}>Date of Birth</Text>
-        <Button title="Select Date of Birth" onPress={showDatePicker} />
+        <Text style={styles.label}>Date of Birth *</Text>
+        <TouchableOpacity style={styles.dateButton} onPress={showDatePicker}>
+          <Text style={styles.dateButtonText}>
+            {formData.dob ? formatDate(formData.dob) : "Select Date of Birth"}
+          </Text>
+        </TouchableOpacity>
+        <ErrorDisplay error={errors.dob} />
+        
         {isDatePickerVisible && (
           <DateTimePicker
             value={date}
             mode="date"
             onChange={handleDateChange}
             display="default"
+            maximumDate={new Date()}
           />
         )}
-        <FormInput
-          editable={false}
-          value={formData.dob ? formatDate(formData.dob) : ""}
-          error={errors.dob}
-          placeholder="DD-MM-YYYY"
-        />
       </View>
 
       <FormInput
-        label="Email"
+        label="Email Address *"
         value={formData.email}
         onChangeText={(text) => handleInputChange('email', text)}
         error={errors.email}
-        placeholder="Enter your email"
+        placeholder="Enter your email address"
         keyboardType="email-address"
+        autoCapitalize="none"
       />
 
-      {/* <FormInput
-        label="Re-enter Email"
-        value={formData.reEmail}
-        onChangeText={(text) => handleInputChange('reEmail', text)}
-        error={errors.reEmail}
-        placeholder="Re-enter your email"
-        keyboardType="email-address"
-      /> */}
-
       <FormInput
-        label="Phone Number"
+        label="Phone Number *"
         value={formData.number}
         onChangeText={(text) => handleInputChange('number', text)}
         error={errors.number}
-        placeholder="Enter your phone number"
+        placeholder="Enter 10-digit phone number"
         keyboardType="phone-pad"
         maxLength={10}
       />
 
       <FormInput
-        label="Password"
+        label="Password *"
         value={formData.password}
         onChangeText={(text) => handleInputChange('password', text)}
         error={errors.password}
-        placeholder="Create a password"
+        placeholder="Create a strong password"
         secureTextEntry
       />
-
-
 
       <AddressForm
         address={formData.address}
@@ -403,143 +487,218 @@ export default function RegisterWithBh() {
       <View style={styles.termsContainer}>
         <TouchableOpacity
           style={styles.checkbox}
-          onPress={() => setTermsAccepted(!termsAccepted)}
+          onPress={() => {
+            setTermsAccepted(!termsAccepted);
+            if (errors.terms) {
+              setErrors(prev => ({ ...prev, terms: null }));
+            }
+          }}
         >
-          <View style={[styles.checkboxInner, termsAccepted && styles.checkboxChecked]} />
+          <View style={[styles.checkboxInner, termsAccepted && styles.checkboxChecked]}>
+            {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+          </View>
         </TouchableOpacity>
         <Text style={styles.termsText}>
-          I accept the Terms and Conditions
+          I accept the Terms and Conditions *
         </Text>
       </View>
-      {errors.terms && <Text style={styles.errorText}>{errors.terms}</Text>}
+      <ErrorDisplay error={errors.terms} />
 
       <TouchableOpacity
         style={[
-          styles.button,
+          styles.submitButton,
           (submitting || !termsAccepted) && styles.buttonDisabled
         ]}
         onPress={handleSubmit}
         disabled={submitting || !termsAccepted}
       >
         <Text style={styles.buttonText}>
-          {submitting ? 'Registering...' : 'Register'}
+          {submitting ? 'Registering...' : 'Register Now'}
         </Text>
+        {submitting && (
+          <ActivityIndicator 
+            size="small" 
+            color="#fff" 
+            style={styles.buttonLoader} 
+          />
+        )}
       </TouchableOpacity>
-
     </View>
   );
 
-
-
   return (
-    <ScrollView style={styles.container}>
-      {renderRegistrationForm()}
-    </ScrollView>
+    <>
+      <ScrollView 
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {renderRegistrationForm()}
+      </ScrollView>
+      
+      <LoadingModal 
+        visible={submitting} 
+        message="Creating your account..." 
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
   formContainer: {
     padding: 20,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     marginVertical: 15,
-    marginHorizontal: 10,
+    marginHorizontal: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 25,
     color: '#333',
   },
-  pickerContainer: {
+  submitErrorContainer: {
+    backgroundColor: '#fee',
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#fcc',
+  },
+  submitErrorText: {
+    color: '#c33',
+    fontSize: 14,
+    textAlign: 'center',
   },
   datePickerContainer: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     marginBottom: 8,
-    color: '#666',
-    fontWeight: '500',
+    color: '#333',
+    fontWeight: '600',
   },
-  picker: {
+  dateButton: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    padding: 5,
+    padding: 15,
+    justifyContent: 'center',
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: '#333',
   },
   errorText: {
-    color: '#ff0000',
+    color: '#e74c3c',
     fontSize: 12,
     marginTop: 5,
+    marginLeft: 5,
   },
-  button: {
+  submitButton: {
     backgroundColor: '#ff0000',
-    padding: 15,
-    borderRadius: 8,
+    padding: 18,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 25,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    shadowColor: '#ff0000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
+    shadowOpacity: 0.1,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  buttonLoader: {
+    marginLeft: 10,
   },
   termsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 15,
+    marginTop: 20,
+    paddingHorizontal: 5,
   },
   checkbox: {
-    height: 20,
-    width: 20,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#666',
-    marginRight: 10,
+    height: 24,
+    width: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkboxInner: {
-    height: 12,
-    width: 12,
-    borderRadius: 2,
+    height: 16,
+    width: 16,
+    borderRadius: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   checkboxChecked: {
     backgroundColor: '#ff0000',
   },
-  termsText: {
-    fontSize: 14,
-    color: '#333',
+  checkmark: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
-  switchButton: {
-    marginTop: 20,
+  termsText: {
+    fontSize: 15,
+    color: '#333',
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  switchButtonText: {
-    color: '#0066cc',
-    fontSize: 14,
+  loadingModalContent: {
+    backgroundColor: '#fff',
+    padding: 30,
+    borderRadius: 12,
+    alignItems: 'center',
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

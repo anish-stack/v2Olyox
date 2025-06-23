@@ -35,13 +35,19 @@
           "whatsapp",
           "tel",
           "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
           "whatsapp"
         ],
         "ITSAppUsesNonExemptEncryption": false,
         "GMSApiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
       },
       "googleServicesFile": "./GoogleService-Info.plist",
-     "runtimeVersion": "1.0.4"
+      "runtimeVersion": "1.0.4"
     },
     "android": {
       "adaptiveIcon": {
@@ -54,9 +60,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
       ],
-      "versionCode": 22,
+      "versionCode": 30,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -67,14 +76,16 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "package": "com.happy_coding.olyox",
       "googleServicesFile": "./google-services.json",
       "runtimeVersion": "1.0.4"
     },
-
     "web": {
       "favicon": "./assets/appicon.png",
       "build": {
@@ -85,7 +96,7 @@
       "clerkFrontendApi": "pk_test_c2VjdXJlLWdudS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
       "clerkApiKey": "pk_test_c2VjdXJlLWdudS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
       "eas": {
-        "projectId": "e73c718b-d6aa-45ea-a12a-c496424892ba"
+        "projectId": "dac7f514-992d-4670-8961-c730c482f5e9"
       }
     },
     "plugins": [
@@ -105,9 +116,9 @@
       ]
     ],
     "updates": {
-      "enabled": true,
+       "enabled": true,
       "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/e73c718b-d6aa-45ea-a12a-c496424892ba"
+      "url": "https://u.expo.dev/dac7f514-992d-4670-8961-c730c482f5e9"
     }
   }
 }
