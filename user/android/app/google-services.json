@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "900366491123",
+    "project_id": "olyox-6215a",
+    "storage_bucket": "olyox-6215a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:900366491123:android:0ecb86eff4c628c3ecc686",
+        "android_client_info": {
+          "package_name": "com.happy_coding.olyox"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-mGbVdZs1VXF24aUPZaXkJgMTo7BDa4Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

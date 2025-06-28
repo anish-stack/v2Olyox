@@ -310,45 +310,65 @@ app.get('/rider/:tempRide', async (req, res) => {
     }
 });
 
-
 app.post('/webhook/cab-receive-location', async (req, res, next) => {
+    console.log('--- Incoming request to /webhook/cab-receive-location ---');
+    console.log('Request Body:', req.body);
+
     if (!req.body.riderId) {
-        // Apply Protect middleware only if riderId is not provided
+        console.log('No riderId provided in request body, applying Protect middleware...');
         return Protect(req, res, next);
     }
+
+    console.log('riderId found, skipping Protect middleware');
     next(); // Proceed to the handler if riderId is provided
+
 }, async (req, res) => {
     try {
+        console.log('--- Entering location update handler ---');
+
         const { latitude, longitude, riderId } = req.body;
+        console.log('Received Data:', { latitude, longitude, riderId });
+
         let userId;
         if (riderId) {
-            userId = riderId;  // Use riderId from the body if it's provided
+            userId = riderId;
+            console.log('Using riderId from request body:', userId);
         } else {
-            userId = req.user.userId;  // Otherwise, get userId from the authenticated user
+            userId = req.user?.userId;
+            console.log('Using authenticated userId:', userId);
         }
 
+        if (!userId) {
+            console.warn('No userId available for updating location');
+            return res.status(400).json({ error: 'User ID is required' });
+        }
 
+        const updatePayload = {
+            location: {
+                type: 'Point',
+                coordinates: [longitude, latitude]
+            },
+            lastUpdated: new Date()
+        };
+
+        console.log('Updating rider location with payload:', updatePayload);
 
         const data = await RiderModel.findOneAndUpdate(
             { _id: userId },
-            {
-                location: {
-                    type: 'Point',
-                    coordinates: [longitude, latitude]
-                },
-                lastUpdated: new Date()
-            },
+            updatePayload,
             { upsert: true, new: true }
         );
 
-        // console.log("data of rider updated");
+        console.log('Rider location updated:', data);
 
         res.status(200).json({ message: 'Location updated successfully' });
+
     } catch (error) {
         console.error('Error updating location:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
 
 app.post('/webhook/receive-location', Protect, async (req, res) => {
     try {

@@ -12,7 +12,7 @@ export default function ManualCheck() {
 
     useEffect(() => {
         // Set app version
-        const version = Constants?.manifest?.version || '1.0.0';
+        const version = Constants?.manifest?.version || '1.0.4';
         setAppVersion(version);
     }, []);
 
