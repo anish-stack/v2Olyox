@@ -610,7 +610,7 @@ const updateRideStatus = async (redisClient, rideId, status, additionalData = {}
             rideId,
             { $set: updateData },
             { new: true }
-        );
+        ).populate('user');
 
         if (status === 'cancelled' && updatedRide.user) {
             updatedRide.user.currentRide = null;
