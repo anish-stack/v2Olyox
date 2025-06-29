@@ -95,9 +95,11 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     // Prepare notification message
     const message = {
       token: token,
+    
       notification: {
         title: title || defaultTitle,
-        body: body || defaultBody,
+        body: body || defaultBody
+
       },
       data: {
         // Ensure all data values are strings
