@@ -98,6 +98,8 @@ const sendNotification = async (token, title, body, eventData = {}) => {
       notification: {
         title: title || defaultTitle,
         body: body || defaultBody,
+        android_channel_id: "default"
+
       },
       data: {
         // Ensure all data values are strings
@@ -140,7 +142,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     if (error instanceof NotificationError) {
       return null;
     }
-   return 
+    return
   }
 };
 

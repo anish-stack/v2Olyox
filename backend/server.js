@@ -335,7 +335,7 @@ app.post('/webhook/cab-receive-location', async (req, res, next) => {
             console.log('Using riderId from request body:', userId);
         } else {
             userId = req.user?.userId;
-            console.log('Using authenticated userId:', userId);
+            // console.log('Using authenticated userId:', userId);
         }
 
         if (!userId) {
@@ -359,7 +359,7 @@ app.post('/webhook/cab-receive-location', async (req, res, next) => {
             { upsert: true, new: true }
         );
 
-        console.log('Rider location updated:', data);
+        console.log('Rider location updated:', data?.name);
 
         res.status(200).json({ message: 'Location updated successfully' });
 

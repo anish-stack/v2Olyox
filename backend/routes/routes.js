@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerRider, getAllRiders, changeLocation, login, resendOtp, verifyOtp, uploadDocuments, details, getMyAllDetails, getMyAllRides, toggleWorkStatusOfRider, verifyDocument, uploadPaymentQr, getMySessionsByUserId, riderDocumentsVerify, updateBlockStatus, getSingleRider, updateRiderDetails, updateRiderDocumentVerify, logoutRider, deleteRider, AdmintoggleWorkStatusOfRider } = require('../controllers/rider.controller');
+const { registerRider, getAllRiders, changeLocation, login, resendOtp, verifyOtp, uploadDocuments, details, getMyAllDetails, getMyAllRides, toggleWorkStatusOfRider, verifyDocument, uploadPaymentQr, getMySessionsByUserId, riderDocumentsVerify, updateBlockStatus, getSingleRider, updateRiderDetails, updateRiderDocumentVerify, logoutRider, deleteRider, AdmintoggleWorkStatusOfRider, saveFcmTokenToken } = require('../controllers/rider.controller');
 const { calculateRidePriceForUser, rideEndByFallBack } = require('../controllers/ride.request');
 
 const router = express.Router();
@@ -52,6 +52,7 @@ router.post('/rider-upload', Protect, upload.array('documents'), uploadDocuments
 router.post('/rider-uploadPaymentQr', Protect, upload.single('image'), uploadPaymentQr)
 router.get('/user-details', Protect, details);
 router.put('/updateRiderBlock/:id', updateBlockStatus)
+router.post('/update-fcm',Protect, saveFcmTokenToken)
 
 router.get('/getMyAllDetails', Protect, getMyAllDetails);
 router.get('/getMyAllRides', Protect, getMyAllRides);
