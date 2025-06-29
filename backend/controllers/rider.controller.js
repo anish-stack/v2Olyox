@@ -326,6 +326,37 @@ exports.login = async (req, res) => {
   }
 };
 
+exports.saveFcmTokenToken = async (req, res) => {
+  try {
+    const riderId =req.user?.userId;
+    const { fcmToken } = req.body;
+    console.log(req.user)
+    console.log(fcmToken)
+    const partner = await Rider.findById(riderId);
+    if (!partner) {
+      return res.status(401).json({
+        success: false,
+        message: 'Notification Update Not done'
+      })
+    }
+    if (fcmToken && fcmToken !== partner.fcmToken) {
+      partner.fcmToken = fcmToken;
+    }
+    await partner.save()
+
+    res.status(201).json({
+      success: true,
+      message: 'Notification Update  done'
+    })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({
+      success: false,
+      message: error.message
+    })
+  }
+}
+
 
 exports.logoutRider = async (req, res) => {
   try {

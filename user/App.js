@@ -66,15 +66,23 @@ import axios from 'axios';
 import OlyoxAppUpdate from './context/CheckAppUpdate';
 import OnWayRide from './New Screen/OnWayRide';
 import RateRiderOrRide from './New Screen/RateRiderOrRide';
+import ManualCheck from './context/ManualCheck';
 
 const Stack = createNativeStackNavigator();
 
 // Initialize Sentry
 Sentry.init({
-  dsn: "https://c73ead860e964d854e9985d11321815e@o4508943362621440.ingest.de.sentry.io/4508943364194384",
+  dsn: "https://f7347ca019397d16c7b1b5de089b1a82@o4508834287583232.ingest.us.sentry.io/4509547460755456",
   enableInExpoDevelopment: true,
-  debug: false,
+  debug: true,
+  attachScreenshot: true,
+  enableNative: true,
   tracesSampleRate: 1.0,
+  profilesSampleRate: 1.0,
+  enableInExpoDevelopment: __DEV__,
+  debug: __DEV__,
+  environment: __DEV__ ? "development" : "production",
+  enableAutoSessionTracking: true,
 });
 
 // Constants
@@ -456,6 +464,7 @@ const App = () => {
 
       {/* App Policy */}
       <Stack.Screen name="spalsh" options={{ headerShown: false }} component={SplashScreen} />
+      <Stack.Screen name="open" options={{ headerShown: false }} component={ManualCheck} />
       <Stack.Screen name="policy" options={{ headerShown: true, title: "Olyox App Polices" }} component={Policy} />
       <Stack.Screen name="policyauth" options={{ headerShown: true, title: "Olyox App Polices" }} component={Policy} />
       <Stack.Screen name="Help_me" options={{ headerShown: true, title: "Olyox Center" }} component={Help_On} />

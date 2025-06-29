@@ -7,8 +7,10 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  StyleSheet,
   ToastAndroid,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -25,6 +27,53 @@ const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
 const POLLING_INTERVAL = 8000;
 const BOOKING_TIMEOUT = 120000;
+
+// Enhanced Color Palette
+const COLORS = {
+  primary: '#6366F1',
+  primaryLight: '#E0E7FF',
+  primaryDark: '#4338CA',
+  secondary: '#10B981',
+  secondaryLight: '#D1FAE5',
+  accent: '#F59E0B',
+  accentLight: '#FEF3C7',
+  
+  success: '#10B981',
+  successLight: '#D1FAE5',
+  warning: '#F59E0B',
+  warningLight: '#FEF3C7',
+  danger: '#EF4444',
+  dangerLight: '#FEE2E2',
+  info: '#3B82F6',
+  infoLight: '#DBEAFE',
+  
+  background: {
+    primary: '#FFFFFF',
+    secondary: '#F8FAFC',
+    tertiary: '#F1F5F9',
+    dark: '#0F172A',
+  },
+  
+  text: {
+    primary: '#0F172A',
+    secondary: '#475569',
+    tertiary: '#94A3B8',
+    inverse: '#FFFFFF',
+    muted: '#64748B',
+  },
+  
+  border: {
+    light: '#E2E8F0',
+    medium: '#CBD5E1',
+    dark: '#94A3B8',
+  },
+  
+  shadow: {
+    light: 'rgba(0, 0, 0, 0.05)',
+    medium: 'rgba(0, 0, 0, 0.1)',
+    dark: 'rgba(0, 0, 0, 0.15)',
+  },
+};
 
 const showNotification = (title, message, type = 'info') => {
   const displayMessage = `${title ? title + '\n' : ''}${message}`;
@@ -62,26 +111,24 @@ export default function BookingConfirmation() {
   const fetchDirections = async () => {
     if (!origin || !destination) return;
     try {
+      const pickup = {
+        latitude: origin.latitude,
+        longitude: origin.longitude
+      };
+      const dropoff = {
+        latitude: destination.latitude,
+        longitude: destination.longitude
+      };
       console.log('Fetching directions...');
-      const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/directions/json`,
-        {
-          params: {
-            origin: `${origin.latitude},${origin.longitude}`,
-            destination: `${destination.latitude},${destination.longitude}`,
-            key: GOOGLE_MAPS_APIKEY,
-            mode: 'driving',
-          },
-          timeout: 10000,
-        }
-      );
-      if (response.data.routes.length > 0) {
-        const points = decodePolyline(response.data.routes[0].overview_polyline.points);
-        const coords = points.map(point => ({
-          latitude: point[0],
-          longitude: point[1],
+      const response = await axios.post('https://appapi.olyox.com/directions', { pickup, dropoff });
+
+      const json = response.data;
+      if (json?.polyline) {
+        const decodedCoords = PolylineDecoder.decode(json.polyline).map(([lat, lng]) => ({
+          latitude: lat,
+          longitude: lng,
         }));
-        setCoordinates(coords);
+        setCoordinates(decodedCoords);
       }
     } catch (error) {
       console.error('Error fetching directions:', error);
@@ -345,19 +392,25 @@ export default function BookingConfirmation() {
   };
 
   const Header = () => (
-    <View>
-      <TouchableOpacity onPress={() => (isBookingInProgress ? handleCancelBooking() : navigation.goBack())}>
-        <Icon name="arrow-left" size={24} />
+    <View style={styles.headerContainer}>
+      <TouchableOpacity 
+        style={styles.headerButton}
+        onPress={() => (isBookingInProgress ? handleCancelBooking() : navigation.goBack())}
+        activeOpacity={0.7}
+      >
+        <Icon name="arrow-left" size={24} color={COLORS.text.primary} />
       </TouchableOpacity>
-      <Text>Book Your Ride</Text>
+      <Text style={styles.headerTitle}>Book Your Ride</Text>
+      <View style={styles.headerButton} />
     </View>
   );
 
   const MapSection = () => (
-    <View>
+    <View style={styles.mapContainer}>
       {origin && destination ? (
         <MapView
           ref={mapRef}
+          style={styles.map}
           provider={PROVIDER_GOOGLE}
           initialRegion={{
             latitude: (origin.latitude + destination.latitude) / 2,
@@ -366,145 +419,232 @@ export default function BookingConfirmation() {
             longitudeDelta: Math.abs(origin.longitude - destination.longitude) * 2 || 0.01,
           }}
           onMapReady={fitMapToMarkers}
+          showsUserLocation={false}
+          showsMyLocationButton={false}
+          showsCompass={false}
+          toolbarEnabled={false}
         >
           <Marker
             coordinate={{ latitude: origin.latitude, longitude: origin.longitude }}
             title="Pickup"
             description={pickup?.description || 'Pickup location'}
           >
-            <Icon name="map-marker-circle" size={30} />
+            <View style={styles.customMarker}>
+              <Icon name="map-marker-circle" size={32} color={COLORS.primary} />
+            </View>
           </Marker>
           <Marker
             coordinate={{ latitude: destination.latitude, longitude: destination.longitude }}
             title="Drop-off"
             description={dropoff?.description || 'Destination'}
           >
-            <Icon name="flag-checkered" size={30} />
+            <View style={styles.customMarker}>
+              <Icon name="flag-checkered" size={32} color={COLORS.secondary} />
+            </View>
           </Marker>
-          {Platform.OS === 'ios' && coordinates.length > 0 && (
-            <Polyline coordinates={coordinates} strokeWidth={4} strokeColor="#2196F3" />
-          )}
-          {Platform.OS !== 'ios' && coordinates.length > 0 && (
-            <Polyline coordinates={coordinates} strokeWidth={4} strokeColor="#2196F3" />
+          {coordinates.length > 0 && (
+            <Polyline 
+              coordinates={coordinates} 
+              strokeWidth={4} 
+              strokeColor={COLORS.primary}
+              lineDashPattern={[0]}
+            />
           )}
         </MapView>
       ) : (
-        <View>
-          <Icon name="map-outline" size={48} />
-          <Text>Map loading...</Text>
+        <View style={styles.mapPlaceholder}>
+          <Icon name="map-outline" size={48} color={COLORS.text.tertiary} />
+          <Text style={styles.mapPlaceholderText}>Loading map...</Text>
         </View>
       )}
     </View>
   );
 
   const LocationCard = () => (
-    <View>
-      <View>
-        <Text>PICKUP</Text>
-        <Text>{pickup?.description || 'Current Location'}</Text>
+    <View style={styles.locationCard}>
+      <View style={styles.locationRow}>
+        <View style={styles.locationIconContainer}>
+          <View style={[styles.locationDot, { backgroundColor: COLORS.primary }]} />
+        </View>
+        <View style={styles.locationTextContainer}>
+          <Text style={styles.locationLabel}>PICKUP</Text>
+          <Text style={styles.locationText} numberOfLines={2}>
+            {pickup?.description || 'Current Location'}
+          </Text>
+        </View>
       </View>
-      <View>
-        <Text>DROP-OFF</Text>
-        <Text>{dropoff?.description || 'Selected Destination'}</Text>
+      
+      <View style={styles.routeLine} />
+      
+      <View style={styles.locationRow}>
+        <View style={styles.locationIconContainer}>
+          <View style={[styles.locationDot, { backgroundColor: COLORS.secondary }]} />
+        </View>
+        <View style={styles.locationTextContainer}>
+          <Text style={styles.locationLabel}>DROP-OFF</Text>
+          <Text style={styles.locationText} numberOfLines={2}>
+            {dropoff?.description || 'Selected Destination'}
+          </Text>
+        </View>
       </View>
     </View>
   );
 
   const RideDetailsCard = () => (
-    <View>
-      <View>
-        <Text>Ride Details</Text>
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>Ride Details</Text>
         {selectedRide?.durationInMinutes && (
-          <View>
-            <Icon name="clock-outline" size={16} />
-            <Text>{selectedRide.durationInMinutes.toFixed(0)} min</Text>
+          <View style={styles.durationBadge}>
+            <Icon name="clock-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.durationText}>
+              {selectedRide.durationInMinutes.toFixed(0)} min
+            </Text>
           </View>
         )}
       </View>
-      <View>
-        <Icon name="car" size={24} />
-        <Text>{selectedRide?.vehicleName || 'Standard Vehicle'}</Text>
+      
+      <View style={styles.vehicleInfo}>
+        <Icon name="car" size={28} color={COLORS.primary} />
+        <Text style={styles.vehicleText}>
+          {selectedRide?.vehicleName || 'Standard Vehicle'}
+        </Text>
       </View>
-      <View>
-        <Text>Fare Breakdown</Text>
-        <View>
-          <Text>Base Fare</Text>
-          <Text>₹{selectedRide?.totalPrice?.toFixed(0) || '0'}</Text>
+      
+      <View style={styles.fareSection}>
+        <Text style={styles.fareSectionTitle}>Fare Breakdown</Text>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>Base Fare</Text>
+          <Text style={styles.fareValue}>
+            ₹{selectedRide?.pricing?.baseFare?.toFixed(0) || '0'}
+          </Text>
         </View>
-        <View>
-          <Text>Total Fare</Text>
-          <Text>₹{selectedRide?.totalPrice?.toFixed(0) || '0'}</Text>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>Distance Cost</Text>
+          <Text style={styles.fareValue}>
+            ₹{selectedRide?.pricing?.distanceCost?.toFixed(0) || '0'}
+          </Text>
+        </View>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>Time Cost</Text>
+          <Text style={styles.fareValue}>
+            ₹{selectedRide?.pricing?.timeCost?.toFixed(0) || '0'}
+          </Text>
+        </View>
+        <View style={styles.totalFareRow}>
+          <Text style={styles.totalFareLabel}>Total Fare</Text>
+          <Text style={styles.totalFareValue}>
+            ₹{selectedRide?.totalPrice?.toFixed(0) || '0'}
+          </Text>
         </View>
       </View>
-      <Text>* Fare may vary based on distance, traffic, and tolls.</Text>
+      
+      <Text style={styles.disclaimer}>
+        * Fare may vary based on distance, traffic, and tolls.
+      </Text>
     </View>
   );
 
   const BookingProgressCard = () => (
-    <View>
-      <View>
-        <ActivityIndicator size="large" />
-        <Text>Finding Your Driver</Text>
-        <Text>{bookingStatusMessage}</Text>
+    <View style={styles.progressCard}>
+      <View style={styles.progressHeader}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.progressTitle}>Finding Your Driver</Text>
+        <Text style={styles.progressMessage}>{bookingStatusMessage}</Text>
       </View>
-      <View>
-        <View>
-          <Text>Searching for drivers</Text>
+      
+      <View style={styles.statusIndicator}>
+        <View style={styles.statusRow}>
+          <View style={[
+            styles.statusDot, 
+            currentRideStatus === 'searching' && styles.statusDotActive
+          ]} />
+          <Text style={styles.statusText}>Searching for drivers</Text>
         </View>
-        <View>
-          <Text>Driver assigned</Text>
+        <View style={styles.statusConnector} />
+        <View style={styles.statusRow}>
+          <View style={[
+            styles.statusDot, 
+            currentRideStatus === 'driver_assigned' && styles.statusDotActive
+          ]} />
+          <Text style={styles.statusText}>Driver assigned</Text>
         </View>
       </View>
+      
       {rideOtp && (
-        <View>
-          <Text>Your Ride OTP</Text>
-          <Text>{rideOtp}</Text>
+        <View style={styles.otpSection}>
+          <Text style={styles.otpLabel}>Your Ride OTP</Text>
+          <Text style={styles.otpValue}>{rideOtp}</Text>
         </View>
       )}
-      <TouchableOpacity onPress={handleCancelBooking}>
-        <Icon name="close-circle-outline" size={20} />
-        <Text>Cancel Request</Text>
+      
+      <TouchableOpacity 
+        style={styles.cancelButton}
+        onPress={handleCancelBooking}
+        activeOpacity={0.7}
+      >
+        <Icon name="close-circle-outline" size={20} color={COLORS.danger} />
+        <Text style={styles.cancelButtonText}>Cancel Request</Text>
       </TouchableOpacity>
     </View>
   );
 
   if (isLoadingLocation) {
     return (
-      <SafeAreaView>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background.primary} />
         <Header />
-        <View>
-          <ActivityIndicator size="large" />
-          <Text>Getting your location...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Getting your location...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background.primary} />
       <Header />
-      <ScrollView>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <MapSection />
         <LocationCard />
         {isBookingInProgress ? <BookingProgressCard /> : <RideDetailsCard />}
       </ScrollView>
+      
       {!isBookingInProgress && (
-        <View>
-          <TouchableOpacity onPress={handleChangePayment}>
-            <Icon name={getPaymentIcon()} size={24} />
-            <Text>{paymentMethod}</Text>
-            <Icon name="chevron-down" size={20} />
+        <View style={styles.footer}>
+          <TouchableOpacity 
+            style={styles.paymentSelector}
+            onPress={handleChangePayment}
+            activeOpacity={0.7}
+          >
+            <Icon name={getPaymentIcon()} size={24} color={COLORS.primary} />
+            <Text style={styles.paymentText}>{paymentMethod}</Text>
+            <Icon name="chevron-down" size={20} color={COLORS.text.secondary} />
           </TouchableOpacity>
+          
           <TouchableOpacity
+            style={[
+              styles.bookButton,
+              (!selectedRide || !currentLocation || isCreatingRide) && styles.bookButtonDisabled
+            ]}
             onPress={handleCreateRide}
             disabled={!selectedRide || !currentLocation || isCreatingRide}
+            activeOpacity={0.8}
           >
             {isCreatingRide ? (
-              <ActivityIndicator size="small" />
+              <ActivityIndicator size="small" color={COLORS.text.inverse} />
             ) : (
               <>
-                <Text>Book Ride</Text>
-                <Text>₹{selectedRide?.totalPrice?.toFixed(0) || '0'}</Text>
+                <Text style={styles.bookButtonText}>Book Ride</Text>
+                <Text style={styles.bookButtonSubtext}>
+                  ₹{selectedRide?.totalPrice?.toFixed(0) || '0'}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -515,425 +655,431 @@ export default function BookingConfirmation() {
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: COLORS.background.primary,
-    },
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+  },
 
-    // Header Styles
-    headerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: COLORS.background.primary,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border.light,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-    },
-    headerButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.background.secondary,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        textAlign: 'center',
-    },
+  // Header Styles
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border.light,
+    elevation: 2,
+    shadowColor: COLORS.shadow.medium,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background.secondary,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+    textAlign: 'center',
+  },
 
-    // Scroll View Styles
-    scrollView: {
-        flex: 1,
-    },
-    scrollContainer: {
-        paddingBottom: 20,
-    },
+  // Scroll View Styles
+  scrollView: {
+    flex: 1,
+  },
+  scrollContainer: {
+    paddingBottom: 24,
+  },
 
-    // Loading Styles
-    loadingContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 20,
-    },
-    loadingText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-    },
+  // Loading Styles
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text.secondary,
+    textAlign: 'center',
+  },
 
-    // Map Styles
-    mapContainer: {
-        height: height * 0.35,
-        margin: 16,
-        borderRadius: 16,
-        overflow: 'hidden',
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-    },
-    map: {
-        flex: 1,
-    },
-    mapPlaceholder: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.background.tertiary,
-    },
-    mapPlaceholderText: {
-        marginTop: 8,
-        fontSize: 14,
-        color: COLORS.text.tertiary,
-    },
-    customMarker: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+  // Map Styles
+  mapContainer: {
+    height: height * 0.4,
+    margin: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: COLORS.shadow.dark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+  },
+  map: {
+    flex: 1,
+  },
+  mapPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background.tertiary,
+  },
+  mapPlaceholderText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text.tertiary,
+  },
+  customMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
-    // Location Card Styles
-    locationCard: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: COLORS.background.primary,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-    },
-    locationIconContainer: {
-        marginRight: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 24,
-    },
-    locationDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-    },
-    routeLine: {
-        width: 2,
-        height: 32,
-        backgroundColor: COLORS.border.medium,
-        marginLeft: 11,
-        marginVertical: 8,
-    },
-    locationTextContainer: {
-        flex: 1,
-    },
-    locationLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: COLORS.text.tertiary,
-        marginBottom: 4,
-        letterSpacing: 0.5,
-    },
-    locationText: {
-        fontSize: 15,
-        color: COLORS.text.primary,
-        lineHeight: 20,
-    },
+  // Location Card Styles
+  locationCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 20,
+    padding: 24,
+    elevation: 4,
+    shadowColor: COLORS.shadow.medium,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  locationIconContainer: {
+    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 24,
+  },
+  locationDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  routeLine: {
+    width: 2,
+    height: 32,
+    backgroundColor: COLORS.border.medium,
+    marginLeft: 11,
+    marginVertical: 12,
+  },
+  locationTextContainer: {
+    flex: 1,
+  },
+  locationLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text.tertiary,
+    marginBottom: 6,
+    letterSpacing: 1,
+  },
+  locationText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+    lineHeight: 22,
+  },
 
-    // Card Styles
-    card: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: COLORS.background.primary,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-    },
-    durationBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.primaryLight,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    durationText: {
-        marginLeft: 4,
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.primary,
-    },
+  // Card Styles
+  card: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 20,
+    padding: 24,
+    elevation: 4,
+    shadowColor: COLORS.shadow.medium,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  durationText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
 
-    // Vehicle Info Styles
-    vehicleInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        backgroundColor: COLORS.background.secondary,
-        borderRadius: 12,
-    },
-    vehicleText: {
-        marginLeft: 12,
-        fontSize: 16,
-        fontWeight: '500',
-        color: COLORS.text.primary,
-    },
+  // Vehicle Info Styles
+  vehicleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: 16,
+  },
+  vehicleText: {
+    marginLeft: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
 
-    // Fare Section Styles
-    fareSection: {
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border.light,
-        paddingTop: 16,
-    },
-    fareSectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        marginBottom: 12,
-    },
-    fareRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 8,
-    },
-    fareLabel: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-    },
-    fareValue: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.text.primary,
-    },
-    totalFareRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-        marginTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border.light,
-    },
-    totalFareLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-    },
-    totalFareValue: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: COLORS.primary,
-    },
-    disclaimer: {
-        fontSize: 12,
-        color: COLORS.text.tertiary,
-        textAlign: 'center',
-        marginTop: 12,
-        fontStyle: 'italic',
-        lineHeight: 16,
-    },
+  // Fare Section Styles
+  fareSection: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+    paddingTop: 20,
+  },
+  fareSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+    marginBottom: 16,
+  },
+  fareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  fareLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.text.secondary,
+  },
+  fareValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
+  totalFareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+  },
+  totalFareLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+  },
+  totalFareValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  disclaimer: {
+    fontSize: 13,
+    color: COLORS.text.tertiary,
+    textAlign: 'center',
+    marginTop: 16,
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
 
-    // Progress Card Styles
-    progressCard: {
-        marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: COLORS.background.primary,
-        borderRadius: 16,
-        padding: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        borderWidth: 2,
-        borderColor: COLORS.primaryLight,
-    },
-    progressHeader: {
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    progressTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        marginTop: 12,
-        marginBottom: 8,
-    },
-    progressMessage: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-    },
+  // Progress Card Styles
+  progressCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 20,
+    padding: 24,
+    elevation: 4,
+    shadowColor: COLORS.shadow.medium,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.primaryLight,
+  },
+  progressHeader: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  progressTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text.primary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  progressMessage: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.text.secondary,
+    textAlign: 'center',
+  },
 
-    // Status Indicator Styles
-    statusIndicator: {
-        marginBottom: 20,
-    },
-    statusRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    statusDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: COLORS.border.medium,
-        marginRight: 12,
-    },
-    statusDotActive: {
-        backgroundColor: COLORS.primary,
-    },
-    statusText: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-    },
-    statusConnector: {
-        width: 2,
-        height: 20,
-        backgroundColor: COLORS.border.light,
-        marginLeft: 5,
-        marginVertical: 4,
-    },
+  // Status Indicator Styles
+  statusIndicator: {
+    marginBottom: 24,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: COLORS.border.medium,
+    marginRight: 16,
+  },
+  statusDotActive: {
+    backgroundColor: COLORS.primary,
+  },
+  statusText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.text.secondary,
+  },
+  statusConnector: {
+    width: 2,
+    height: 24,
+    backgroundColor: COLORS.border.light,
+    marginLeft: 6,
+    marginVertical: 8,
+  },
 
-    // OTP Section Styles
-    otpSection: {
-        backgroundColor: COLORS.successLight,
-        borderRadius: 12,
-        padding: 16,
-        alignItems: 'center',
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: COLORS.success,
-    },
-    otpLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.success,
-        marginBottom: 4,
-    },
-    otpValue: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: COLORS.success,
-        letterSpacing: 2,
-    },
+  // OTP Section Styles
+  otpSection: {
+    backgroundColor: COLORS.successLight,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  otpLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.success,
+    marginBottom: 8,
+  },
+  otpValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: COLORS.success,
+    letterSpacing: 4,
+  },
 
-    // Cancel Button Styles
-    cancelButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.danger,
-        backgroundColor: COLORS.dangerLight,
-    },
-    cancelButtonText: {
-        marginLeft: 8,
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.danger,
-    },
+  // Cancel Button Styles
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    backgroundColor: COLORS.dangerLight,
+  },
+  cancelButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.danger,
+  },
 
-    // Footer Styles
-    footer: {
-        backgroundColor: COLORS.background.primary,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border.light,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
+  // Footer Styles
+  footer: {
+    backgroundColor: COLORS.background.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+    elevation: 12,
+    shadowColor: COLORS.shadow.dark,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+  },
 
-    // Payment Selector Styles
-    paymentSelector: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.background.secondary,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: COLORS.border.light,
-    },
-    paymentText: {
-        flex: 1,
-        marginLeft: 12,
-        fontSize: 16,
-        fontWeight: '500',
-        color: COLORS.text.primary,
-    },
+  // Payment Selector Styles
+  paymentSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.secondary,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border.light,
+  },
+  paymentText: {
+    flex: 1,
+    marginLeft: 16,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
 
-    // Book Button Styles
-    bookButton: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 4,
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        minHeight: 56,
-    },
-    bookButtonDisabled: {
-        backgroundColor: COLORS.border.medium,
-        elevation: 0,
-        shadowOpacity: 0,
-    },
-    bookButtonText: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.text.inverse,
-        marginBottom: 2,
-    },
-    bookButtonSubtext: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.text.inverse,
-        opacity: 0.9,
-    },
+  // Book Button Styles
+  bookButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 20,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    minHeight: 64,
+  },
+  bookButtonDisabled: {
+    backgroundColor: COLORS.border.medium,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  bookButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text.inverse,
+    marginBottom: 4,
+  },
+  bookButtonSubtext: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.inverse,
+    opacity: 0.9,
+  },
 });

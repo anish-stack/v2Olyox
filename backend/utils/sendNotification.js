@@ -98,9 +98,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     
       notification: {
         title: title || defaultTitle,
-        body: body || defaultBody
-
-      },
+        body: body || defaultBody      },
       data: {
         // Ensure all data values are strings
         event: eventData.event || "DEFAULT_EVENT",
@@ -142,7 +140,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     if (error instanceof NotificationError) {
       return null;
     }
-   return 
+    return
   }
 };
 

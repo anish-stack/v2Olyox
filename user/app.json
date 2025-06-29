@@ -35,15 +35,31 @@
           "whatsapp",
           "tel",
           "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
+          "whatsapp",
+          "tel",
+          "mailto",
           "whatsapp"
         ],
         "ITSAppUsesNonExemptEncryption": false,
         "GMSApiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
       },
       "googleServicesFile": "./GoogleService-Info.plist",
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+      "runtimeVersion": "1.0.3"
     },
     "android": {
       "adaptiveIcon": {
@@ -56,9 +72,18 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
       ],
-      "versionCode": 22,
+      "versionCode": 30,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -69,14 +94,16 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "package": "com.happy_coding.olyox",
       "googleServicesFile": "./google-services.json",
       "runtimeVersion": "1.0.3"
     },
-
     "web": {
       "favicon": "./assets/appicon.png",
       "build": {

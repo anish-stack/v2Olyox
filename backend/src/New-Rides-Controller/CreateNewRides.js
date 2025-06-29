@@ -53,47 +53,6 @@ const scheduleRideCancellationCheck = async (redisClient, rideId) => {
 };
 
 
-exports.JobscheduleRideCancellationCheck = async (redisClient, rideId) => {
-    const CANCELLATION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-    setTimeout(async () => {
-        try {
-            const ride = await RideBooking.findById(rideId).populate('user');
-            if (!ride) {
-                console.error(`Ride ${rideId} not found for cancellation check`);
-                return;
-            }
-            if (ride.ride_status === 'pending' || ride.ride_status === 'searching') {
-                console.info(`No driver assigned for ride ${rideId} within 2 minutes, cancelling`);
-                const updatedRide = await updateRideStatus(redisClient, rideId, 'cancelled', {
-                    cancellation_reason: 'No driver found within time limit',
-                    cancelled_at: new Date(),
-                    cancelledBy: 'system'
-                });
-                // Notify user of cancellation
-                if (updatedRide.user && updatedRide.user.fcmToken) {
-                    await sendNotification.sendNotification(
-                        updatedRide.user.fcmToken,
-                        "Ride Cancelled",
-                        "No drivers were available for your ride request.",
-                        {
-                            event: 'RIDE_CANCELLED',
-                            rideId: rideId,
-                            message: 'No drivers were available for your ride request.',
-                            screen: 'RideHistory',
-                        }
-                    );
-                }
-                // Remove ride from Redis
-                if (redisClient) {
-                    await redisClient.del(`ride:${rideId}`);
-                    await redisClient.del(`riders:${rideId}`);
-                }
-            }
-        } catch (error) {
-            console.error(`Error during cancellation check for ride ${rideId}:`, error.message);
-        }
-    }, CANCELLATION_TIMEOUT_MS);
-};
 
 exports.NewcreateRequest = async (req, res) => {
     try {
@@ -429,8 +388,6 @@ exports.NewcreateRequest = async (req, res) => {
     }
 };
 
-
-
 const getRouteFromAPI = async (pickup, drop) => {
     try {
         const apiKey = process.env.GOOGLE_MAPS_API_KEY;
@@ -610,7 +567,7 @@ const updateRideStatus = async (redisClient, rideId, status, additionalData = {}
             rideId,
             { $set: updateData },
             { new: true }
-        );
+        ).populate('user');
 
         if (status === 'cancelled' && updatedRide.user) {
             updatedRide.user.currentRide = null;
@@ -1236,7 +1193,7 @@ exports.ride_status_after_booking = async (req, res) => {
 
 exports.riderFetchPoolingForNewRides = async (req, res) => {
     try {
-        const { id:riderId } = req.params;
+        const { id: riderId } = req.params;
         console.log("=== STARTING RIDE FETCH FOR RIDER ===");
         console.log("Rider ID:", riderId);
 
@@ -2372,10 +2329,10 @@ exports.AdminChangeCurrentRiderRideStatus = async (req, res) => {
                     user.currentRide = null;
                     await user.save();
                 }
-                if(driver){
+                if (driver) {
                     driver.on_ride_id = null;
                     driver.isAvailable = true;
-                    
+
                     await driver.save();
                 }
                 break;
@@ -2818,45 +2775,45 @@ exports.RateYourRider = async (req, res) => {
 
 
 cron.schedule('*/10 * * * * *', async () => {
-  try {
-    console.log('🕒 Running scheduled ride cleanup job...');
+    try {
+        console.log('🕒 Running scheduled ride cleanup job...');
 
-    const currentTime = new Date();
-    const oneMinuteAgo = new Date(currentTime.getTime() - 1 * 60 * 1000);
+        const currentTime = new Date();
+        const oneMinuteAgo = new Date(currentTime.getTime() - 1 * 60 * 1000);
 
-    // Find rides still pending or searching and older than 1 minute
-    const allRides = await RideBooking.find({
-      ride_status: { $in: ['pending', 'searching'] },
-      requested_at: { $lte: oneMinuteAgo },  // ✅ Fixed field name
-    }).populate('user').populate('driver');
+        // Find rides still pending or searching and older than 1 minute
+        const allRides = await RideBooking.find({
+            ride_status: { $in: ['pending', 'searching'] },
+            requested_at: { $lte: oneMinuteAgo },  // ✅ Fixed field name
+        }).populate('user').populate('driver');
 
-    if (allRides.length === 0) {
-      console.log('✅ No rides to cancel. All clean.');
-      return;
+        if (allRides.length === 0) {
+            console.log('✅ No rides to cancel. All clean.');
+            return;
+        }
+
+        console.log(`🔍 Found ${allRides.length} outdated rides. Cleaning up...`);
+
+        for (const ride of allRides) {
+            console.log(`⛔ Cancelling ride ${ride._id} requested at ${ride.requested_at}`);
+
+            ride.ride_status = 'cancelled';
+            ride.cancelled_at = new Date();
+            ride.cancellation_reason = 'Auto-cancelled due to inactivity';
+            ride.cancelled_by = 'system';
+
+            if (ride.user) {
+                ride.user.currentRide = null;
+                await ride.user.save();
+                console.log(`👤 Cleared currentRide for user ${ride.user._id}`);
+            }
+
+            await ride.save();
+            console.log(`✅ Ride ${ride._id} cancelled successfully`);
+        }
+
+        console.log('🎯 Ride cleanup job completed.');
+    } catch (error) {
+        console.error('❌ Error in ride cleanup cron job:', error.message);
     }
-
-    console.log(`🔍 Found ${allRides.length} outdated rides. Cleaning up...`);
-
-    for (const ride of allRides) {
-      console.log(`⛔ Cancelling ride ${ride._id} requested at ${ride.requested_at}`);
-
-      ride.ride_status = 'cancelled';
-      ride.cancelled_at = new Date();
-      ride.cancellation_reason = 'Auto-cancelled due to inactivity';
-      ride.cancelled_by = 'system';
-
-      if (ride.user) {
-        ride.user.currentRide = null;
-        await ride.user.save();
-        console.log(`👤 Cleared currentRide for user ${ride.user._id}`);
-      }
-
-      await ride.save();
-      console.log(`✅ Ride ${ride._id} cancelled successfully`);
-    }
-
-    console.log('🎯 Ride cleanup job completed.');
-  } catch (error) {
-    console.error('❌ Error in ride cleanup cron job:', error.message);
-  }
 });
