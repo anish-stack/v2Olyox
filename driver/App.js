@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, StatusBar } from 'react-native';
 import { AppRegistry } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
@@ -58,7 +58,7 @@ import useNotificationPermission from './hooks/notification';
 
 const Stack = createNativeStackNavigator();
 
-// Sentry Configuration - Move outside component to prevent re-initialization
+// Sentry Configuration
 Sentry.init({
   dsn: 'https://cb37ba59c700e925974e3b36d10e8e5b@o4508691997261824.ingest.us.sentry.io/4508692015022080',
   environment: 'production',
@@ -71,7 +71,7 @@ Sentry.init({
 const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1';
 const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
 
-// Configure Expo Notifications - Move outside component
+// Configure Expo Notifications
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -80,72 +80,64 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Background Message Handler - Move outside component and add guard
-let backgroundHandlerInitialized = false;
-if (!backgroundHandlerInitialized) {
-  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-    console.log('📩 Background message received:', remoteMessage);
-    const messageId = remoteMessage.messageId || `local-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+// Background Message Handler
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+  console.log('📩 Background message received:', remoteMessage);
+  const messageId = remoteMessage.messageId || `local-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
-    if (!messageId) return;
+
+  if (!messageId) return;
+  
+  try {
+    // Prevent duplicate processing
+    const processedMessages = await AsyncStorage.getItem(PROCESSED_MESSAGES_KEY);
+    const processed = processedMessages ? JSON.parse(processedMessages) : [];
     
-    try {
-      // Prevent duplicate processing
-      const processedMessages = await AsyncStorage.getItem(PROCESSED_MESSAGES_KEY);
-      const processed = processedMessages ? JSON.parse(processedMessages) : [];
-      
-      if (processed.includes(messageId)) {
-        console.log('📩 Message already processed, skipping:', messageId);
-        return;
-      }
-      
-      // Add to processed list (keep only last 50)
-      processed.push(messageId);
-      if (processed.length > 50) {
-        processed.splice(0, processed.length - 50);
-      }
-      await AsyncStorage.setItem(PROCESSED_MESSAGES_KEY, JSON.stringify(processed));
-      
-      // Store the notification data for when app opens
-      await AsyncStorage.setItem('@app:pendingNotification', JSON.stringify({
-        data: remoteMessage.data,
-        timestamp: Date.now(),
-        messageId: messageId
-      }));
-      
-      // Show notification with proper category for actions
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: remoteMessage.notification?.title || 'New Message',
-          body: remoteMessage.notification?.body || 'You have a new notification',
-          data: {
-            ...remoteMessage.data,
-            fromBackground: true,
-            messageId: messageId
-          },
-          sound: true,
-          categoryIdentifier: 'RIDE_REQUEST',
-        },
-        trigger: null,
-      });
-      
-      console.log('✅ Background notification scheduled with data:', remoteMessage.data);
-      
-    } catch (error) {
-      console.error('❌ Background handler error:', error);
+    if (processed.includes(messageId)) {
+      console.log('📩 Message already processed, skipping:', messageId);
+      return;
     }
-  });
-  backgroundHandlerInitialized = true;
-}
+    
+    // Add to processed list (keep only last 50)
+    processed.push(messageId);
+    if (processed.length > 50) {
+      processed.splice(0, processed.length - 50);
+    }
+    await AsyncStorage.setItem(PROCESSED_MESSAGES_KEY, JSON.stringify(processed));
+    
+    // Store the notification data for when app opens
+    await AsyncStorage.setItem('@app:pendingNotification', JSON.stringify({
+      data: remoteMessage.data,
+      timestamp: Date.now(),
+      messageId: messageId
+    }));
+    
+    // Show notification with proper category for actions
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: remoteMessage.notification?.title || 'New Message',
+        body: remoteMessage.notification?.body || 'You have a new notification',
+        data: {
+          ...remoteMessage.data,
+          fromBackground: true,
+          messageId: messageId
+        },
+        sound: true,
+        categoryIdentifier: 'RIDE_REQUEST',
+      },
+      trigger: null,
+    });
+    
+    console.log('✅ Background notification scheduled with data:', remoteMessage.data);
+    
+  } catch (error) {
+    console.error('❌ Background handler error:', error);
+  }
+});
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [initialRoute, setInitialRoute] = useState('Onboarding');
-  const [isInitialized, setIsInitialized] = useState(false);
-  
-  // Use refs to track initialization state
-  const initializationRef = useRef(false);
-  const appStateRef = useRef(AppState.currentState);
   
   const navigationRef = useNavigationContainerRef();
   const { 
@@ -156,21 +148,9 @@ const App = () => {
     showNotification 
   } = useNotificationPermission(navigationRef);
 
-  // Memoize API base URL to prevent recreating axios calls
-  const apiConfig = useMemo(() => ({
-    baseURL: API_BASE_URL,
-    timeout: 10000,
-  }), []);
-
-  // Check authentication and user status - Add initialization guard
+  // Check authentication and user status
   const checkAuthToken = useCallback(async () => {
-    if (initializationRef.current) {
-      console.log('🔒 Auth check already in progress, skipping...');
-      return;
-    }
-    
     try {
-      initializationRef.current = true;
       const token = await SecureStore.getItemAsync('auth_token_cab');
       if (!token) {
         setInitialRoute('Onboarding');
@@ -179,7 +159,6 @@ const App = () => {
 
       const response = await axios.get(`${API_BASE_URL}/rider/user-details`, {
         headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
       });
 
       const { partner } = response.data;
@@ -196,11 +175,10 @@ const App = () => {
       setInitialRoute('Onboarding');
     } finally {
       setIsLoading(false);
-      initializationRef.current = false;
     }
   }, []);
 
-  // Get Expo Push Token - Add guard to prevent multiple calls
+  // Get Expo Push Token
   const getExpoPushToken = useCallback(async () => {
     try {
       const { data } = await Notifications.getExpoPushTokenAsync();
@@ -211,7 +189,7 @@ const App = () => {
     }
   }, []);
 
-  // Handle notification navigation - Memoize to prevent recreation
+  // Handle notification navigation
   const handleNotificationNavigation = useCallback((data) => {
     if (!navigationRef?.current || !data) return;
     
@@ -236,6 +214,7 @@ const App = () => {
         });
       } else {
         console.log('🏠 Navigating to Home screen');
+        // Default navigation
         navigationRef.current.navigate("Home", {
           fromNotification: true,
           timestamp: Date.now(),
@@ -244,6 +223,7 @@ const App = () => {
       }
     } catch (error) {
       console.error('❌ Navigation error:', error);
+      // Fallback navigation
       try {
         navigationRef.current.navigate("Home");
       } catch (fallbackError) {
@@ -252,24 +232,16 @@ const App = () => {
     }
   }, [navigationRef]);
 
-  // Handle app state changes - Add debouncing and state tracking
+  // Handle app state changes
   const handleAppStateChange = useCallback((nextAppState) => {
-    const previousAppState = appStateRef.current;
-    appStateRef.current = nextAppState;
+    console.log(`AppState changed to: ${nextAppState}`);
     
-    // Only log if state actually changed
-    if (previousAppState !== nextAppState) {
-      console.log(`AppState changed from ${previousAppState} to ${nextAppState}`);
-      
-      if (nextAppState === 'active' && previousAppState === 'background') {
-        console.log('App returned to foreground');
-        // Only request permissions if not already initialized
-        if (isInitialized) {
-          requestPermission();
-        }
-      }
+    if (nextAppState === 'active') {
+      console.log('App returned to foreground');
+      // Request permissions if not already granted
+      requestPermission();
     }
-  }, [requestPermission, isInitialized]);
+  }, [requestPermission]);
 
   // Check for pending notifications when app starts
   const checkPendingNotifications = useCallback(async () => {
@@ -292,56 +264,43 @@ const App = () => {
     }
   }, [handleNotificationNavigation]);
 
-  // Initialize app - Add proper initialization guard
+  // Initialize app
   useEffect(() => {
-    if (isInitialized) return;
-    
     const initializeApp = async () => {
       try {
-        console.log('🚀 Starting app initialization...');
         await checkAuthToken();
         await getExpoPushToken();
         await requestPermission();
         await checkPendingNotifications();
-        setIsInitialized(true);
-        console.log('✅ App initialization complete');
       } catch (error) {
         console.error('❌ App initialization error:', error);
-        setIsLoading(false);
       }
     };
 
     initializeApp();
-  }, [isInitialized, checkAuthToken, getExpoPushToken, requestPermission, checkPendingNotifications]);
+  }, [checkAuthToken, getExpoPushToken, requestPermission, checkPendingNotifications]);
 
-  // Handle FCM message navigation - Add dependency check
+  // Handle FCM message navigation
   useEffect(() => {
-    if (isInitialized && lastFcmMessage?.data) {
+    if (lastFcmMessage?.data) {
       console.log('Handling FCM message navigation:', lastFcmMessage.data);
       handleNotificationNavigation(lastFcmMessage.data);
     }
-  }, [lastFcmMessage, handleNotificationNavigation, isInitialized]);
+  }, [lastFcmMessage, handleNotificationNavigation]);
 
-  // Handle Expo notification navigation - Add dependency check
+  // Handle Expo notification navigation
   useEffect(() => {
-    if (isInitialized && lastNotification?.request?.content?.data) {
+    if (lastNotification?.request?.content?.data) {
       console.log('Handling Expo notification navigation:', lastNotification.request.content.data);
       handleNotificationNavigation(lastNotification.request.content.data);
     }
-  }, [lastNotification, handleNotificationNavigation, isInitialized]);
+  }, [lastNotification, handleNotificationNavigation]);
 
-  // App state listener - Add proper cleanup
+  // App state listener
   useEffect(() => {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      subscription?.remove();
-    };
+    return () => subscription.remove();
   }, [handleAppStateChange]);
-
-  // Memoize screen options to prevent recreation
-  const screenOptions = useMemo(() => ({ 
-    headerShown: false 
-  }), []);
 
   // Show loading screen
   if (isLoading) {
@@ -360,7 +319,7 @@ const App = () => {
                     <StatusBar barStyle="dark-content" />
                     <Stack.Navigator 
                       initialRouteName={initialRoute} 
-                      screenOptions={screenOptions}
+                      screenOptions={{ headerShown: false }}
                     >
                       <Stack.Screen 
                         name="Onboarding" 
@@ -487,17 +446,17 @@ const App = () => {
   );
 };
 
-// Wrap with Sentry - Memoize to prevent recreation
-const WrappedApp = React.memo(Sentry.wrap(App));
+// Wrap with Sentry
+const WrappedApp = Sentry.wrap(App);
 
-// Root App Component - Memoize to prevent recreation
-const RootApp = React.memo(() => (
+// Root App Component
+const RootApp = () => (
   <ErrorBoundaryWrapper>
     <CheckAppUpdate>
       <WrappedApp />
     </CheckAppUpdate>
   </ErrorBoundaryWrapper>
-));
+);
 
 // Register the app
 AppRegistry.registerComponent(appName, () => RootApp);

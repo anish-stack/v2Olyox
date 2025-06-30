@@ -94,17 +94,16 @@ const sendNotification = async (token, title, body, eventData = {}) => {
 
     const message = {
       token: token,
-    
       notification: {
         title: title || "New Ride Request",
         body: body || "₹119.18 - Sector 99A to Sector 29",
       },
-
+      
       android: {
-        priority: "high",
+        priority: "high", // ✅ Important for heads-up
         notification: {
-          channelId: "ride-requests",
-          clickAction: "ACCEPT_RIDE_ACTION",
+          channelId: "default", // Should match the one created in the app
+          clickAction: "ACCEPT_RIDE_ACTION", // ✅ Handle in app
           imageUrl: 'https://olyox.in/wp-content/uploads/2025/04/cropped-cropped-logo-CWkwXYQ_-removebg-preview.png', // Optional: ride map/image
           clickAction: "ACCEPT_RIDE_ACTION",
         },

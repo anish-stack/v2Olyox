@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>JSON Transformer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      h2 {
+        color: #333;
+        margin-bottom: 20px;
+      }
+      input[type="file"] {
+        margin: 10px 0;
+        padding: 10px;
+        border: 2px dashed #ddd;
+        border-radius: 5px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 10px 5px;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .status {
+        margin: 15px 0;
+        padding: 10px;
+        border-radius: 5px;
+        display: none;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      pre {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        max-height: 200px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>JSON Transformer</h2>
+      <p>Upload a JSON file to transform user data into the required format.</p>
+      
+      <input type="file" id="jsonFile" accept=".json,.txt" />
+      
+      <div class="status" id="statusMsg"></div>
+      
+      <button id="downloadBtn" onclick="downloadTransformed()" disabled>
+        Download Transformed JSON
+      </button>
+      
+      <button onclick="previewData()" id="previewBtn" disabled>
+        Preview Data
+      </button>
+      
+      <div id="preview" style="display: none;">
+        <h3>Preview (First 2 records):</h3>
+        <pre id="previewContent"></pre>
+      </div>
+    </div>
+
+    <script>
+      let transformedData = [];
+
+      function showStatus(message, type = 'info') {
+        const statusElement = document.getElementById('statusMsg');
+        statusElement.textContent = message;
+        statusElement.className = `status ${type}`;
+        statusElement.style.display = 'block';
+        
+        if (type === 'error') {
+          console.error(message);
+        }
+      }
+
+      function enableButtons() {
+        document.getElementById('downloadBtn').disabled = false;
+        document.getElementById('previewBtn').disabled = false;
+      }
+
+      function disableButtons() {
+        document.getElementById('downloadBtn').disabled = true;
+        document.getElementById('previewBtn').disabled = true;
+      }
+
+      document.getElementById("jsonFile").addEventListener("change", function (e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = function (event) {
+          try {
+            let content = event.target.result;
+            
+            // Try to clean up common JSON issues
+            content = content.trim();
+            
+            // Remove any BOM characters
+            if (content.charCodeAt(0) === 0xFEFF) {
+              content = content.slice(1);
+            }
+            
+            // Try to parse the JSON
+            let inputData;
+            try {
+              inputData = JSON.parse(content);
+            } catch (parseError) {
+              console.log("Initial parse failed, attempting to fix MongoDB/NDJSON format...");
+              
+              // Check if this is NDJSON (newline-delimited JSON) or MongoDB export format
+              const lines = content.split('\n').filter(line => line.trim());
+              
+              if (lines.length > 1) {
+                // This looks like NDJSON or multiple JSON objects
+                console.log(`Found ${lines.length} JSON objects, converting to array...`);
+                
+                const jsonObjects = [];
+                for (let i = 0; i < lines.length; i++) {
+                  const line = lines[i].trim();
+                  if (line) {
+                    try {
+                      const obj = JSON.parse(line);
+                      jsonObjects.push(obj);
+                    } catch (lineError) {
+                      console.warn(`Skipping malformed line ${i + 1}:`, line.substring(0, 100));
+                    }
+                  }
+                }
+                
+                if (jsonObjects.length === 0) {
+                  throw new Error("No valid JSON objects found in the file");
+                }
+                
+                inputData = jsonObjects;
+              } else {
+                // Single object, try to fix common JSON issues
+                content = content.replace(/,(\s*[}\]])/g, '$1');
+                
+                // Try parsing again
+                inputData = JSON.parse(content);
+              }
+            }
+
+            // Ensure inputData is an array
+            if (!Array.isArray(inputData)) {
+              throw new Error("JSON must contain an array of objects");
+            }
+
+            if (inputData.length === 0) {
+              throw new Error("JSON array is empty");
+            }
+
+            // Transform the data
+            transformedData = inputData.map((entry, index) => {
+              try {
+                // Handle MongoDB ObjectId format
+                const getId = (field) => {
+                  if (typeof field === 'object' && field !== null) {
+                    return field.$oid || field.toString();
+                  }
+                  return field || "";
+                };
+
+            
+                
+                return {
+                  BhId: entry?.bhId,
+                  isActive: entry?.isEmailVerified,
+              
+                };
+              } catch (itemError) {
+                console.error(`Error processing item ${index}:`, itemError);
+                throw new Error(`Error processing item ${index}: ${itemError.message}`);
+              }
+            });
+
+            showStatus(`File processed successfully! Transformed ${transformedData.length} records.`, 'success');
+            enableButtons();
+
+          } catch (err) {
+            showStatus(`Error processing file: ${err.message}`, 'error');
+            disableButtons();
+            transformedData = [];
+            
+            // Additional debugging info
+            console.error("Full error:", err);
+            console.log("File content preview:", event.target.result.substring(0, 200) + "...");
+          }
+        };
+
+        reader.onerror = function() {
+          showStatus("Error reading file", 'error');
+          disableButtons();
+        };
+
+        reader.readAsText(file);
+      });
+
+      function downloadTransformed() {
+        if (transformedData.length === 0) {
+          showStatus("No data to download", 'error');
+          return;
+        }
+
+        try {
+          const blob = new Blob([JSON.stringify(transformedData, null, 2)], {
+            type: "application/json",
+          });
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = "transformed_users.json";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(link.href);
+          
+          showStatus("Download started successfully!", 'success');
+        } catch (err) {
+          showStatus(`Download error: ${err.message}`, 'error');
+        }
+      }
+
+      function previewData() {
+        if (transformedData.length === 0) {
+          showStatus("No data to preview", 'error');
+          return;
+        }
+
+        const preview = transformedData.slice(0, 2);
+        document.getElementById('previewContent').textContent = JSON.stringify(preview, null, 2);
+        document.getElementById('preview').style.display = 'block';
+      }
+    </script>
+  </body>
+</html>

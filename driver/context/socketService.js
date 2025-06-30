@@ -3,7 +3,7 @@ import io from "socket.io-client";
 import axios from "axios";
 import * as SecureStore from 'expo-secure-store';
 
-const SOCKET_URL = "http://192.168.1.17:3100";
+const SOCKET_URL = "https://www.appv2.olyox.com";
 let socket = null;
 let pingIntervalRef = null;
 let networkStateRef = null;
