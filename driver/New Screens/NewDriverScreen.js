@@ -77,6 +77,8 @@ export default function NewHomeScreen() {
   const [notificationSetupDone, setNotificationSetupDone] = useState(false);
   const [showNotificationSetup, setShowNotificationSetup] = useState(false);
   const { fcmToken: currentToken } = useNotificationPermission()
+    const { fetchUserDetails: reCallMe } = useFetchUserDetails();
+  
   useKeepAwake();
 
   // Check if notification setup is done
@@ -332,18 +334,45 @@ export default function NewHomeScreen() {
   }, [isTracking, currentLocation]);
 
   // Pull-to-refresh handler
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await stopLocationTracking();
-      await Updates.reloadAsync();
-    } catch (e) {
-      console.error('Reload failed:', e);
-      if (locationStarted) await startLocationTracking();
-    } finally {
-      setRefreshing(false);
+const onRefresh = useCallback(async () => {
+  setRefreshing(true);
+  try {
+    console.log('Starting complete app restart...');
+    
+    // Stop all services
+    await stopLocationTracking();
+    if (BackgroundService.isRunning()) {
+      await BackgroundService.stop();
     }
-  }, [locationStarted]);
+    
+    // Reset states
+    setLocationStarted(false);
+    setFcmToken(null);
+    setNotificationSetupDone(false);
+    setShowNotificationSetup(false);
+    
+    // Wait for cleanup
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Reinitialize everything
+    await checkNotificationSetup();
+    await setupFCMToken();
+    await startLocationTracking();
+    setLocationStarted(true);
+    
+    console.log('✅ Complete restart successful');
+    
+  } catch (e) {
+    console.error('❌ Restart failed:', e);
+    Alert.alert(
+      'Restart Failed',
+      'Could not restart completely. Please try again or restart the app manually.',
+      [{ text: 'OK' }]
+    );
+  } finally {
+    setRefreshing(false);
+  }
+}, [stopLocationTracking, startLocationTracking, checkNotificationSetup, setupFCMToken]);
 
   // Render notification setup section
   const renderNotificationSetup = () => {

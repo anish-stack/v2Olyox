@@ -27,7 +27,7 @@ android {
         applicationId 'com.happy_coding.olyox'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 37
+        versionCode 38
         versionName "1.0.5"
     }
 

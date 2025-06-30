@@ -197,22 +197,21 @@ export default function useLocationTracking() {
   // Function to send location to server (for foreground) with distance filtering
   const sendLocationToServer = async (coords) => {
     try {
-      // Check if we should send this location
-      const shouldSend = await shouldSendLocation(coords);
-      
-      if (!shouldSend) {
-        console.log("⏭️ Skipping foreground location - within threshold");
-        return;
-      }
-
+  
+  const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        maximumAge: 10000,
+      });
+      console.log("📍 Current location fetched:", location.coords);
+   
       const token = await SecureStore.getItemAsync("auth_token_cab");
       
-      if (token && coords) {
+      if (token && location?.coords) {
         const response = await axios.post(
           "https://www.appv2.olyox.com/webhook/cab-receive-location",
           {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
+            latitude: location?.coords.latitude,
+            longitude: location?.coords.longitude,
             timestamp: Date.now(),
           },
           {
@@ -223,8 +222,8 @@ export default function useLocationTracking() {
         console.log("📍 Foreground location sent successfully:", response.status);
         
         // Save location after successful send
-        await saveLocationToStorage(coords);
-        setLastSentLocation(coords);
+        await saveLocationToStorage(location?.coords);
+        setLastSentLocation(location?.coords);
       }
     } catch (error) {
       console.error("❌ Error sending foreground location:", error.message);
@@ -549,6 +548,14 @@ export default function useLocationTracking() {
   useEffect(() => {
     loadLastSentLocation();
   }, []);
+
+  useEffect(() => {
+  const intervalId = setInterval(() => {
+    startLocationTracking();
+  }, 5000); // runs every 5 seconds
+
+  return () => clearInterval(intervalId); // cleanup on unmount
+}, []);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -80,7 +80,7 @@ export default function CheckAppUpdate({ children }) {
                         </View>
 
                         {/* Driver-focused messaging */}
-                        <Text style={styles.title}>Remove Background ping Test Ride Shuru Karein!</Text>
+                        <Text style={styles.title}>Update 30-6-2025 !</Text>
 
                         <Text style={styles.subtitle}>
                             Driver App mein naye features available hain
