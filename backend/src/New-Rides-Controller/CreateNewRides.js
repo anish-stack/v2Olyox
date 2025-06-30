@@ -149,12 +149,12 @@ exports.NewcreateRequest = async (req, res) => {
         }
         const ONE_MINUTE_AGO = new Date(Date.now() - 60 * 1000);
         // Check for existing active rides
-        if(findUser.currentRide){
+        if (findUser.currentRide) {
             console.log("You already have an active ride")
-              return res.status(409).json({
-                    error: "You already have an active ride request",
-                    activeRide: findUser.currentRide,
-                });
+            return res.status(409).json({
+                error: "You already have an active ride request",
+                activeRide: findUser.currentRide,
+            });
         }
 
         // Construct geo points using the schema format
@@ -885,8 +885,9 @@ const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
                         };
                         await sendNotification.sendNotification(
                             rider.fcmToken,
-                            '🚖 New Ride Request',
+                            'A new ride is waiting — check your vehicle!',
                             'You have a new ride nearby. Tap to view details.',
+                            payload,
                             payload
                         );
                         return rider._id;
