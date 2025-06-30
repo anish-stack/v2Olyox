@@ -18,7 +18,7 @@ import axios from 'axios';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFetchUserDetails } from '../../hooks/New Hookes/RiderDetailsHooks';
 
-const API_URL = 'http://192.168.1.37:3100/api/v1/rider/rider-uploadPaymentQr';
+const API_URL = 'https://www.appv2.olyox.com/api/v1/rider/rider-uploadPaymentQr';
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
 
 export default function UploadQr() {

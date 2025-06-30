@@ -11,6 +11,7 @@ import {
     Dimensions,
     ScrollView,
     Alert,
+    
 } from "react-native"
 import { Audio } from "expo-av"
 import LottieView from "lottie-react-native"
@@ -19,16 +20,10 @@ import { API_BASE_URL, colors } from "../../NewConstant"
 import { useFetchUserDetails } from "../../../hooks/New Hookes/RiderDetailsHooks"
 import axios from "axios"
 import { useNavigation, useFocusEffect } from "@react-navigation/native"
-import * as Notifications from 'expo-notifications';
+import notifee, { AndroidImportance, AndroidVisibility } from "@notifee/react-native"
 
 const screenHeight = Dimensions.get("window").height
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+
 export default function RideSearching({ refreshing, id }) {
     const { userData, loading, error, fetchUserDetails, isOnline } = useFetchUserDetails()
     const [rides, setRides] = useState([])
@@ -40,7 +35,7 @@ export default function RideSearching({ refreshing, id }) {
     const [modalOpen, setModalOpen] = useState(false)
     const [isProcessingAction, setIsProcessingAction] = useState(false)
     const navigation = useNavigation()
-    // console.log("userData",userData)
+
     // Audio and interval refs
     const notificationSound = useRef(null)
     const intervalRef = useRef(null)
@@ -48,6 +43,87 @@ export default function RideSearching({ refreshing, id }) {
     const soundIntervalRef = useRef(null)
     const isMountedRef = useRef(true)
     const isAudioLoadedRef = useRef(false)
+
+    // Initialize Notifee
+    const initializeNotifications = useCallback(async () => {
+        try {
+            // Request permission
+            await notifee.requestPermission()
+
+            // Create notification channel for Android
+            const channelId = await notifee.createChannel({
+                id: "ride-requests",
+                name: "Ride Requests",
+                importance: AndroidImportance.HIGH,
+                sound: "sound",
+                vibration: true,
+                visibility: AndroidVisibility.PUBLIC,
+            })
+
+            console.log("✅ Notifee initialized with channel:", channelId)
+            return channelId
+        } catch (error) {
+            console.log("❌ Error initializing Notifee:", error)
+            return null
+        }
+    }, [])
+
+    // Display notification using Notifee
+    const displayNotification = useCallback(
+        async (ride) => {
+            try {
+                const channelId = await initializeNotifications()
+
+                await notifee.displayNotification({
+                    title: "🚖 Ride Found!",
+                    body: `You have a new ride request from ${ride?.pickup_address?.formatted_address || "a nearby location"}.`,
+                    android: {
+                        channelId: channelId || "ride-requests",
+                        importance: AndroidImportance.HIGH,
+                        pressAction: {
+                            id: "default",
+                        },
+                        actions: [
+                            {
+                                title: "✅ Accept",
+                                pressAction: {
+                                    id: "accept",
+                                    launchActivity: "default",
+                                },
+                            },
+                            {
+                                title: "❌ Reject",
+                                pressAction: {
+                                    id: "reject",
+                                    launchActivity: "default",
+                                },
+                            },
+                        ],
+                        sound: "default",
+                        vibrationPattern: [300, 500, 300, 500],
+                        lights: [300, 600],
+                        visibility: AndroidVisibility.PUBLIC,
+                        category: "call",
+                        fullScreenAction: {
+                            id: "default",
+                            launchActivity: "default",
+                        },
+                    },
+                    ios: {
+                        sound: "default",
+                        critical: true,
+                        criticalVolume: 1.0,
+                        interruptionLevel: "critical",
+                    },
+                })
+
+                console.log("✅ Notification displayed successfully")
+            } catch (error) {
+                console.log("❌ Error displaying notification:", error)
+            }
+        },
+        [initializeNotifications],
+    )
 
     // Enhanced audio management
     const loadNotificationSound = useCallback(async () => {
@@ -70,7 +146,7 @@ export default function RideSearching({ refreshing, id }) {
 
             const { sound } = await Audio.Sound.createAsync(require("./sound.mp3"), {
                 shouldPlay: false,
-                isLooping: true, // Changed to false for better control
+                isLooping: true,
                 volume: 1.0,
             })
 
@@ -82,13 +158,11 @@ export default function RideSearching({ refreshing, id }) {
             isAudioLoadedRef.current = false
         }
     }, [])
+
     const playNotificationSound = useCallback(async () => {
         try {
             if (notificationSound.current && isAudioLoadedRef.current) {
-                // Get current status
                 const status = await notificationSound.current.getStatusAsync()
-
-                // If already playing, don't restart
                 if (!status.isPlaying) {
                     await notificationSound.current.setPositionAsync(0)
                     await notificationSound.current.playAsync()
@@ -98,6 +172,7 @@ export default function RideSearching({ refreshing, id }) {
             console.log("❌ Error playing notification sound:", error)
         }
     }, [])
+
     const stopNotificationSound = useCallback(async () => {
         try {
             if (notificationSound.current && isAudioLoadedRef.current) {
@@ -111,16 +186,13 @@ export default function RideSearching({ refreshing, id }) {
     }, [])
 
     const startContinuousSound = useCallback(() => {
-        // Only clear the interval, don't stop the currently playing sound
         if (soundIntervalRef.current) {
             clearInterval(soundIntervalRef.current)
             soundIntervalRef.current = null
         }
 
-        // Play initial sound immediately
         playNotificationSound()
 
-        // Set up interval for continuous playing
         soundIntervalRef.current = setInterval(async () => {
             if (modalOpen && !searching && !isProcessingAction) {
                 await playNotificationSound()
@@ -131,13 +203,11 @@ export default function RideSearching({ refreshing, id }) {
     }, [modalOpen, searching, isProcessingAction, playNotificationSound])
 
     const stopContinuousSound = useCallback(async () => {
-        // Clear the interval first
         if (soundIntervalRef.current) {
             clearInterval(soundIntervalRef.current)
             soundIntervalRef.current = null
         }
 
-        // Then stop the actual audio
         await stopNotificationSound()
         console.log("🔇 Stopped continuous sound")
     }, [stopNotificationSound])
@@ -160,6 +230,9 @@ export default function RideSearching({ refreshing, id }) {
         // Stop sound and clear sound interval
         await stopContinuousSound()
 
+        // Cancel all notifications
+        await notifee.cancelAllNotifications()
+
         console.log("✅ Cleanup completed")
     }, [stopContinuousSound])
 
@@ -176,26 +249,21 @@ export default function RideSearching({ refreshing, id }) {
                 if (rideStatus === "driver_assigned" || rideStatus === "cancelled") {
                     console.log(`Ride ${rideId} is ${rideStatus}, closing modal and clearing state`)
 
-                    // Stop all sounds and intervals immediately
                     await cleanupAll()
 
                     if (isMountedRef.current) {
-                        // Clear all states
                         setShowModal(false)
                         setModalOpen(false)
                         setCurrentRide(null)
                         setRides([])
                         setSearching(true)
                         setIsProcessingAction(false)
-
-                        // Restart ride pooling for new rides
                         startRidePolling()
                     }
-
-                    return true // Ride is completed/cancelled
+                    return true
                 }
 
-                return false // Ride is still active
+                return false
             } catch (error) {
                 console.log("❌ Error checking ride status:", error)
                 return false
@@ -218,31 +286,58 @@ export default function RideSearching({ refreshing, id }) {
                     clearInterval(statusIntervalRef.current)
                     statusIntervalRef.current = null
                 }
-            }, 3000) // Check status every 3 seconds
+            }, 3000)
         },
         [checkRideStatus],
     )
 
-    // Load sound on component mount
+    // Handle notification actions
+    useEffect(() => {
+        const handleNotificationAction = async (detail) => {
+            const { type, pressAction } = detail
+
+            if (type === "press" && pressAction?.id) {
+                switch (pressAction.id) {
+                    case "accept":
+                        await handleAccept()
+                        break
+                    case "reject":
+                        await handleReject()
+                        break
+                    case "default":
+                        // Open app - modal should already be visible
+                        break
+                }
+            }
+        }
+
+        const unsubscribe = notifee.onForegroundEvent(handleNotificationAction)
+        const unsubscribeBackground = notifee.onBackgroundEvent(handleNotificationAction)
+
+        return () => {
+            unsubscribe()
+            unsubscribeBackground()
+        }
+    }, [])
+
+    // Load sound and initialize notifications on component mount
     useEffect(() => {
         loadNotificationSound()
+        initializeNotifications()
 
         return () => {
             isMountedRef.current = false
             cleanupAll()
-
-            // Unload sound
             if (notificationSound.current) {
                 notificationSound.current.unloadAsync().catch(console.log)
             }
         }
-    }, [loadNotificationSound, cleanupAll])
+    }, [loadNotificationSound, initializeNotifications, cleanupAll])
 
     // Focus effect for proper cleanup when screen loses focus
     useFocusEffect(
         useCallback(() => {
             isMountedRef.current = true
-
             return () => {
                 isMountedRef.current = false
                 cleanupAll()
@@ -263,17 +358,15 @@ export default function RideSearching({ refreshing, id }) {
     }, [userData, isOnline, refreshing])
 
     const startRidePolling = useCallback(() => {
-        console.log("🚦 Starting ride polling...");
-
+        console.log("🚦 Starting ride polling...")
         if (intervalRef.current) {
-            clearInterval(intervalRef.current);
+            clearInterval(intervalRef.current)
         }
 
         intervalRef.current = setInterval(() => {
-            checkForRides(); // don't await inside setInterval
-        }, 7000); // Every 5 seconds
-    }, [userData]);
-
+            checkForRides()
+        }, 7000)
+    }, [userData])
 
     const checkForRides = useCallback(async () => {
         console.log("🔍 Checking for new rides...")
@@ -281,8 +374,8 @@ export default function RideSearching({ refreshing, id }) {
 
         try {
             const timestamp = new Date().toLocaleTimeString()
-            let sendRider = userData?._id || id
-           
+            const sendRider = userData?._id || id
+
             if (sendRider === undefined || sendRider === null) {
                 console.log("❌ User data is not available, cannot fetch rides")
                 await fetchUserDetails()
@@ -290,28 +383,20 @@ export default function RideSearching({ refreshing, id }) {
             }
 
             const data = await NewRidePooling(sendRider)
-            // console.log("📥 Ride pooling response:", data)
-            if (data?.length > 0 && data[0]?._id) {
-                const firstRide = data[0];
-                const rideId = firstRide._id;
 
-                setRides([firstRide]);
+            if (data?.length > 0 && data[0]?._id) {
+                const firstRide = data[0]
+                const rideId = firstRide._id
+
+                setRides([firstRide])
                 setCurrentRide(firstRide)
                 setSearching(false)
                 setShowModal(true)
                 setModalOpen(true)
-                await Notifications.scheduleNotificationAsync({
-                    content: {
-                        title: "🚖 Ride Found!",
-                        body: `You have a new ride request from ${firstRide?.pickupLocation?.address || 'a nearby location'}.`,
-                     
-                        priority: Notifications.AndroidNotificationPriority.HIGH,
-                    },
-                    trigger: null, // Immediate notification
-                });
 
+                // Display notification using Notifee
+                await displayNotification(firstRide)
 
-                // Update status history
                 setStatusHistory((prev) => [
                     ...prev.slice(-4),
                     {
@@ -323,15 +408,14 @@ export default function RideSearching({ refreshing, id }) {
                 ])
                 setLastStatusCheck(timestamp)
 
-                // Play notification sound and start continuous sound
                 await playNotificationSound()
                 startContinuousSound()
 
-                // Stop ride pooling and start status polling
                 if (intervalRef.current) {
                     clearInterval(intervalRef.current)
                     intervalRef.current = null
                 }
+
                 startStatusPolling(rideId)
             } else if (isMountedRef.current) {
                 setRides([])
@@ -339,7 +423,6 @@ export default function RideSearching({ refreshing, id }) {
                 setShowModal(false)
                 setModalOpen(false)
 
-                // Update status history
                 setStatusHistory((prev) => [
                     ...prev.slice(-4),
                     {
@@ -365,7 +448,7 @@ export default function RideSearching({ refreshing, id }) {
                 ])
             }
         }
-    }, [userData])
+    }, [userData, displayNotification])
 
     const handleAccept = useCallback(async () => {
         if (isProcessingAction) return
@@ -373,10 +456,9 @@ export default function RideSearching({ refreshing, id }) {
         console.log("✅ Attempting to accept ride...")
         setIsProcessingAction(true)
 
-        // Stop sound immediately when user takes action
         await stopContinuousSound()
+        await notifee.cancelAllNotifications()
 
-        // Validate required fields
         const action = "accept"
         const rideId = currentRide?._id
         const riderId = userData?._id
@@ -399,23 +481,18 @@ export default function RideSearching({ refreshing, id }) {
             const response = await axios.post(`${API_BASE_URL}/new/ride-action-reject-accepet`, requestBody)
             console.log("✅ Ride accepted successfully:", response.data)
 
-            // Complete cleanup
             await cleanupAll()
 
             if (isMountedRef.current) {
-                // Close modal and clear states
                 setShowModal(false)
                 setModalOpen(false)
                 setCurrentRide(null)
                 setRides([])
                 setIsProcessingAction(false)
-
-                // Navigate to ride start
                 navigation.navigate("start", { rideData: rideId })
             }
         } catch (error) {
             console.error("❌ API Error while accepting ride:", error?.response?.data || error.message)
-
             if (isMountedRef.current) {
                 setIsProcessingAction(false)
                 Alert.alert("Error", "Failed to accept ride. Please try again.")
@@ -429,10 +506,9 @@ export default function RideSearching({ refreshing, id }) {
         console.log("❌ Attempting to reject ride...")
         setIsProcessingAction(true)
 
-        // Stop sound immediately when user takes action
         await stopContinuousSound()
+        await notifee.cancelAllNotifications()
 
-        // Validate required fields
         const action = "reject"
         const rideId = currentRide?._id
         const riderId = userData?._id
@@ -455,25 +531,19 @@ export default function RideSearching({ refreshing, id }) {
             const response = await axios.post(`${API_BASE_URL}/new/ride-action-reject-accepet`, requestBody)
             console.log("✅ Ride rejected successfully:", response.data)
 
-            // Complete cleanup
             await cleanupAll()
 
             if (isMountedRef.current) {
-                // Close modal and clear states
                 setShowModal(false)
                 setModalOpen(false)
                 setCurrentRide(null)
                 setRides([])
                 setIsProcessingAction(false)
-
-                // Restart ride polling
                 startRidePolling()
             }
         } catch (error) {
             console.error("❌ API Error while rejecting ride:", error?.response?.data || error.message)
-
             if (isMountedRef.current) {
-                // Even on error, close modal and restart polling
                 setShowModal(false)
                 setModalOpen(false)
                 setCurrentRide(null)
@@ -487,10 +557,8 @@ export default function RideSearching({ refreshing, id }) {
     const handleModalClose = useCallback(async () => {
         console.log("🚪 Modal closing...")
 
-        // Stop sounds immediately
         await stopContinuousSound()
-
-        // Complete cleanup
+        await notifee.cancelAllNotifications()
         await cleanupAll()
 
         if (isMountedRef.current) {
@@ -500,8 +568,6 @@ export default function RideSearching({ refreshing, id }) {
             setRides([])
             setSearching(true)
             setIsProcessingAction(false)
-
-            // Restart ride polling
             startRidePolling()
         }
     }, [stopContinuousSound, cleanupAll, startRidePolling])
@@ -613,6 +679,7 @@ export default function RideSearching({ refreshing, id }) {
                                     <Text style={styles.buttonText}>❌ Reject</Text>
                                 )}
                             </TouchableOpacity>
+
                             <TouchableOpacity
                                 style={[styles.acceptBtn, isProcessingAction && styles.disabledButton]}
                                 onPress={handleAccept}
@@ -860,7 +927,7 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 12,
         width: "48%",
-        alignItems: "center", // Corrected: changed 'center' to 'center'
+        alignItems: "center",
         elevation: 2,
     },
     disabledButton: {

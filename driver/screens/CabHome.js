@@ -176,7 +176,7 @@ const CabHome = () => {
           console.log("Fetching ride details for ride ID:", temp_ride_id);
 
           const response = await axios.get(
-            `http://192.168.1.37:3100/rider/${temp_ride_id}`
+            `https://www.appv2.olyox.com/rider/${temp_ride_id}`
           );
           if (response.data) {
             // Ensure we're passing a boolean to updateRideStatus
@@ -226,7 +226,7 @@ const CabHome = () => {
 
           // Attempt the logout API call
           const response = await axios.get(
-            `http://192.168.1.37:3100/api/v1/rider/rider-logout/${user_data._id}`
+            `https://www.appv2.olyox.com/api/v1/rider/rider-logout/${user_data._id}`
           );
           console.log("Logout successful:", response.data);
 
@@ -357,7 +357,7 @@ const CabHome = () => {
         const token = await SecureStore.getItemAsync("auth_token_cab");
         if (token) {
           const response = await axios.get(
-            "http://192.168.1.37:3100/api/v1/rider/user-details",
+            "https://www.appv2.olyox.com/api/v1/rider/user-details",
             {
               headers: { Authorization: `Bearer ${token}` },
             }
@@ -454,13 +454,13 @@ const CabHome = () => {
 
         // Always allow the API call if going OFFLINE regardless of recharge status
         const response = await axios.post(
-          "http://192.168.1.37:3100/api/v1/rider/toggleWorkStatusOfRider",
+          "https://www.appv2.olyox.com/api/v1/rider/toggleWorkStatusOfRider",
           { status: goingOnline }, // Make sure this is a boolean
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
         const response_two = await axios.get(
-          "http://192.168.1.37:3100/api/v1/rider/user-details",
+          "https://www.appv2.olyox.com/api/v1/rider/user-details",
           {
             headers: { Authorization: `Bearer ${token}` },
           }

@@ -25,7 +25,7 @@ import {
 import { colors } from '../../NewConstant';
 import { useFetchUserDetails } from '../../../hooks/New Hookes/RiderDetailsHooks';
 
-const API_BASE_URL = 'http://192.168.1.37:3100/api/v1/rider';
+const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1/rider';
 const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/'; // Replace with your sound URL
 
 const HeaderNew = ({ isRefresh }) => {
@@ -262,7 +262,7 @@ const HeaderNew = ({ isRefresh }) => {
         console.log("Fetching ride details for ride ID:", user_data.on_ride_id);
 
         const response = await axios.get(
-          `http://192.168.1.37:3100/rider/${user_data.on_ride_id}`
+          `https://www.appv2.olyox.com/rider/${user_data.on_ride_id}`
         );
 
         if (response.data) {

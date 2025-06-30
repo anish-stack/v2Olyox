@@ -2,20 +2,18 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Platform, PermissionsAndroid, AppState, Vibration } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
+import notifee, { 
+  AndroidImportance, 
+  AndroidVisibility,
+  AndroidCategory,
+  AndroidStyle,
+  AndroidColor,
+  EventType
+} from '@notifee/react-native';
 import { Audio } from 'expo-av';
 
 const FCM_TOKEN_STORAGE_KEY = '@app:fcmToken';
 const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
-
-// Configure expo notifications
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 const requestNotificationsPermission = async () => {
   const authStatus = await messaging().requestPermission();
@@ -38,16 +36,14 @@ const requestAndroidPermission = async (permission) => {
   }
 };
 
-const requestExpoNotificationPermission = async () => {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+const requestNotifeePermission = async () => {
+  try {
+    const settings = await notifee.requestPermission();
+    return settings.authorizationStatus >= 1; // AUTHORIZED or PROVISIONAL
+  } catch (error) {
+    console.error('❌ Error requesting Notifee permission:', error);
+    return false;
   }
-
-  return finalStatus === 'granted';
 };
 
 const useNotificationPermission = (navigation) => {
@@ -56,9 +52,8 @@ const useNotificationPermission = (navigation) => {
   const [fcmToken, setFcmToken] = useState(null);
   const [lastNotification, setLastNotification] = useState(null);
   const [lastFcmMessage, setLastFcmMessage] = useState(null);
+  const [channelId, setChannelId] = useState(null);
   
-  const notificationListener = useRef();
-  const responseListener = useRef();
   const soundRef = useRef(null);
   const processedMessagesRef = useRef(new Set());
   const isInitialized = useRef(false);
@@ -79,6 +74,111 @@ const useNotificationPermission = (navigation) => {
     } catch (error) {
       console.error('❌ Error retrieving FCM token:', error);
       return null;
+    }
+  };
+
+  // Setup Notifee
+  const setupNotifee = async () => {
+    try {
+      // Create notification channel
+      const channelId = await notifee.createChannel({
+        id: 'ride-requests',
+        name: 'Ride Requests',
+        description: 'Notifications for ride requests and app updates',
+        importance: AndroidImportance.HIGH,
+        visibility: AndroidVisibility.PUBLIC,
+        sound: 'default',
+        vibration: true,
+        vibrationPattern: [300, 500, 300, 500],
+      });
+
+      setChannelId(channelId);
+      console.log('📱 Notifee channel created:', channelId);
+
+      // Setup notification event handlers
+      setupNotifeeEventHandlers();
+
+      return channelId;
+    } catch (error) {
+      console.error('❌ Error setting up Notifee:', error);
+      return null;
+    }
+  };
+
+  // Setup Notifee event handlers
+  const setupNotifeeEventHandlers = () => {
+    // Foreground events
+    notifee.onForegroundEvent(({ type, detail }) => {
+      console.log('📱 Notifee foreground event:', type, detail);
+      
+      switch (type) {
+        case EventType.DISMISSED:
+          console.log('📱 Notification dismissed:', detail.notification);
+          break;
+        case EventType.PRESS:
+          console.log('📱 Notification pressed:', detail.notification);
+          setLastNotification(detail.notification);
+          handleNotificationNavigation({ data: detail.notification.data });
+          break;
+        case EventType.ACTION_PRESS:
+          console.log('📱 Action pressed:', detail.pressAction.id, detail.notification);
+          handleNotificationAction(detail.pressAction.id, detail.notification);
+          break;
+      }
+    });
+
+    // Background events
+    notifee.onBackgroundEvent(async ({ type, detail }) => {
+      console.log('📱 Notifee background event:', type, detail);
+      
+      switch (type) {
+        case EventType.PRESS:
+          setLastNotification(detail.notification);
+          handleNotificationNavigation({ data: detail.notification.data });
+          break;
+        case EventType.ACTION_PRESS:
+          await handleNotificationAction(detail.pressAction.id, detail.notification);
+          break;
+      }
+    });
+  };
+
+  // Handle notification actions
+  const handleNotificationAction = async (actionId, notification) => {
+    const data = notification.data;
+    
+    switch (actionId) {
+      case 'accept':
+        console.log('✅ Ride accepted:', data);
+        // Handle ride acceptance
+        if (navigation && data.rideId) {
+          navigation.navigate("Home", {
+            rideId: data.rideId,
+            action: 'accept',
+            fromNotification: true,
+            timestamp: Date.now(),
+          });
+        }
+        await notifee.cancelNotification(notification.id);
+        break;
+        
+      case 'decline':
+        console.log('❌ Ride declined:', data);
+        await notifee.cancelNotification(notification.id);
+        break;
+        
+      case 'snooze':
+        console.log('⏰ Ride snoozed:', data);
+        // Reschedule notification after 1 minute
+        setTimeout(async () => {
+          await showNotification(
+            notification.title || 'Ride Request',
+            notification.body || 'You have a pending ride request',
+            data
+          );
+        }, 60000);
+        await notifee.cancelNotification(notification.id);
+        break;
     }
   };
 
@@ -180,14 +280,18 @@ const useNotificationPermission = (navigation) => {
         default: async () => 'not-determined',
       })();
 
-      // Request permissions for Expo Notifications
-      const expoPermissionGranted = await requestExpoNotificationPermission();
+      // Request permissions for Notifee
+      const notifeePermissionGranted = await requestNotifeePermission();
 
-      const granted = status === 'granted' && expoPermissionGranted;
+      const granted = status === 'granted' && notifeePermissionGranted;
+
       setPermissionStatus(granted ? 'granted' : 'denied');
       setIsGranted(granted);
 
       if (granted) {
+        // Setup Notifee
+        await setupNotifee();
+        
         // Get FCM token
         const token = await messaging().getToken();
         console.log('🔥 FCM Token:', token);
@@ -305,16 +409,12 @@ const useNotificationPermission = (navigation) => {
           // Play sound and vibration for foreground messages
           await playNotificationSound();
           
-          // Show notification in foreground
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: remoteMessage.notification?.title || 'New Message',
-              body: remoteMessage.notification?.body || 'You have a new message',
-              data: remoteMessage.data || {},
-              sound: true,
-            },
-            trigger: null,
-          });
+          // Show notification using Notifee
+          await showNotification(
+            remoteMessage.notification?.title || 'New Message',
+            remoteMessage.notification?.body || 'You have a new message',
+            remoteMessage.data || {}
+          );
         });
 
         // App opened from background notification
@@ -359,7 +459,6 @@ const useNotificationPermission = (navigation) => {
           unsubscribeTokenRefresh();
           subscription.remove();
         };
-
       } catch (error) {
         console.error('❌ Error setting up FCM listeners:', error);
       }
@@ -373,52 +472,77 @@ const useNotificationPermission = (navigation) => {
     };
   }, [isInitialized.current, isGranted, fcmToken, requestPermission, playNotificationSound, handleNotificationNavigation]);
 
-  // Set up Expo Notification listeners
+  // Cleanup on unmount
   useEffect(() => {
-    // Notification received listener
-    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('📱 Expo Notification received:', notification);
-      setLastNotification(notification);
-    });
-
-    // Notification response listener (when user taps notification)
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log('📱 Notification tapped:', response);
-      const data = response.notification.request.content.data;
-      setLastNotification(response.notification);
-      
-      // Handle navigation based on notification data
-      handleNotificationNavigation({ data });
-    });
-
-    // Cleanup
     return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => {});
       }
     };
-  }, [handleNotificationNavigation]);
+  }, []);
 
-  // Helper function to show custom notifications
+  // Helper function to show custom notifications using Notifee
   const showNotification = async (title, body, data = {}) => {
     try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          data,
-          sound: true,
+      if (!channelId) {
+        console.warn('⚠️ Channel not ready, setting up Notifee...');
+        await setupNotifee();
+      }
+
+      const notificationId = await notifee.displayNotification({
+        title,
+        body,
+        data,
+        android: {
+          channelId: channelId || 'ride-requests',
+          importance: AndroidImportance.HIGH,
+          visibility: AndroidVisibility.PUBLIC,
+          category: data.event === "NEW_RIDE_REQUEST" ? AndroidCategory.CALL : AndroidCategory.MESSAGE,
+          autoCancel: true,
+          showTimestamp: true,
+          sound: 'default',
+          vibrationPattern: [300, 500, 300, 500],
+          
+          // Add actions for ride requests
+          ...(data.event === "NEW_RIDE_REQUEST" && {
+            actions: [
+              {
+                title: '✅ Accept',
+                pressAction: { id: 'accept' },
+              },
+              {
+                title: '❌ Decline',
+                pressAction: { id: 'decline' },
+              },
+              {
+                title: '⏰ Snooze',
+                pressAction: { id: 'snooze' },
+              },
+            ],
+            ongoing: true,
+            autoCancel: false,
+            timeoutAfter: 30000, // 30 seconds
+          }),
+          
+          // Rich styling for ride requests
+          ...(data.event === "NEW_RIDE_REQUEST" && {
+            style: {
+              type: AndroidStyle.BIGTEXT,
+              text: `🚗 New Ride Request\n\n` +
+                    `💰 Price: ${data.price || 'N/A'}\n` +
+                    `📍 Pickup: ${data.pickup || 'N/A'}\n` +
+                    `🏁 Drop: ${data.drop || 'N/A'}`,
+            },
+            color: AndroidColor.BLUE,
+            colorized: true,
+          }),
         },
-        trigger: null,
       });
+
+      console.log('📱 Notifee notification displayed:', notificationId);
+      return notificationId;
     } catch (error) {
-      console.error('❌ Error showing notification:', error);
+      console.error('❌ Error showing Notifee notification:', error);
     }
   };
 
@@ -432,6 +556,7 @@ const useNotificationPermission = (navigation) => {
     lastNotification,
     lastFcmMessage,
     playNotificationSound,
+    channelId,
   };
 };
 

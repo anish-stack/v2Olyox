@@ -36,13 +36,15 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 const shouldSendLocation = async (newCoords) => {
   try {
     const lastLocationData = await AsyncStorage.getItem(STORAGE_KEYS.LAST_LOCATION);
-    
+
     if (!lastLocationData) {
       console.log("📍 No previous location found - sending location");
       return true;
     }
 
     const lastLocation = JSON.parse(lastLocationData);
+    console.log(`📏 lastLocation`, lastLocation?.latitude);
+
     const distance = calculateDistance(
       lastLocation.latitude,
       lastLocation.longitude,
@@ -51,17 +53,17 @@ const shouldSendLocation = async (newCoords) => {
     );
 
     console.log(`📏 Distance from last location: ${distance.toFixed(2)}m`);
-    
+
     // Send if distance is more than 100 meters or more than 5 minutes have passed
     const timeDiff = Date.now() - lastLocation.timestamp;
     const fiveMinutes = 5 * 60 * 1000;
-    
+
     const shouldSend = distance > 100 || timeDiff > fiveMinutes;
-    
+
     if (!shouldSend) {
-      console.log(`⏭️ Skipping location update - distance: ${distance.toFixed(2)}m, time: ${Math.round(timeDiff/1000)}s`);
+      console.log(`⏭️ Skipping location update - distance: ${distance.toFixed(2)}m, time: ${Math.round(timeDiff / 1000)}s`);
     }
-    
+
     return shouldSend;
   } catch (error) {
     console.error("❌ Error checking location threshold:", error);
@@ -77,18 +79,18 @@ const saveLocationToStorage = async (coords) => {
       longitude: coords.longitude,
       timestamp: Date.now(),
     };
-    
+
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_LOCATION, JSON.stringify(locationData));
-    
+
     // Also save to history (keep last 10 locations)
     const historyData = await AsyncStorage.getItem(STORAGE_KEYS.LOCATION_HISTORY);
     let history = historyData ? JSON.parse(historyData) : [];
-    
+
     history.push(locationData);
     if (history.length > 10) {
       history = history.slice(-10); // Keep only last 10
     }
-    
+
     await AsyncStorage.setItem(STORAGE_KEYS.LOCATION_HISTORY, JSON.stringify(history));
     console.log("💾 Location saved to AsyncStorage");
   } catch (error) {
@@ -99,10 +101,10 @@ const saveLocationToStorage = async (coords) => {
 // Define the background location task with enhanced debugging and distance filtering
 TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
   const timestamp = new Date().toISOString();
-  
+
   try {
     console.log(`🔄 [${timestamp}] Background task executing...`);
-    
+
     if (error) {
       console.error(`❌ [${timestamp}] Background task error:`, error);
       return BackgroundFetch.BackgroundFetchResult.Failed;
@@ -111,20 +113,20 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
     if (data) {
       const { locations } = data;
       console.log(`📍 [${timestamp}] Background task received locations:`, locations?.length);
-      
+
       if (locations && locations.length > 0) {
         // Use the most recent location
         const location = locations[locations.length - 1];
         console.log(`📍 [${timestamp}] Latest location:`, JSON.stringify(location.coords, null, 2));
-        
+
         // Check if we should send this location
         const shouldSend = await shouldSendLocation(location.coords);
-        
+
         if (!shouldSend) {
           console.log(`⏭️ [${timestamp}] Skipping background location - within threshold`);
           return BackgroundFetch.BackgroundFetchResult.NoData;
         }
-        
+
         const token = await SecureStore.getItemAsync("auth_token_cab");
         console.log(`🔑 [${timestamp}] Token exists:`, !!token);
 
@@ -135,10 +137,10 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
             longitude: location.coords.longitude,
             timestamp: location.timestamp,
           });
-          
+
           try {
             const response = await axios.post(
-              "http://192.168.1.37:3100/webhook/cab-receive-location",
+              "https://www.appv2.olyox.com/webhook/cab-receive-location",
               {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
@@ -149,10 +151,10 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
                 timeout: 15000,
               }
             );
-            
+
             console.log(`✅ [${timestamp}] Background location sent successfully:`, response.status);
             console.log(`✅ [${timestamp}] Server response:`, response.data);
-            
+
             // Save location after successful send
             await saveLocationToStorage(location.coords);
           } catch (apiError) {
@@ -189,30 +191,37 @@ export default function useLocationTracking() {
   const [appState, setAppState] = useState(AppState.currentState);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState('unknown');
   const [lastSentLocation, setLastSentLocation] = useState(null);
-  
+
   const locationSubscription = useRef(null);
   const sendLocationInterval = useRef(null);
   const appStateSubscription = useRef(null);
 
   // Function to send location to server (for foreground) with distance filtering
   const sendLocationToServer = async (coords) => {
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+      maximumAge: 10000,
+    });
     try {
       // Check if we should send this location
-      const shouldSend = await shouldSendLocation(coords);
-      
+      const shouldSend = await shouldSendLocation(location?.coords || coords);
+
       if (!shouldSend) {
         console.log("⏭️ Skipping foreground location - within threshold");
         return;
       }
 
+      console.log("📍 Current location fetched:", location.coords);
+
       const token = await SecureStore.getItemAsync("auth_token_cab");
-      
-      if (token && coords) {
+      console.log(token)
+      console.log(coords)
+      if (token && location.coords) {
         const response = await axios.post(
-          "http://192.168.1.37:3100/webhook/cab-receive-location",
+          "https://www.appv2.olyox.com/webhook/cab-receive-location",
           {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
+            latitude: location?.coords.latitude,
+            longitude: location?.coords.longitude,
             timestamp: Date.now(),
           },
           {
@@ -221,10 +230,10 @@ export default function useLocationTracking() {
           }
         );
         console.log("📍 Foreground location sent successfully:", response.status);
-        
+
         // Save location after successful send
-        await saveLocationToStorage(coords);
-        setLastSentLocation(coords);
+        await saveLocationToStorage(location?.coords);
+        setLastSentLocation(location?.coords);
       }
     } catch (error) {
       console.error("❌ Error sending foreground location:", error.message);
@@ -275,11 +284,11 @@ export default function useLocationTracking() {
     try {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
       const taskOptions = isRegistered ? await TaskManager.getTaskOptionsAsync(TASK_NAME) : null;
-      
+
       console.log("🔍 Background task status check:");
       console.log("  - Registered:", isRegistered);
       console.log("  - Options:", JSON.stringify(taskOptions, null, 2));
-      
+
       setBackgroundTaskStatus(isRegistered ? 'registered' : 'not-registered');
       return isRegistered;
     } catch (error) {
@@ -293,19 +302,19 @@ export default function useLocationTracking() {
   const setupBackgroundLocationTracking = async () => {
     try {
       console.log("🔧 Setting up background location tracking...");
-      
+
       // Check current status first
       await checkBackgroundTaskStatus();
-      
+
       // Stop any existing background tracking first
       const isAlreadyRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
       if (isAlreadyRegistered) {
         console.log("🛑 Stopping existing background task...");
-       try {
-         await Location.stopLocationUpdatesAsync(TASK_NAME);
-       } catch (error) {
+        try {
+          await Location.stopLocationUpdatesAsync(TASK_NAME);
+        } catch (error) {
           return
-       }
+        }
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
       }
 
@@ -324,11 +333,11 @@ export default function useLocationTracking() {
           notificationColor: "#FF6B6B",
         },
       });
-      
+
       // Verify the task was registered
       const finalStatus = await checkBackgroundTaskStatus();
       console.log("✅ Background location tracking setup complete. Registered:", finalStatus);
-      
+
       return finalStatus;
     } catch (error) {
       console.error("❌ Error setting up background location:", error);
@@ -341,16 +350,16 @@ export default function useLocationTracking() {
   const testBackgroundTask = async () => {
     try {
       console.log("🧪 Testing background task manually...");
-      
+
       // Get current location
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-      
+
       // Simulate background task call
       const result = await TaskManager.getRegisteredTasksAsync();
       console.log("🧪 Registered tasks:", result);
-      
+
       // Try to trigger the task manually
       const mockData = {
         data: {
@@ -358,9 +367,9 @@ export default function useLocationTracking() {
         },
         error: null
       };
-      
+
       console.log("🧪 Simulating background task with data:", mockData);
-      
+
     } catch (error) {
       console.error("❌ Error testing background task:", error);
     }
@@ -457,7 +466,7 @@ export default function useLocationTracking() {
   const stopLocationTracking = async () => {
     try {
       console.log("🛑 Stopping location tracking...");
-      
+
       // Stop foreground location watching
       if (locationSubscription.current) {
         locationSubscription.current.remove();
@@ -496,12 +505,12 @@ export default function useLocationTracking() {
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       console.log("📱 App state changed from", appState, "to", nextAppState);
-      
+
       if (appState.match(/inactive|background/) && nextAppState === 'active') {
         console.log("🔄 App came to foreground - checking location tracking");
         // Check background task status when app comes to foreground
         checkBackgroundTaskStatus();
-        
+
         if (isTracking) {
           console.log("🔄 Restarting foreground location tracking");
           startLocationTracking();
@@ -509,18 +518,18 @@ export default function useLocationTracking() {
       } else if (nextAppState.match(/inactive|background/)) {
         console.log("📱 App went to background - background tracking should continue");
         console.log("📱 Background task status:", backgroundTaskStatus);
-        
+
         // Log current background task status
         setTimeout(() => {
           checkBackgroundTaskStatus();
         }, 2000);
       }
-      
+
       setAppState(nextAppState);
     };
 
     appStateSubscription.current = AppState.addEventListener('change', handleAppStateChange);
-    
+
     return () => {
       if (appStateSubscription.current) {
         appStateSubscription.current.remove();
@@ -531,13 +540,13 @@ export default function useLocationTracking() {
   // Check task status periodically when app is active
   useEffect(() => {
     let statusInterval;
-    
+
     if (appState === 'active' && isTracking) {
       statusInterval = setInterval(() => {
         checkBackgroundTaskStatus();
       }, 30000); // Check every 30 seconds
     }
-    
+
     return () => {
       if (statusInterval) {
         clearInterval(statusInterval);
@@ -548,6 +557,14 @@ export default function useLocationTracking() {
   // Load last sent location on mount
   useEffect(() => {
     loadLastSentLocation();
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      sendLocationToServer();
+    }, 5000); // runs every 5 seconds
+
+    return () => clearInterval(intervalId); // cleanup on unmount
   }, []);
 
   // Cleanup on unmount

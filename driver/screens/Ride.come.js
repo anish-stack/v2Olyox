@@ -564,7 +564,7 @@ export default function RideRequestScreen() {
         return;
       }
 
-      const response = await fetch('http://192.168.1.37:3100/webhook/cab-receive-location', {
+      const response = await fetch('https://www.appv2.olyox.com/webhook/cab-receive-location', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -603,7 +603,7 @@ export default function RideRequestScreen() {
       }
 
       const response = await axios.get(
-        'http://192.168.1.37:3100/api/v1/rider/user-details',
+        'https://www.appv2.olyox.com/api/v1/rider/user-details',
         {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 10000
@@ -809,7 +809,7 @@ export default function RideRequestScreen() {
       console.log('🔄 Polling started');
 
       try {
-        const response = await fetch('http://192.168.1.37:3100/api/v1/rides/driver/poll-rides', {
+        const response = await fetch('https://www.appv2.olyox.com/api/v1/rides/driver/poll-rides', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ driver_id: riderDetails._id }),

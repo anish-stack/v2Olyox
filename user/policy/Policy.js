@@ -10,7 +10,7 @@ export default function Policy() {
 
     const fetchPolicies = async () => {
         try {
-            const response = await axios.get('http://192.168.1.37:3100/api/v1/admin/policies');
+            const response = await axios.get('https://www.appv2.olyox.com/api/v1/admin/policies');
             setPolicies(response.data);
         } catch (error) {
             console.error('Failed to fetch policies:', error);

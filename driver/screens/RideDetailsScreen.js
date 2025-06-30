@@ -29,7 +29,7 @@ import { useLocationTrackingTwo } from "../hooks/useLocationTrackingTwo";
 
 // Constants
 const { height } = Dimensions.get('window');
-const API_BASE_URL = "http://192.168.1.37:3100";
+const API_BASE_URL = "http://192.168.1.17:3100";
 const BOTTOM_SHEET_MIN_HEIGHT = 200;
 const BOTTOM_SHEET_MAX_HEIGHT = height * 1;
 
@@ -227,7 +227,7 @@ export default function RideDetailsScreen() {
     try {
 
       const response = await axios.get(`${API_BASE_URL}/rider/${rideId}`);
-      // const response = await axios.get(`http://192.168.1.37:3100/rider/${rideId}`);
+      // const response = await axios.get(`https://www.appv2.olyox.com/rider/${rideId}`);
 
       if (!response.data) {
         throw new Error('No ride data returned from API');

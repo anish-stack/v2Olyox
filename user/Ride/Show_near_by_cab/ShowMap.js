@@ -22,7 +22,7 @@ import { AntDesign, MaterialIcons, Ionicons, Feather } from "@expo/vector-icons"
 import useSettings from "../../hooks/Settings"
 
 const { width, height } = Dimensions.get("window")
-const API_BASE_URL = "http://192.168.1.37:3100/api/v1/new/new-price-calculations"
+const API_BASE_URL = "https://www.appv2.olyox.com/api/v1/new/new-price-calculations"
 
 // Haptic feedback utility
 const hapticFeedback = () => {

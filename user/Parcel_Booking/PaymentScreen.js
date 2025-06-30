@@ -53,7 +53,7 @@ const PaymentScreen = () => {
     const fetchCoupons = async () => {
         setLoading(true);
         try {
-            const response = await axios.get('http://192.168.1.37:3100/api/v1/parcel/parcel-coupon');
+            const response = await axios.get('https://www.appv2.olyox.com/api/v1/parcel/parcel-coupon');
             if (response.data.success) {
                 setCoupons(response.data.data);
             } else {
@@ -125,7 +125,7 @@ const PaymentScreen = () => {
                                     };
 
                                     const response = await axios.post(
-                                        'http://192.168.1.37:3100/api/v1/parcel/book-parcel',
+                                        'https://www.appv2.olyox.com/api/v1/parcel/book-parcel',
                                         updatedOrderDetails
                                     );
 

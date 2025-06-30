@@ -9,7 +9,7 @@ import { useSocket } from '../context/SocketContext';
 import { useNavigation } from '@react-navigation/native';
 import NewHomeScreen from '../New Screens/NewDriverScreen';
 
-const API_BASE_URL = "http://192.168.1.37:3100/api/v1";
+const API_BASE_URL = "https://www.appv2.olyox.com/api/v1";
 
 export default function HomeScreen() {
   const navigation = useNavigation();
