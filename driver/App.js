@@ -9,25 +9,29 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider as PaperProvider } from 'react-native-paper';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import messaging from '@react-native-firebase/messaging';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
-import * as TaskManager from 'expo-task-manager';
 import * as Sentry from '@sentry/react-native';
-import * as BackgroundFetch from 'expo-background-fetch';
+
 import './context/firebaseConfig';
 import { name as appName } from './app.json';
 import { store } from './redux/store';
 import { SocketProvider } from './context/SocketContext';
 import { LocationProvider } from './context/LocationContext';
-import { registerBackgroundSocketTask } from './context/backgroundTasks/socketTask';
+import { RideStatusProvider } from './context/CheckRideHaveOrNot.context';
+
+// Components
 import Loading from './components/Loading';
-import ActiveRideButton from './ActiveRideButton';
 import ErrorBoundaryWrapper from './ErrorBoundary';
+import CheckAppUpdate from './context/CheckAppUpdate';
+
+// Screens
 import OnboardingScreen from './screens/onboarding/OnboardingScreen';
 import RegistrationForm from './screens/onboarding/registration/RegistrationForm';
 import Document from './screens/onboarding/registration/Document';
 import Wait_Screen from './screens/Wait_Screen/Wait_Screen';
 import HomeScreen from './screens/HomeScreen';
-import RideDetailsScreen from './screens/RideDetailsScreen';
 import MoneyPage from './screens/MoneyPage';
 import AllRides from './screens/All_Rides/AllRides';
 import Profile from './screens/Profile/Profile';
@@ -42,19 +46,19 @@ import WorkingData from './screens/WorkingData/WorkingData';
 import ReferalHistory from './screens/Profile/ReferalHistory';
 import Withdraw from './screens/Profile/Withdraw';
 import RideRequestScreen from './screens/Ride.come';
-import { RideStatusProvider } from './context/CheckRideHaveOrNot.context';
 import NewParcelLive from './screens/Parcel_Screens/NewParcelLive/NewParcelLive';
 import DeliveryTracking from './screens/Parcel_Screens/DeliveryTracking/DeliveryTracking';
 import AvailableOrder from './screens/Parcel_Screens/Available_Orders/AvailableOrder';
 import ProgressOrder from './screens/Parcel_Screens/ProgressOrder/ProgressOrder';
 import UnlockCoupons from './screens/Unlock/UnlockCoupons';
-import CheckAppUpdate from './context/CheckAppUpdate';
-import useNotificationPermission from './hooks/notification';
 import RunningRide from './New Screens/on_way_ride/RunningRide';
 
-const TASK_NAME = 'BACKGROUND_NOTIFICATION_TASK';
+// Custom Hook
+import useNotificationPermission from './hooks/notification';
+
 const Stack = createNativeStackNavigator();
 
+// Sentry Configuration
 Sentry.init({
   dsn: 'https://cb37ba59c700e925974e3b36d10e8e5b@o4508691997261824.ingest.us.sentry.io/4508692015022080',
   environment: 'production',
@@ -63,27 +67,88 @@ Sentry.init({
   tracesSampleRate: 1.0,
 });
 
+// Constants
+const API_BASE_URL = 'http://192.168.1.37:3100/api/v1';
+const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
+
+// Configure Expo Notifications
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// Background Message Handler
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+  console.log('📩 Background message received:', remoteMessage);
+  const messageId = remoteMessage.messageId || `local-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
 
-const getExpoPushToken = async () => {
+  if (!messageId) return;
+  
   try {
-    const { data } = await Notifications.getExpoPushTokenAsync();
-    console.log('Expo Push Token:', data);
-    return data;
+    // Prevent duplicate processing
+    const processedMessages = await AsyncStorage.getItem(PROCESSED_MESSAGES_KEY);
+    const processed = processedMessages ? JSON.parse(processedMessages) : [];
+    
+    if (processed.includes(messageId)) {
+      console.log('📩 Message already processed, skipping:', messageId);
+      return;
+    }
+    
+    // Add to processed list (keep only last 50)
+    processed.push(messageId);
+    if (processed.length > 50) {
+      processed.splice(0, processed.length - 50);
+    }
+    await AsyncStorage.setItem(PROCESSED_MESSAGES_KEY, JSON.stringify(processed));
+    
+    // Store the notification data for when app opens
+    await AsyncStorage.setItem('@app:pendingNotification', JSON.stringify({
+      data: remoteMessage.data,
+      timestamp: Date.now(),
+      messageId: messageId
+    }));
+    
+    // Show notification with proper category for actions
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: remoteMessage.notification?.title || 'New Message',
+        body: remoteMessage.notification?.body || 'You have a new notification',
+        data: {
+          ...remoteMessage.data,
+          fromBackground: true,
+          messageId: messageId
+        },
+        sound: true,
+        categoryIdentifier: 'RIDE_REQUEST',
+      },
+      trigger: null,
+    });
+    
+    console.log('✅ Background notification scheduled with data:', remoteMessage.data);
+    
   } catch (error) {
-    console.error('Error fetching Expo push token:', error);
+    console.error('❌ Background handler error:', error);
   }
-};
+});
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [initialRoute, setInitialRoute] = useState('Onboarding');
-  const [activeRide, setActiveRide] = useState(false);
-  const [activeRideData, setActiveRideData] = useState(null);
+  
   const navigationRef = useNavigationContainerRef();
-  const intervalRef = useRef(null);
-  const { fcmToken, lastNotification } = useNotificationPermission();
+  const { 
+    fcmToken, 
+    lastNotification, 
+    lastFcmMessage, 
+    requestPermission,
+    showNotification 
+  } = useNotificationPermission(navigationRef);
 
+  // Check authentication and user status
   const checkAuthToken = useCallback(async () => {
     try {
       const token = await SecureStore.getItemAsync('auth_token_cab');
@@ -92,17 +157,11 @@ const App = () => {
         return;
       }
 
-      const response = await axios.get('https://www.appv2.olyox.com/api/v1/rider/user-details', {
+      const response = await axios.get(`${API_BASE_URL}/rider/user-details`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       const { partner } = response.data;
-      if (partner?.on_ride_id) {
-        setActiveRide(true);
-        await fetchRideDetails(partner.on_ride_id);
-      } else {
-        setActiveRide(false);
-      }
 
       if (!partner?.isDocumentUpload) {
         setInitialRoute('UploadDocuments');
@@ -119,104 +178,134 @@ const App = () => {
     }
   }, []);
 
-  const fetchRideDetails = useCallback(async (rideId) => {
+  // Get Expo Push Token
+  const getExpoPushToken = useCallback(async () => {
     try {
-      const response = await axios.get(`https://www.appv2.olyox.com/rider/${rideId}`);
-      setActiveRideData(response.data);
+      const { data } = await Notifications.getExpoPushTokenAsync();
+      console.log('Expo Push Token:', data);
+      return data;
     } catch (error) {
-      console.error('Error fetching ride details:', error?.response?.data);
+      console.error('Error fetching Expo push token:', error);
     }
   }, []);
 
-  // const updateFcmToken = useCallback(async () => {
-  //   if (!fcmToken) return;
-  //   try {
-  //     const authToken = await SecureStore.getItemAsync('auth_token_cab');
-  //     if (authToken) {
-  //       await axios.post(
-  //         'https://www.appv2.olyox.com/api/v1/rider/update-fcm-token',
-  //         { fcm_token: fcmToken },
-  //         { headers: { Authorization: `Bearer ${authToken}` } }
-  //       );
-  //       console.log('FCM token updated on server');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error updating FCM token:', error?.response?.data);
-  //   }
-  // }, [fcmToken]);
-
-  const checkActiveRideStatus = useCallback(async () => {
+  // Handle notification navigation
+  const handleNotificationNavigation = useCallback((data) => {
+    if (!navigationRef?.current || !data) return;
+    
+    console.log('🧭 Navigating with data:', data);
+    
     try {
-      const token = await SecureStore.getItemAsync('auth_token_cab');
-      if (!token) return;
-
-      const response = await axios.get('https://www.appv2.olyox.com/api/v1/rider/user-details', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const { partner } = response.data;
-      if (partner?.on_ride_id) {
-        setActiveRide(true);
-        await fetchRideDetails(partner.on_ride_id);
+      if (data.event === "NEW_RIDE_REQUEST" || data.action === "RIDE_REQUEST") {
+        console.log('🚖 Navigating to NewRideScreen with rideId:', data.rideId);
+        navigationRef.current.navigate("Home", {
+          rideId: data.rideId,
+          pickup: data.pickup !== "undefined" ? data.pickup : null,
+          drop: data.drop !== "undefined" ? data.drop : null,
+          price: data.price !== "undefined" ? data.price : null,
+          fromNotification: true,
+          timestamp: Date.now(),
+        });
+      } else if (data.type === 'ride_update') {
+        console.log('🔄 Navigating to start screen with rideId:', data.ride_id);
+        navigationRef.current.navigate('start', { 
+          rideId: data.ride_id,
+          fromNotification: true 
+        });
       } else {
-        setActiveRide(false);
-        setActiveRideData(null);
+        console.log('🏠 Navigating to Home screen');
+        // Default navigation
+        navigationRef.current.navigate("Home", {
+          fromNotification: true,
+          timestamp: Date.now(),
+          notificationData: data
+        });
       }
     } catch (error) {
-      console.error('Error checking ride status:', error);
-    }
-  }, [fetchRideDetails]);
-
-
-
-  const handleAppStateChange = useCallback(
-    (nextAppState) => {
-      console.log(`AppState changed to: ${nextAppState}`);
-      if (nextAppState === 'active') {
-        console.log('App returned to foreground');
-        // stopBackgroundLogging();
-        checkActiveRideStatus();
-        // updateFcmToken();
-      } else if (nextAppState === 'background') {
-        console.log('App moved to background');
- 
-        checkActiveRideStatus();
-      }
-    },
-    [checkActiveRideStatus]
-  );
-
-  useEffect(() => {
-    console.log('Mounting App, initial intervalRef:', !!intervalRef.current);
-    checkAuthToken();
-    getExpoPushToken();
-  }, [checkAuthToken]);
-
-
-
-  useEffect(() => {
-    if (lastNotification) {
-      console.log('Handling notification:', lastNotification);
-      const data = lastNotification.request?.content?.data || {};
-      if (data.type === 'ride_request') {
-        navigationRef.navigate('NewRideScreen', { rideId: data.ride_id });
-      } else if (data.type === 'ride_update') {
-        navigationRef.navigate('start', { rideId: data.ride_id });
+      console.error('❌ Navigation error:', error);
+      // Fallback navigation
+      try {
+        navigationRef.current.navigate("Home");
+      } catch (fallbackError) {
+        console.error('❌ Fallback navigation failed:', fallbackError);
       }
     }
-  }, [lastNotification, navigationRef]);
+  }, [navigationRef]);
 
+  // Handle app state changes
+  const handleAppStateChange = useCallback((nextAppState) => {
+    console.log(`AppState changed to: ${nextAppState}`);
+    
+    if (nextAppState === 'active') {
+      console.log('App returned to foreground');
+      // Request permissions if not already granted
+      requestPermission();
+    }
+  }, [requestPermission]);
+
+  // Check for pending notifications when app starts
+  const checkPendingNotifications = useCallback(async () => {
+    try {
+      const pendingNotification = await AsyncStorage.getItem('@app:pendingNotification');
+      if (pendingNotification) {
+        const notification = JSON.parse(pendingNotification);
+        console.log('📱 Found pending notification:', notification);
+        
+        // Clear the pending notification
+        await AsyncStorage.removeItem('@app:pendingNotification');
+        
+        // Handle navigation after a small delay to ensure app is ready
+        setTimeout(() => {
+          handleNotificationNavigation(notification.data);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('❌ Error checking pending notifications:', error);
+    }
+  }, [handleNotificationNavigation]);
+
+  // Initialize app
   useEffect(() => {
-    console.log('Setting up AppState listener');
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      console.log('Cleaning up AppState listener');
-      subscription.remove();
-      // stopBackgroundLogging();
+    const initializeApp = async () => {
+      try {
+        await checkAuthToken();
+        await getExpoPushToken();
+        await requestPermission();
+        await checkPendingNotifications();
+      } catch (error) {
+        console.error('❌ App initialization error:', error);
+      }
     };
+
+    initializeApp();
+  }, [checkAuthToken, getExpoPushToken, requestPermission, checkPendingNotifications]);
+
+  // Handle FCM message navigation
+  useEffect(() => {
+    if (lastFcmMessage?.data) {
+      console.log('Handling FCM message navigation:', lastFcmMessage.data);
+      handleNotificationNavigation(lastFcmMessage.data);
+    }
+  }, [lastFcmMessage, handleNotificationNavigation]);
+
+  // Handle Expo notification navigation
+  useEffect(() => {
+    if (lastNotification?.request?.content?.data) {
+      console.log('Handling Expo notification navigation:', lastNotification.request.content.data);
+      handleNotificationNavigation(lastNotification.request.content.data);
+    }
+  }, [lastNotification, handleNotificationNavigation]);
+
+  // App state listener
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
   }, [handleAppStateChange]);
 
-  if (isLoading) return <Loading />;
+  // Show loading screen
+  if (isLoading) {
+    return <Loading />;
+  }
 
   return (
     <Provider store={store}>
@@ -228,34 +317,124 @@ const App = () => {
                 <SafeAreaProvider>
                   <NavigationContainer ref={navigationRef}>
                     <StatusBar barStyle="dark-content" />
-                    <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-                      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                      <Stack.Screen name="register" options={{ headerShown: true, title: 'Complete Profile' }} component={RegistrationForm} />
-                      <Stack.Screen name="UploadDocuments" component={Document} />
-                      <Stack.Screen name="Wait_Screen" component={Wait_Screen} />
-                      <Stack.Screen name="Home" component={HomeScreen} />
-                      <Stack.Screen name="start" component={RunningRide} />
-                      <Stack.Screen name="support" component={SupportScreen} />
-                      <Stack.Screen name="collect_money" component={MoneyPage} />
-                      <Stack.Screen name="AllRides" component={AllRides} />
-                      <Stack.Screen name="NewRideScreen" component={RideRequestScreen} />
-                      <Stack.Screen name="UnlockCoupons" component={UnlockCoupons} />
-                      <Stack.Screen name="Profile" component={Profile} />
-                      <Stack.Screen name="upload-qr" component={UploadQr} />
-                      <Stack.Screen name="enter_bh" component={BhVerification} />
-                      <Stack.Screen name="Register" component={RegisterWithBh} />
-                      <Stack.Screen name="OtpVerify" component={BhOtpVerification} />
-                      <Stack.Screen name="Recharge" component={RechargeViaOnline} />
-                      <Stack.Screen name="recharge-history" component={RechargeHistory} />
-                      <Stack.Screen name="WorkingData" component={WorkingData} />
-                      <Stack.Screen name="referral-history" component={ReferalHistory} />
-                      <Stack.Screen name="withdraw" component={Withdraw} />
-                      <Stack.Screen name="ParcelDetails" component={NewParcelLive} />
-                      <Stack.Screen name="DeliveryTracking" options={{ headerShown: false }} component={DeliveryTracking} />
-                      <Stack.Screen name="available-orders" options={{ headerShown: false, title: "Available Orders" }} component={AvailableOrder} />
-                      <Stack.Screen name="progress-order" options={{ headerShown: true, title: "Progress Orders" }} component={ProgressOrder} />
+                    <Stack.Navigator 
+                      initialRouteName={initialRoute} 
+                      screenOptions={{ headerShown: false }}
+                    >
+                      <Stack.Screen 
+                        name="Onboarding" 
+                        component={OnboardingScreen} 
+                      />
+                      <Stack.Screen 
+                        name="register" 
+                        component={RegistrationForm}
+                        options={{ 
+                          headerShown: true, 
+                          title: 'Complete Profile' 
+                        }} 
+                      />
+                      <Stack.Screen 
+                        name="UploadDocuments" 
+                        component={Document} 
+                      />
+                      <Stack.Screen 
+                        name="Wait_Screen" 
+                        component={Wait_Screen} 
+                      />
+                      <Stack.Screen 
+                        name="Home" 
+                        component={HomeScreen} 
+                      />
+                      <Stack.Screen 
+                        name="start" 
+                        component={RunningRide} 
+                      />
+                      <Stack.Screen 
+                        name="support" 
+                        component={SupportScreen} 
+                      />
+                      <Stack.Screen 
+                        name="collect_money" 
+                        component={MoneyPage} 
+                      />
+                      <Stack.Screen 
+                        name="AllRides" 
+                        component={AllRides} 
+                      />
+                      <Stack.Screen 
+                        name="NewRideScreen" 
+                        component={RideRequestScreen} 
+                      />
+                      <Stack.Screen 
+                        name="UnlockCoupons" 
+                        component={UnlockCoupons} 
+                      />
+                      <Stack.Screen 
+                        name="Profile" 
+                        component={Profile} 
+                      />
+                      <Stack.Screen 
+                        name="upload-qr" 
+                        component={UploadQr} 
+                      />
+                      <Stack.Screen 
+                        name="enter_bh" 
+                        component={BhVerification} 
+                      />
+                      <Stack.Screen 
+                        name="Register" 
+                        component={RegisterWithBh} 
+                      />
+                      <Stack.Screen 
+                        name="OtpVerify" 
+                        component={BhOtpVerification} 
+                      />
+                      <Stack.Screen 
+                        name="Recharge" 
+                        component={RechargeViaOnline} 
+                      />
+                      <Stack.Screen 
+                        name="recharge-history" 
+                        component={RechargeHistory} 
+                      />
+                      <Stack.Screen 
+                        name="WorkingData" 
+                        component={WorkingData} 
+                      />
+                      <Stack.Screen 
+                        name="referral-history" 
+                        component={ReferalHistory} 
+                      />
+                      <Stack.Screen 
+                        name="withdraw" 
+                        component={Withdraw} 
+                      />
+                      <Stack.Screen 
+                        name="ParcelDetails" 
+                        component={NewParcelLive} 
+                      />
+                      <Stack.Screen 
+                        name="DeliveryTracking" 
+                        component={DeliveryTracking}
+                        options={{ headerShown: false }} 
+                      />
+                      <Stack.Screen 
+                        name="available-orders" 
+                        component={AvailableOrder}
+                        options={{ 
+                          headerShown: false, 
+                          title: "Available Orders" 
+                        }} 
+                      />
+                      <Stack.Screen 
+                        name="progress-order" 
+                        component={ProgressOrder}
+                        options={{ 
+                          headerShown: true, 
+                          title: "Progress Orders" 
+                        }} 
+                      />
                     </Stack.Navigator>
-                    {/* {activeRide && <ActiveRideButton rideData={activeRideData} />} */}
                   </NavigationContainer>
                 </SafeAreaProvider>
               </GestureHandlerRootView>
@@ -267,7 +446,10 @@ const App = () => {
   );
 };
 
+// Wrap with Sentry
 const WrappedApp = Sentry.wrap(App);
+
+// Root App Component
 const RootApp = () => (
   <ErrorBoundaryWrapper>
     <CheckAppUpdate>
@@ -276,5 +458,7 @@ const RootApp = () => (
   </ErrorBoundaryWrapper>
 );
 
+// Register the app
 AppRegistry.registerComponent(appName, () => RootApp);
+
 export default RootApp;

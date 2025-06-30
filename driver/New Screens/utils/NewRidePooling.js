@@ -4,12 +4,11 @@ import { API_BASE_URL } from "../NewConstant";
 
 export const NewRidePooling = async (riderId) => {
     try {
-      console.log("Fetching new pooling rides for riderId:", riderId);
         const response = await axios.get(
             `${API_BASE_URL}/new/pooling-rides-for-rider/${riderId}`
         );
         const ridesData = response.data.data;
-        // console.log("I am Ride Data", ridesData)
+        console.log("ridesData0",ridesData)
         if (!ridesData) {
             return null
         } else {

@@ -8,7 +8,7 @@ export const slidesFetch = async () => {
 
   while (attempt < MAX_RETRIES) {
     try {
-      const { data } = await axios.get('https://www.appv2.olyox.com/api/v1/admin/get_onboarding_slides');
+      const { data } = await axios.get('http://192.168.1.37:3100/api/v1/admin/get_onboarding_slides');
       return data?.data;
     } catch (error) {
       attempt++;

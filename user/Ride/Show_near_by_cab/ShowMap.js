@@ -22,7 +22,7 @@ import { AntDesign, MaterialIcons, Ionicons, Feather } from "@expo/vector-icons"
 import useSettings from "../../hooks/Settings"
 
 const { width, height } = Dimensions.get("window")
-const API_BASE_URL = "https://www.appv2.olyox.com/api/v1/new/new-price-calculations"
+const API_BASE_URL = "http://192.168.1.37:3100/api/v1/new/new-price-calculations"
 
 // Haptic feedback utility
 const hapticFeedback = () => {
@@ -371,12 +371,21 @@ const handleBookNow = useCallback(() => {
             </View>
           </View>
 
-          <View style={styles.rideRight}>
-            <Text style={styles.ridePrice}>{formatPrice(ride.totalPrice)}</Text>
-            <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
-              {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
-            </View>
-          </View>
+         <View style={styles.rideRight}>
+  {/* Original price with 15% markup, shown cut */}
+  <Text style={styles.originalPrice}>
+    {formatPrice(ride.totalPrice * 1.15)}
+  </Text>
+
+  {/* Actual price */}
+  <Text style={styles.ridePrice}>
+    {formatPrice(ride.totalPrice)}
+  </Text>
+
+  <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
+    {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+  </View>
+</View>
         </TouchableOpacity>
       </Animated.View>
     )
@@ -926,5 +935,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+   originalPrice: {
+    fontSize: 14,
+    color: '#888',
+    textDecorationLine: 'line-through',
   },
 })

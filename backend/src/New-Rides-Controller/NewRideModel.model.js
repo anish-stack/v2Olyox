@@ -48,8 +48,8 @@ const PricingSchema = new Schema({
     rain_charge: {
         type: Number, min: 0, default: 0
     },
-    collected_amount:{
-        type: Number, min: 0, default: 0 
+    collected_amount: {
+        type: Number, min: 0, default: 0
     },
     toll_charge: {
         type: Number, min: 0, default: 0
@@ -125,13 +125,13 @@ const RideRequestSchema = new Schema({
 
     ride_status: {
         type: String,
-        enum: ['pending', 'searching', 'driver_assigned', 'driver_arrived','in_progress', 'completed', 'cancelled'],
+        enum: ['pending', 'searching', 'driver_assigned', 'driver_arrived', 'in_progress', 'completed', 'cancelled'],
         default: 'pending',
         required: true,
         index: true
     },
-    search_started_at:{
-        type:Date
+    search_started_at: {
+        type: Date
     },
     // OTP for ride verification
     ride_otp: {
@@ -184,13 +184,13 @@ const RideRequestSchema = new Schema({
     // Payment Information
     payment_method: {
         type: String,
-        enum: ['cash', 'card', 'wallet','digital', 'upi', 'paypal','online'],
+        enum: ['cash', 'card', 'wallet', 'digital', 'upi', 'paypal', 'online'],
         required: [true, 'Payment method is required'],
         lowercase: true
     },
     payment_status: {
         type: String,
-        enum: ['pending', 'processing', 'completed', 'failed', 'refunded','cancelled'],
+        enum: ['pending', 'processing', 'completed', 'failed', 'refunded', 'cancelled'],
         default: 'pending'
     },
     payment_transaction_id: String,
@@ -215,7 +215,7 @@ const RideRequestSchema = new Schema({
     cancelled_at: Date,
     cancellation_reason: {
         type: String,
-        
+
     },
     cancellation_fee: {
         type: Number,
@@ -278,6 +278,17 @@ const RideRequestSchema = new Schema({
     updated_at: {
         type: Date,
         default: Date.now
+    },
+    last_notification_sent_at: {
+        type: Date,
+    },
+    notified_riders: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Rider'
+    }],
+    total_notifications_sent: {
+        type: Number,
+        default: 0
     }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },

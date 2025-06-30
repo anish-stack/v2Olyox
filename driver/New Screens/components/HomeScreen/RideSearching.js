@@ -19,10 +19,17 @@ import { API_BASE_URL, colors } from "../../NewConstant"
 import { useFetchUserDetails } from "../../../hooks/New Hookes/RiderDetailsHooks"
 import axios from "axios"
 import { useNavigation, useFocusEffect } from "@react-navigation/native"
+import * as Notifications from 'expo-notifications';
 
 const screenHeight = Dimensions.get("window").height
-
-export default function RideSearching({ refreshing,id }) {
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+export default function RideSearching({ refreshing, id }) {
     const { userData, loading, error, fetchUserDetails, isOnline } = useFetchUserDetails()
     const [rides, setRides] = useState([])
     const [searching, setSearching] = useState(true)
@@ -33,7 +40,7 @@ export default function RideSearching({ refreshing,id }) {
     const [modalOpen, setModalOpen] = useState(false)
     const [isProcessingAction, setIsProcessingAction] = useState(false)
     const navigation = useNavigation()
-// console.log("userData",userData)
+    // console.log("userData",userData)
     // Audio and interval refs
     const notificationSound = useRef(null)
     const intervalRef = useRef(null)
@@ -255,17 +262,17 @@ export default function RideSearching({ refreshing,id }) {
         }
     }, [userData, isOnline, refreshing])
 
-  const startRidePolling = useCallback(() => {
-    console.log("🚦 Starting ride polling...");
+    const startRidePolling = useCallback(() => {
+        console.log("🚦 Starting ride polling...");
 
-    if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-    }
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+        }
 
-    intervalRef.current = setInterval(() => {
-        checkForRides(); // don't await inside setInterval
-    }, 7000); // Every 5 seconds
-}, [userData]);
+        intervalRef.current = setInterval(() => {
+            checkForRides(); // don't await inside setInterval
+        }, 7000); // Every 5 seconds
+    }, [userData]);
 
 
     const checkForRides = useCallback(async () => {
@@ -274,14 +281,16 @@ export default function RideSearching({ refreshing,id }) {
 
         try {
             const timestamp = new Date().toLocaleTimeString()
-            let sendRider  = userData?._id || id
-            if(sendRider === undefined || sendRider === null){
-                console.log("❌ User data is not available, cannot fetch rides")    
+            let sendRider = userData?._id || id
+           
+            if (sendRider === undefined || sendRider === null) {
+                console.log("❌ User data is not available, cannot fetch rides")
+                await fetchUserDetails()
                 return
             }
 
             const data = await NewRidePooling(sendRider)
-            console.log("📥 Ride pooling response:", data)
+            // console.log("📥 Ride pooling response:", data)
             if (data?.length > 0 && data[0]?._id) {
                 const firstRide = data[0];
                 const rideId = firstRide._id;
@@ -291,6 +300,16 @@ export default function RideSearching({ refreshing,id }) {
                 setSearching(false)
                 setShowModal(true)
                 setModalOpen(true)
+                await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: "🚖 Ride Found!",
+                        body: `You have a new ride request from ${firstRide?.pickupLocation?.address || 'a nearby location'}.`,
+                     
+                        priority: Notifications.AndroidNotificationPriority.HIGH,
+                    },
+                    trigger: null, // Immediate notification
+                });
+
 
                 // Update status history
                 setStatusHistory((prev) => [

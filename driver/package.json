@@ -11,6 +11,7 @@
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.1.4",
     "@mapbox/polyline": "^1.2.1",
+    "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-community/datetimepicker": "8.2.0",
     "@react-native-community/netinfo": "11.4.1",
@@ -35,6 +36,7 @@
     "expo-haptics": "~14.0.1",
     "expo-image-picker": "^16.0.5",
     "expo-intent-launcher": "~12.0.2",
+    "expo-keep-awake": "~14.0.3",
     "expo-linear-gradient": "^14.0.2",
     "expo-location": "^18.0.5",
     "expo-notifications": "^0.29.14",
@@ -48,7 +50,6 @@
     "react": "18.3.1",
     "react-native": "0.76.7",
     "react-native-background-actions": "^4.0.1",
-    "react-native-floating-bubble": "^1.0.12",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-ionicons": "^4.6.5",
     "react-native-maps": "1.18.0",
@@ -63,7 +64,8 @@
     "react-native-svg": "15.8.0",
     "react-redux": "^8.1.1",
     "socket.io-client": "^4.8.1",
-    "swr": "^2.3.3"
+    "swr": "^2.3.3",
+    "expo-media-library": "~17.0.6"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

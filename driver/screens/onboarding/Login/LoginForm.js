@@ -55,7 +55,7 @@ const LoginForm = ({ onLogin }) => {
     
     try {
       const response = await axios.post(
-        'https://www.appv2.olyox.com/api/v1/rider/rider-login', 
+        'http://192.168.1.37:3100/api/v1/rider/rider-login', 
         { 
           fcmToken:isGranted ? fcmToken:null,
           number: formattedPhone,

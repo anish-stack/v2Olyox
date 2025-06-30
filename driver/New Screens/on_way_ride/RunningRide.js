@@ -77,7 +77,7 @@ export default function RunningRide() {
                 console.log("📦 Fetching ride details for ride ID:", userData.on_ride_id);
 
                 const response = await axios.get(
-                    `https://www.appv2.olyox.com/rider/${userData.on_ride_id}`,
+                    `http://192.168.1.37:3100/rider/${userData.on_ride_id}`,
                     {
                         timeout: 10000,
                     }
