@@ -95,7 +95,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     const message = {
       token: token,
       notification: {
-        title: title || "New Ride Request",
+        title: title || "New Ride  by server",
         body: body || "₹119.18 - Sector 99A to Sector 29",
       },
       
