@@ -11,6 +11,7 @@ import {
   BackHandler,
   StyleSheet,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useNavigationState } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
@@ -25,6 +26,7 @@ import { colors } from '../../NewConstant';
 import { useFetchUserDetails } from '../../../hooks/New Hookes/RiderDetailsHooks';
 
 const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1/rider';
+const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/'; // Replace with your sound URL
 
 const HeaderNew = ({ isRefresh }) => {
   const navigation = useNavigation();
@@ -397,6 +399,28 @@ const HeaderNew = ({ isRefresh }) => {
                 />
               </View>
               <Text style={styles.menuText}>Profile</Text>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={async () => {
+                setMenuVisible(false);
+                await Linking.openURL(NOTIFICATION_SOUND_URL);
+
+              }}
+            >
+              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
+                <MaterialCommunityIcons
+                  name="bell"
+                  size={20}
+                  color={colors.red400}
+                />
+              </View>
+              <Text style={styles.menuText}>Set A Notification</Text>
               <MaterialCommunityIcons
                 name="chevron-right"
                 size={20}

@@ -92,21 +92,32 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     const defaultTitle = "👑 Royal Proclamation!";
     const defaultBody = "Hear ye, hear ye! Anish and Manish have ascended the throne. All hail the kings who rule with wisdom, strength, and unstoppable swag! 👑🔥🦁";
 
-    // Prepare notification message
     const message = {
       token: token,
     
       notification: {
-        title: title || defaultTitle,
-        body: body || defaultBody      },
+        title: title || "New Ride Request",
+        body: body || "₹119.18 - Sector 99A to Sector 29",
+      },
+
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "ride-requests",
+          clickAction: "ACCEPT_RIDE_ACTION",
+          imageUrl: 'https://olyox.in/wp-content/uploads/2025/04/cropped-cropped-logo-CWkwXYQ_-removebg-preview.png', // Optional: ride map/image
+          clickAction: "ACCEPT_RIDE_ACTION",
+        },
+      },
       data: {
-        // Ensure all data values are strings
         event: eventData.event || "DEFAULT_EVENT",
-        ...Object.fromEntries(
-          Object.entries(eventData).map(([k, v]) => [k, String(v)])
-        ),
+        rideId: String(eventData.rideId),
+        pickup: String(eventData.pickup),
+        drop: String(eventData.drop),
+        price: String(eventData.price),
       },
     };
+
 
     // Send notification
     const response = await admin.messaging().send(message);

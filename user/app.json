@@ -2,7 +2,7 @@
   "expo": {
     "name": "Olyox",
     "slug": "olyox",
-    "version": "1.0.3",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/appicon.png",
     "userInterfaceStyle": "light",
@@ -59,7 +59,7 @@
         "GMSApiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
       },
       "googleServicesFile": "./GoogleService-Info.plist",
-      "runtimeVersion": "1.0.3"
+      "runtimeVersion": "1.0.5"
     },
     "android": {
       "adaptiveIcon": {
@@ -83,7 +83,7 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
       ],
-      "versionCode": 30,
+      "versionCode": 38,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -94,15 +94,12 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
       "package": "com.happy_coding.olyox",
       "googleServicesFile": "./google-services.json",
-      "runtimeVersion": "1.0.3"
+      "runtimeVersion": "1.0.5"
     },
     "web": {
       "favicon": "./assets/appicon.png",
@@ -130,6 +127,24 @@
               "use_modular_headers!": true
             }
           }
+        }
+      ],
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "2247847082336470",
+          "clientToken": "ceb7598813d528b734761f9ce865ffad",
+          "displayName": "YourAppName",
+          "scheme": "2247847082336470",
+          "advertiserIDCollectionEnabled": true,
+          "autoLogAppEventsEnabled": true,
+          "isAutoInitEnabled": true
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "This identifier will be used to deliver personalized ads to you."
         }
       ]
     ],

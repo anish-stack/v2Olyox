@@ -6,6 +6,7 @@ import React, {
   memo, 
   useMemo 
 } from 'react';
+import { AppEventsLogger, Settings } from "react-native-fbsdk-next";
 import { 
   StyleSheet, 
   FlatList, 
@@ -145,7 +146,7 @@ const HomeScreen = () => {
 
     // Track HomeScreen renders
     performanceTracker.trackRender('HomeScreen');
-
+    
     // Memoized component data for FlatList
     const componentData = useMemo(() => [
         { 

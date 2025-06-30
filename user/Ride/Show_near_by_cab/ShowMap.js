@@ -371,12 +371,21 @@ const handleBookNow = useCallback(() => {
             </View>
           </View>
 
-          <View style={styles.rideRight}>
-            <Text style={styles.ridePrice}>{formatPrice(ride.totalPrice)}</Text>
-            <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
-              {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
-            </View>
-          </View>
+         <View style={styles.rideRight}>
+  {/* Original price with 15% markup, shown cut */}
+  <Text style={styles.originalPrice}>
+    {formatPrice(ride.totalPrice * 1.15)}
+  </Text>
+
+  {/* Actual price */}
+  <Text style={styles.ridePrice}>
+    {formatPrice(ride.totalPrice)}
+  </Text>
+
+  <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
+    {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+  </View>
+</View>
         </TouchableOpacity>
       </Animated.View>
     )
@@ -926,5 +935,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+   originalPrice: {
+    fontSize: 14,
+    color: '#888',
+    textDecorationLine: 'line-through',
   },
 })
