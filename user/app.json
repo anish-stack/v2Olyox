@@ -29,31 +29,11 @@
         "NSLocationAlwaysUsageDescription": "Olyox uses your location to help with background location tracking for delivery updates, even when you're not using the app.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Olyox requires location access at all times to provide accurate real-time updates for orders and to find nearby service providers.",
         "NSPhotoLibraryUsageDescription": "Olyox uses your photo library to let you upload saved images such as profile photos, mismatched items, or food pictures for order tracking, returns, and support.",
-        "LSApplicationQueriesSchemes": [
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp",
-          "tel",
-          "mailto",
-          "whatsapp"
+        "LSApplicationQueriesSchemes": ["tel", "mailto", "whatsapp"],
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["fb2247847082336470"]
+          }
         ],
         "ITSAppUsesNonExemptEncryption": false,
         "GMSApiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
@@ -70,15 +50,6 @@
         "apiKey": "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
@@ -127,24 +98,6 @@
               "use_modular_headers!": true
             }
           }
-        }
-      ],
-      [
-        "react-native-fbsdk-next",
-        {
-          "appID": "2247847082336470",
-          "clientToken": "ceb7598813d528b734761f9ce865ffad",
-          "displayName": "YourAppName",
-          "scheme": "2247847082336470",
-          "advertiserIDCollectionEnabled": true,
-          "autoLogAppEventsEnabled": true,
-          "isAutoInitEnabled": true
-        }
-      ],
-      [
-        "expo-tracking-transparency",
-        {
-          "userTrackingPermission": "This identifier will be used to deliver personalized ads to you."
         }
       ]
     ],

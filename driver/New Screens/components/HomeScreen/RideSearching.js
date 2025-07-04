@@ -352,7 +352,7 @@ export default function RideSearching({ refreshing, id }) {
                 setLastStatusCheck(timestamp)
             }
         } catch (err) {
-            console.log("❌ Ride pooling error:", err.message)
+            console.log("❌ Ride pooling error:", err)
             if (isMountedRef.current) {
                 setStatusHistory((prev) => [
                     ...prev.slice(-4),

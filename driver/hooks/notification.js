@@ -22,7 +22,7 @@ const requestNotificationsPermission = async () => {
   return {
     status:
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL
         ? 'granted'
         : 'denied',
   };
@@ -56,7 +56,7 @@ const useNotificationPermission = (navigation) => {
   const [fcmToken, setFcmToken] = useState(null);
   const [lastNotification, setLastNotification] = useState(null);
   const [lastFcmMessage, setLastFcmMessage] = useState(null);
-  
+
   const notificationListener = useRef();
   const responseListener = useRef();
   const soundRef = useRef(null);
@@ -119,20 +119,20 @@ const useNotificationPermission = (navigation) => {
         }
         soundRef.current = null;
       }
-      
+
       // Create and play new sound
       const { sound } = await Audio.Sound.createAsync(
         require('./sound.mp3'),
-        { 
+        {
           shouldPlay: true,
           volume: 0.8,
           rate: 1.0,
         }
       );
-      
+
       soundRef.current = sound;
       console.log('🔊 Playing notification sound');
-      
+
       // Auto cleanup after 3 seconds
       setTimeout(async () => {
         if (soundRef.current) {
@@ -144,12 +144,12 @@ const useNotificationPermission = (navigation) => {
           }
         }
       }, 3000);
-      
+
     } catch (error) {
       console.log('❌ Error playing sound:', error.message);
       // Fallback to vibration
       Vibration.vibrate([0, 250, 250, 250]);
-      
+
       // Clean up on error
       if (soundRef.current) {
         try {
@@ -210,17 +210,17 @@ const useNotificationPermission = (navigation) => {
         if (storedToken) {
           setFcmToken(storedToken);
         }
-        
+
         // Setup audio
         await setupAudio();
-        
+
         // Load processed messages
         const processedMessages = await AsyncStorage.getItem(PROCESSED_MESSAGES_KEY);
         if (processedMessages) {
           const processed = JSON.parse(processedMessages);
           processedMessagesRef.current = new Set(processed);
         }
-        
+
         isInitialized.current = true;
       } catch (error) {
         console.error('❌ Error initializing data:', error);
@@ -233,9 +233,9 @@ const useNotificationPermission = (navigation) => {
   // Handle notification navigation
   const handleNotificationNavigation = useCallback((remoteMessage) => {
     if (!navigation || !remoteMessage?.data) return;
-    
+
     const { data } = remoteMessage;
-    
+
     try {
       if (data.event === "NEW_RIDE_REQUEST" || data.action === "RIDE_REQUEST") {
         // Navigate to Home with ride details
@@ -288,36 +288,28 @@ const useNotificationPermission = (navigation) => {
         const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
           if (!mounted) return;
           console.log('📩 FCM Message in foreground:', remoteMessage);
-          
+
           // Prevent duplicate processing
           const messageId = remoteMessage.messageId;
           if (messageId && processedMessagesRef.current.has(messageId)) {
             console.log('📩 Duplicate message ignored:', messageId);
             return;
           }
-          
+
           if (messageId) {
             processedMessagesRef.current.add(messageId);
           }
-          
+
           setLastFcmMessage(remoteMessage);
-          
+
           // Play sound and vibration for foreground messages
           await playNotificationSound();
-          
-          // Show notification in foreground
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: remoteMessage.notification?.title || 'New Message',
-              body: remoteMessage.notification?.body || 'You have a new message',
-              data: remoteMessage.data || {},
-              sound: true,
-            },
-            trigger: null,
-          });
+
+
+
         });
 
-        // App opened from background notification
+      
         const unsubscribeOpenedApp = messaging().onNotificationOpenedApp((remoteMessage) => {
           if (!mounted) return;
           console.log('🔄 App opened from background notification:', remoteMessage);
@@ -336,7 +328,7 @@ const useNotificationPermission = (navigation) => {
         // App state change listener
         const subscription = AppState.addEventListener('change', async (nextAppState) => {
           if (!mounted || !isGranted) return;
-          
+
           if (nextAppState === 'active') {
             try {
               const token = await messaging().getToken();
@@ -366,7 +358,7 @@ const useNotificationPermission = (navigation) => {
     };
 
     const cleanup = setupListeners();
-    
+
     return () => {
       mounted = false;
       cleanup.then(cleanupFn => cleanupFn && cleanupFn());
@@ -377,7 +369,7 @@ const useNotificationPermission = (navigation) => {
   useEffect(() => {
     // Notification received listener
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('📱 Expo Notification received:', notification);
+
       setLastNotification(notification);
     });
 
@@ -386,7 +378,7 @@ const useNotificationPermission = (navigation) => {
       console.log('📱 Notification tapped:', response);
       const data = response.notification.request.content.data;
       setLastNotification(response.notification);
-      
+
       // Handle navigation based on notification data
       handleNotificationNavigation({ data });
     });
@@ -400,7 +392,7 @@ const useNotificationPermission = (navigation) => {
         Notifications.removeNotificationSubscription(responseListener.current);
       }
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current.unloadAsync().catch(() => { });
       }
     };
   }, [handleNotificationNavigation]);

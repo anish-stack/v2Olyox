@@ -8,7 +8,7 @@ export const NewRidePooling = async (riderId) => {
             `${API_BASE_URL}/new/pooling-rides-for-rider/${riderId}`
         );
         const ridesData = response.data.data;
-        console.log("ridesData0",ridesData)
+     
         if (!ridesData) {
             return null
         } else {
@@ -28,11 +28,9 @@ export const StatusOfRideComingRide = async (rideId, state) => {
     );
 
     const rideStatus = response.data.data.ride_status;
-    console.log("Ride status:", rideStatus);
 
-    // If the ride is already assigned or cancelled, remove from list
     if (rideStatus === "driver_assigned" || rideStatus === "cancelled") {
-      state.rides.delete(rideId);  // remove the ride from search result
+      state.rides.delete(rideId); 
       return { action: "remove", rideId };
     }
 

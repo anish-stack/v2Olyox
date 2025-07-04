@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import { useKeepAwake } from 'expo-keep-awake';
 import BackgroundService from 'react-native-background-actions';
@@ -26,6 +25,7 @@ import useLocationTracking from '../hooks/useLocationTracking';
 import useNotificationPermission from '../hooks/notification';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import { useFetchUserDetails } from '../hooks/New Hookes/RiderDetailsHooks';
 
 const urlForUpdateFcmToken = `https://www.appv2.olyox.com/api/v1/rider/update-fcm`;
 const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/'; // Replace with your sound URL
@@ -37,22 +37,6 @@ const ASYNC_KEYS = {
   NOTIFICATION_SOUND_DOWNLOADED: 'notification_sound_downloaded',
 };
 
-// Sleep helper
-const sleep = (time) => new Promise((resolve) => setTimeout(resolve, time));
-
-// Background task
-const veryIntensiveTask = async ({ delay }) => {
-  await new Promise(async (resolve) => {
-    for (let i = 0; BackgroundService.isRunning(); i++) {
-      // Only log or perform actions if app is in background
-      if (AppState.currentState === 'background') {
-        console.log(`Background tick: ${AppState.currentState} + ${i}`);
-        // Add your background logic here (e.g., location updates)
-      }
-      await sleep(delay);
-    }
-  });
-};
 
 // Task options
 const options = {
@@ -236,10 +220,7 @@ export default function NewHomeScreen() {
       try {
         if (nextAppState === 'background' && !BackgroundService.isRunning()) {
           console.log('App went to background, starting background task');
-          await BackgroundService.start(veryIntensiveTask, options);
-          await BackgroundService.updateNotification({
-            taskDesc: 'Tracking your ride...',
-          });
+       
         } else if (nextAppState === 'active' && BackgroundService.isRunning()) {
           console.log('App returned to active, stopping background task');
           await BackgroundService.stop();
@@ -279,7 +260,7 @@ export default function NewHomeScreen() {
     const init = async () => {
       if (!locationStarted && mounted) {
         try {
-          await startLocationTracking();
+       
           setLocationStarted(true);
         } catch (err) {
           if (mounted) {
@@ -299,31 +280,7 @@ export default function NewHomeScreen() {
     };
   }, []);
 
-  // Track app state change for location tracking
-  useEffect(() => {
-    if (appState === 'active' && locationStarted && !isTracking) {
-      startLocationTracking();
-    }
-  }, [appState, isTracking, locationStarted]);
 
-  // Show errors
-  useEffect(() => {
-    if (error) {
-      Alert.alert('Location Issue', error, [
-        {
-          text: 'Retry',
-          onPress: async () => {
-            try {
-              await startLocationTracking();
-            } catch (e) {
-              console.log('Retry failed', e);
-            }
-          },
-        },
-        { text: 'Cancel' },
-      ]);
-    }
-  }, [error]);
 
   // Debug logs
   useEffect(() => {
@@ -359,9 +316,10 @@ const onRefresh = useCallback(async () => {
     await setupFCMToken();
     await startLocationTracking();
     setLocationStarted(true);
-    
+    reCallMe()
     console.log('✅ Complete restart successful');
-    
+      setRefreshing(false);
+
   } catch (e) {
     console.error('❌ Restart failed:', e);
     Alert.alert(
@@ -369,6 +327,8 @@ const onRefresh = useCallback(async () => {
       'Could not restart completely. Please try again or restart the app manually.',
       [{ text: 'OK' }]
     );
+      setRefreshing(false);
+
   } finally {
     setRefreshing(false);
   }

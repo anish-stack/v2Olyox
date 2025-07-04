@@ -247,15 +247,10 @@ const useBackgroundTask = () => {
           console.log('🔄 App went to background - starting background operations');
           showPersistentNotification();
           
-          // Start test notifications for debugging (remove in production)
-          if (__DEV__) {
-            startTestIntervalNotifications();
-          }
+       
         } else if (nextAppState === 'active' && previousState !== 'active') {
           console.log('🔄 App became active - stopping test notifications');
-          stopTestIntervalNotifications();
-          
-          // Clear notifications when app becomes active
+   
           setTimeout(() => {
             Notifications.dismissAllNotificationsAsync().catch(console.error);
           }, 1000);

@@ -173,7 +173,6 @@ const CabHome = () => {
           user_data.on_ride_id != null
         ) {
           temp_ride_id = user_data.on_ride_id;
-          console.log("Fetching ride details for ride ID:", temp_ride_id);
 
           const response = await axios.get(
             `https://www.appv2.olyox.com/rider/${temp_ride_id}`

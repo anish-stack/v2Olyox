@@ -259,7 +259,6 @@ const HeaderNew = ({ isRefresh }) => {
   const fetchActiveRideDetails = useCallback(async () => {
     try {
       if (user_data?.on_ride_id) {
-        console.log("Fetching ride details for ride ID:", user_data.on_ride_id);
 
         const response = await axios.get(
           `https://www.appv2.olyox.com/rider/${user_data.on_ride_id}`
@@ -329,7 +328,7 @@ const HeaderNew = ({ isRefresh }) => {
       interval = setInterval(() => {
         console.log("⏱️ Fetching active ride details every 4 seconds");
         fetchActiveRideDetails();
-      }, 4000);
+      }, 15000);
     } else {
       console.log("🔕 Conditions not met. Skipping ride detail polling.");
     }

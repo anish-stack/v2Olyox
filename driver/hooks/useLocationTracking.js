@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { AppState, Platform } from "react-native";
 import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
@@ -6,6 +6,7 @@ import * as TaskManager from "expo-task-manager";
 import * as BackgroundFetch from "expo-background-fetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { debounce } from "lodash";
 
 // Background task name
 const TASK_NAME = "background-location-task";
@@ -32,11 +33,10 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // Distance in meters
 };
 
-// Check if location should be sent based on distance threshold
+// Check if location should be sent based on distance and time thresholds
 const shouldSendLocation = async (newCoords) => {
   try {
     const lastLocationData = await AsyncStorage.getItem(STORAGE_KEYS.LAST_LOCATION);
-    
     if (!lastLocationData) {
       console.log("📍 No previous location found - sending location");
       return true;
@@ -51,17 +51,21 @@ const shouldSendLocation = async (newCoords) => {
     );
 
     console.log(`📏 Distance from last location: ${distance.toFixed(2)}m`);
-    
-    // Send if distance is more than 100 meters or more than 5 minutes have passed
+
+    // Send if distance > 100 meters or > 2 minutes have passed
     const timeDiff = Date.now() - lastLocation.timestamp;
-    const fiveMinutes = 5 * 60 * 1000;
-    
+    const fiveMinutes = 2 * 60 * 1000;
+
     const shouldSend = distance > 100 || timeDiff > fiveMinutes;
-    
+
     if (!shouldSend) {
-      console.log(`⏭️ Skipping location update - distance: ${distance.toFixed(2)}m, time: ${Math.round(timeDiff/1000)}s`);
+      console.log(
+        `⏭️ Skipping location update - distance: ${distance.toFixed(2)}m, time: ${Math.round(
+          timeDiff / 1000
+        )}s`
+      );
     }
-    
+
     return shouldSend;
   } catch (error) {
     console.error("❌ Error checking location threshold:", error);
@@ -77,18 +81,18 @@ const saveLocationToStorage = async (coords) => {
       longitude: coords.longitude,
       timestamp: Date.now(),
     };
-    
+
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_LOCATION, JSON.stringify(locationData));
-    
-    // Also save to history (keep last 10 locations)
+
+    // Save to history (keep last 10 locations)
     const historyData = await AsyncStorage.getItem(STORAGE_KEYS.LOCATION_HISTORY);
     let history = historyData ? JSON.parse(historyData) : [];
-    
+
     history.push(locationData);
     if (history.length > 10) {
       history = history.slice(-10); // Keep only last 10
     }
-    
+
     await AsyncStorage.setItem(STORAGE_KEYS.LOCATION_HISTORY, JSON.stringify(history));
     console.log("💾 Location saved to AsyncStorage");
   } catch (error) {
@@ -96,13 +100,13 @@ const saveLocationToStorage = async (coords) => {
   }
 };
 
-// Define the background location task with enhanced debugging and distance filtering
+// Define the background location task
 TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
   const timestamp = new Date().toISOString();
-  
+
   try {
     console.log(`🔄 [${timestamp}] Background task executing...`);
-    
+
     if (error) {
       console.error(`❌ [${timestamp}] Background task error:`, error);
       return BackgroundFetch.BackgroundFetchResult.Failed;
@@ -111,20 +115,20 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
     if (data) {
       const { locations } = data;
       console.log(`📍 [${timestamp}] Background task received locations:`, locations?.length);
-      
+
       if (locations && locations.length > 0) {
         // Use the most recent location
         const location = locations[locations.length - 1];
         console.log(`📍 [${timestamp}] Latest location:`, JSON.stringify(location.coords, null, 2));
-        
+
         // Check if we should send this location
         const shouldSend = await shouldSendLocation(location.coords);
-        
+
         if (!shouldSend) {
           console.log(`⏭️ [${timestamp}] Skipping background location - within threshold`);
           return BackgroundFetch.BackgroundFetchResult.NoData;
         }
-        
+
         const token = await SecureStore.getItemAsync("auth_token_cab");
         console.log(`🔑 [${timestamp}] Token exists:`, !!token);
 
@@ -135,7 +139,7 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
             longitude: location.coords.longitude,
             timestamp: location.timestamp,
           });
-          
+
           try {
             const response = await axios.post(
               "https://www.appv2.olyox.com/webhook/cab-receive-location",
@@ -149,10 +153,10 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
                 timeout: 15000,
               }
             );
-            
+
             console.log(`✅ [${timestamp}] Background location sent successfully:`, response.status);
             console.log(`✅ [${timestamp}] Server response:`, response.data);
-            
+
             // Save location after successful send
             await saveLocationToStorage(location.coords);
           } catch (apiError) {
@@ -160,7 +164,7 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
             console.error(`❌ [${timestamp}] API Error details:`, {
               status: apiError.response?.status,
               data: apiError.response?.data,
-              url: apiError.config?.url
+              url: apiError.config?.url,
             });
           }
         } else {
@@ -187,31 +191,31 @@ export default function useLocationTracking() {
   const [isTracking, setIsTracking] = useState(false);
   const [error, setError] = useState(null);
   const [appState, setAppState] = useState(AppState.currentState);
-  const [backgroundTaskStatus, setBackgroundTaskStatus] = useState('unknown');
+  const [backgroundTaskStatus, setBackgroundTaskStatus] = useState("unknown");
   const [lastSentLocation, setLastSentLocation] = useState(null);
-  
-  const locationSubscription = useRef(null);
-  const sendLocationInterval = useRef(null);
-  const appStateSubscription = useRef(null);
 
-  // Function to send location to server (for foreground) with distance filtering
-  const sendLocationToServer = async (coords) => {
-    try {
-  
-  const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        maximumAge: 10000,
-      });
-      console.log("📍 Current location fetched:", location.coords);
-   
-      const token = await SecureStore.getItemAsync("auth_token_cab");
-      
-      if (token && location?.coords) {
+  const locationSubscription = useRef(null);
+  const appStateSubscription = useRef(null);
+  const isBackgroundTaskInitialized = useRef(false);
+
+  // Debounced function to send location to server
+  const sendLocationToServer = useCallback(
+    debounce(async (coords) => {
+      try {
+        const shouldSend = await shouldSendLocation(coords);
+        if (!shouldSend) return;
+
+        const token = await SecureStore.getItemAsync("auth_token_cab");
+        if (!token) {
+          console.log("⚠️ No auth token found");
+          return;
+        }
+
         const response = await axios.post(
           "https://www.appv2.olyox.com/webhook/cab-receive-location",
           {
-            latitude: location?.coords.latitude,
-            longitude: location?.coords.longitude,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
             timestamp: Date.now(),
           },
           {
@@ -219,19 +223,19 @@ export default function useLocationTracking() {
             timeout: 10000,
           }
         );
+
         console.log("📍 Foreground location sent successfully:", response.status);
-        
-        // Save location after successful send
-        await saveLocationToStorage(location?.coords);
-        setLastSentLocation(location?.coords);
+        await saveLocationToStorage(coords);
+        setLastSentLocation(coords);
+      } catch (error) {
+        console.error("❌ Error sending foreground location:", error.message);
       }
-    } catch (error) {
-      console.error("❌ Error sending foreground location:", error.message);
-    }
-  };
+    }, 5000),
+    []
+  );
 
   // Load last sent location from storage
-  const loadLastSentLocation = async () => {
+  const loadLastSentLocation = useCallback(async () => {
     try {
       const lastLocationData = await AsyncStorage.getItem(STORAGE_KEYS.LAST_LOCATION);
       if (lastLocationData) {
@@ -245,10 +249,10 @@ export default function useLocationTracking() {
     } catch (error) {
       console.error("❌ Error loading last location:", error);
     }
-  };
+  }, []);
 
   // Get location history from storage
-  const getLocationHistory = async () => {
+  const getLocationHistory = useCallback(async () => {
     try {
       const historyData = await AsyncStorage.getItem(STORAGE_KEYS.LOCATION_HISTORY);
       return historyData ? JSON.parse(historyData) : [];
@@ -256,10 +260,10 @@ export default function useLocationTracking() {
       console.error("❌ Error getting location history:", error);
       return [];
     }
-  };
+  }, []);
 
   // Clear location data from storage
-  const clearLocationData = async () => {
+  const clearLocationData = useCallback(async () => {
     try {
       await AsyncStorage.multiRemove([STORAGE_KEYS.LAST_LOCATION, STORAGE_KEYS.LOCATION_HISTORY]);
       setLastSentLocation(null);
@@ -267,53 +271,74 @@ export default function useLocationTracking() {
     } catch (error) {
       console.error("❌ Error clearing location data:", error);
     }
-  };
+  }, []);
 
   // Check background task registration status
-  const checkBackgroundTaskStatus = async () => {
+  const checkBackgroundTaskStatus = useCallback(async () => {
     try {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
       const taskOptions = isRegistered ? await TaskManager.getTaskOptionsAsync(TASK_NAME) : null;
-      
-      console.log("🔍 Background task status check:");
-      console.log("  - Registered:", isRegistered);
-      console.log("  - Options:", JSON.stringify(taskOptions, null, 2));
-      
-      setBackgroundTaskStatus(isRegistered ? 'registered' : 'not-registered');
+
+
+      setBackgroundTaskStatus(isRegistered ? "registered" : "not-registered");
       return isRegistered;
     } catch (error) {
       console.error("❌ Error checking background task status:", error);
-      setBackgroundTaskStatus('error');
+      setBackgroundTaskStatus("error");
       return false;
     }
-  };
+  }, []);
 
-  // Enhanced background location setup
-  const setupBackgroundLocationTracking = async () => {
+  // Setup background location tracking
+  const setupBackgroundLocationTracking = useCallback(async () => {
+    if (isBackgroundTaskInitialized.current) {
+      console.log("✅ Background task already initialized, skipping setup");
+      return true;
+    }
+
     try {
       console.log("🔧 Setting up background location tracking...");
-      
-      // Check current status first
-      await checkBackgroundTaskStatus();
-      
-      // Stop any existing background tracking first
-      const isAlreadyRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
-      if (isAlreadyRegistered) {
-        console.log("🛑 Stopping existing background task...");
-       try {
-         await Location.stopLocationUpdatesAsync(TASK_NAME);
-       } catch (error) {
-          return
-       }
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+
+      // Check current status
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
+      if (isRegistered) {
+        const taskOptions = await TaskManager.getTaskOptionsAsync(TASK_NAME);
+        const expectedOptions = {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 15000,
+          distanceInterval: 5,
+          deferredUpdatesInterval: 15000,
+          deferredUpdatesDistance: 5,
+          showsBackgroundLocationIndicator: true,
+          foregroundService: {
+            notificationTitle: "🚗 Cab Tracking Active",
+            notificationBody: "Your location is being tracked for safety - Tap to open app",
+            notificationColor: "#FF6B6B",
+          },
+        };
+
+        if (JSON.stringify(taskOptions) === JSON.stringify(expectedOptions)) {
+          console.log("✅ Background task already configured correctly");
+          isBackgroundTaskInitialized.current = true;
+          setBackgroundTaskStatus("registered");
+          return true;
+        }
+
+        console.log("🛑 Stopping existing background task due to configuration mismatch...");
+        try {
+          await Location.stopLocationUpdatesAsync(TASK_NAME);
+        } catch (error) {
+          console.warn("⚠️ Error stopping existing background task:", error);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
-      // Start fresh background location updates with more aggressive settings
+      // Start fresh background location updates
       console.log("🚀 Starting fresh background location updates...");
       await Location.startLocationUpdatesAsync(TASK_NAME, {
         accuracy: Location.Accuracy.Balanced,
-        timeInterval: 15000, // 15 seconds - more frequent for testing
-        distanceInterval: 5, // 5 meters - more sensitive
+        timeInterval: 15000,
+        distanceInterval: 5,
         deferredUpdatesInterval: 15000,
         deferredUpdatesDistance: 5,
         showsBackgroundLocationIndicator: true,
@@ -323,87 +348,81 @@ export default function useLocationTracking() {
           notificationColor: "#FF6B6B",
         },
       });
-      
-      // Verify the task was registered
+
+      isBackgroundTaskInitialized.current = true;
       const finalStatus = await checkBackgroundTaskStatus();
       console.log("✅ Background location tracking setup complete. Registered:", finalStatus);
-      
       return finalStatus;
     } catch (error) {
       console.error("❌ Error setting up background location:", error);
-      setBackgroundTaskStatus('error');
+      setBackgroundTaskStatus("error");
+      isBackgroundTaskInitialized.current = false;
       return false;
     }
-  };
+  }, [checkBackgroundTaskStatus]);
 
   // Test background task manually (for debugging)
-  const testBackgroundTask = async () => {
+  const testBackgroundTask = useCallback(async () => {
     try {
       console.log("🧪 Testing background task manually...");
-      
-      // Get current location
+
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-      
-      // Simulate background task call
+
       const result = await TaskManager.getRegisteredTasksAsync();
       console.log("🧪 Registered tasks:", result);
-      
-      // Try to trigger the task manually
+
       const mockData = {
-        data: {
-          locations: [location]
-        },
-        error: null
+        data: { locations: [location] },
+        error: null,
       };
-      
+
       console.log("🧪 Simulating background task with data:", mockData);
-      
     } catch (error) {
       console.error("❌ Error testing background task:", error);
     }
-  };
+  }, []);
 
-  const startLocationTracking = async () => {
+  // Start location tracking
+  const startLocationTracking = useCallback(async () => {
+    if (isTracking) {
+      console.log("✅ Location tracking already active, skipping...");
+      return;
+    }
+
     try {
       console.log("🔄 Starting location tracking...");
       console.log("📱 Platform:", Platform.OS);
       setError(null);
 
-      // Load last sent location from storage
+      // Load last sent location
       await loadLastSentLocation();
 
-      // Request foreground permission
+      // Request permissions
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       console.log("📍 Foreground permission status:", foregroundStatus);
-
       if (foregroundStatus !== "granted") {
-        console.error("❌ Foreground location permission denied");
         setError("Foreground location permission denied");
         return;
       }
 
-      // Request background permission
       const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
       console.log("📦 Background permission status:", backgroundStatus);
-
       if (backgroundStatus !== "granted") {
-        console.warn("⚠️ Background location permission denied - background tracking won't work");
+        console.warn("⚠️ Background location permission denied");
         setError("Background location permission needed for continuous tracking");
       }
 
-      // Check if location services are enabled on device
+      // Check if location services are enabled
       const enabled = await Location.hasServicesEnabledAsync();
       console.log("📶 Location services enabled:", enabled);
-
       if (!enabled) {
-        console.error("❌ Location services are disabled");
         setError("Location services are disabled");
         return;
       }
 
-      // Get current location immediately
+      // Get current location
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
         maximumAge: 10000,
@@ -411,8 +430,7 @@ export default function useLocationTracking() {
       console.log("📍 Current location fetched:", location.coords);
       setCurrentLocation(location.coords);
 
-      // Send initial location to server (with distance filtering)
-      console.log("📤 Sending initial location to server...");
+      // Send initial location
       await sendLocationToServer(location.coords);
 
       // Start watching foreground location changes
@@ -423,26 +441,18 @@ export default function useLocationTracking() {
           timeInterval: 30000,
           distanceInterval: 10,
         },
-        async (loc) => {
+        (loc) => {
           if (loc?.coords) {
             console.log("📍 Foreground location update:", loc.coords);
             setCurrentLocation(loc.coords);
-            await sendLocationToServer(loc.coords);
+            sendLocationToServer(loc.coords);
           }
         }
       );
 
-      // Setup background location tracking if permission granted
+      // Setup background tracking if permission granted
       if (backgroundStatus === "granted") {
-        const backgroundSetup = await setupBackgroundLocationTracking();
-        if (!backgroundSetup) {
-          console.warn("⚠️ Background location setup failed");
-        } else {
-          // Test the background task
-          setTimeout(() => {
-            testBackgroundTask();
-          }, 3000);
-        }
+        await setupBackgroundLocationTracking();
       }
 
       setIsTracking(true);
@@ -451,143 +461,88 @@ export default function useLocationTracking() {
       console.error("❌ Error starting location tracking:", error);
       setError(error.message);
     }
-  };
+  }, [isTracking, sendLocationToServer, setupBackgroundLocationTracking, loadLastSentLocation]);
 
-  const stopLocationTracking = async () => {
+  // Stop location tracking
+  const stopLocationTracking = useCallback(async () => {
     try {
       console.log("🛑 Stopping location tracking...");
-      
-      // Stop foreground location watching
+
       if (locationSubscription.current) {
         locationSubscription.current.remove();
         locationSubscription.current = null;
       }
 
-      // Clear any intervals
-      if (sendLocationInterval.current) {
-        clearInterval(sendLocationInterval.current);
-        sendLocationInterval.current = null;
-      }
-
-      // Stop background location updates
-      try {
-        const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
-        if (isRegistered) {
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
+      if (isRegistered) {
+        try {
           await Location.stopLocationUpdatesAsync(TASK_NAME);
           console.log("🛑 Background location tracking stopped");
+        } catch (bgError) {
+          console.warn("⚠️ Error stopping background location:", bgError);
         }
-      } catch (bgError) {
-        console.warn("⚠️ Error stopping background location:", bgError);
       }
 
       setIsTracking(false);
       setCurrentLocation(null);
       setError(null);
-      setBackgroundTaskStatus('stopped');
+      setBackgroundTaskStatus("stopped");
+      isBackgroundTaskInitialized.current = false;
       console.log("✅ Location tracking stopped successfully");
     } catch (error) {
       console.error("❌ Error stopping location tracking:", error);
       setError(error.message);
     }
-  };
+  }, []);
 
-  // Handle app state changes with enhanced logging
+  // Handle app state changes
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       console.log("📱 App state changed from", appState, "to", nextAppState);
-      
-      if (appState.match(/inactive|background/) && nextAppState === 'active') {
+
+      if (appState.match(/inactive|background/) && nextAppState === "active") {
         console.log("🔄 App came to foreground - checking location tracking");
-        // Check background task status when app comes to foreground
         checkBackgroundTaskStatus();
-        
-        if (isTracking) {
-          console.log("🔄 Restarting foreground location tracking");
+        if (!isTracking) {
           startLocationTracking();
         }
       } else if (nextAppState.match(/inactive|background/)) {
         console.log("📱 App went to background - background tracking should continue");
-        console.log("📱 Background task status:", backgroundTaskStatus);
-        
-        // Log current background task status
-        setTimeout(() => {
-          checkBackgroundTaskStatus();
-        }, 2000);
+        checkBackgroundTaskStatus();
       }
-      
+
       setAppState(nextAppState);
     };
 
-    appStateSubscription.current = AppState.addEventListener('change', handleAppStateChange);
-    
+    appStateSubscription.current = AppState.addEventListener("change", handleAppStateChange);
+
     return () => {
       if (appStateSubscription.current) {
         appStateSubscription.current.remove();
       }
     };
-  }, [appState, isTracking, backgroundTaskStatus]);
+  }, [appState, isTracking, startLocationTracking, checkBackgroundTaskStatus]);
 
-  // Check task status periodically when app is active
+  // Initialize tracking on mount
   useEffect(() => {
-    let statusInterval;
-    
-    if (appState === 'active' && isTracking) {
-      statusInterval = setInterval(() => {
-        checkBackgroundTaskStatus();
-      }, 30000); // Check every 30 seconds
+    if (!isTracking) {
+      startLocationTracking();
     }
-    
-    return () => {
-      if (statusInterval) {
-        clearInterval(statusInterval);
-      }
-    };
-  }, [appState, isTracking]);
 
-  // Load last sent location on mount
-  useEffect(() => {
-    loadLastSentLocation();
-  }, []);
-
-  useEffect(() => {
-  const intervalId = setInterval(() => {
-    startLocationTracking();
-  }, 5000); // runs every 5 seconds
-
-  return () => clearInterval(intervalId); // cleanup on unmount
-}, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
       if (locationSubscription.current) {
         locationSubscription.current.remove();
       }
-      if (sendLocationInterval.current) {
-        clearInterval(sendLocationInterval.current);
-      }
       if (appStateSubscription.current) {
         appStateSubscription.current.remove();
       }
     };
-  }, []);
+  }, [isTracking, startLocationTracking]);
 
-  // Check if background task is registered on mount
+  // Check task status on mount
   useEffect(() => {
-    const checkTaskStatus = async () => {
-      try {
-        const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
-        console.log("🔍 Background task registered on mount:", isRegistered);
-        if (isRegistered) {
-          setIsTracking(true);
-          await checkBackgroundTaskStatus();
-        }
-      } catch (error) {
-        console.error("❌ Error checking task status:", error);
-      }
-    };
-    checkTaskStatus();
-  }, []);
+    checkBackgroundTaskStatus();
+  }, [checkBackgroundTaskStatus]);
 
   return {
     currentLocation,
@@ -595,12 +550,12 @@ export default function useLocationTracking() {
     error,
     appState,
     backgroundTaskStatus,
-    lastSentLocation, // Added to show last sent location
+    lastSentLocation,
     startLocationTracking,
     stopLocationTracking,
     testBackgroundTask,
     checkBackgroundTaskStatus,
-    getLocationHistory, // Added to get location history
-    clearLocationData, // Added to clear stored location data
+    getLocationHistory,
+    clearLocationData,
   };
 }

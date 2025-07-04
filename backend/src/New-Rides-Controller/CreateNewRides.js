@@ -785,13 +785,12 @@ const initiateDriverSearch = async (rideId, req, res) => {
     }
 };
 
-
 const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
     const notificationStateKey = `ride:${rideId}:notification_state`;
     let notificationsSentCount = 0;
 
     try {
-        console.info(`\u{1F680} Processing ${riders.length} riders for ride ${rideId}`);
+        console.info(`🚀 Processing ${riders.length} riders for ride ${rideId}`);
 
         if (riders.length === 0) {
             await redisClient.set(notificationStateKey, JSON.stringify({
@@ -851,6 +850,24 @@ const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
                         };
                     }
 
+                    // ✅ Only proceed if ride_status is "pending" or "searching"
+                    if (!['pending', 'searching'].includes(ride.ride_status)) {
+                        await redisClient.unwatch();
+                        await redisClient.set(notificationStateKey, JSON.stringify({
+                            batchCount: notificationsSentCount,
+                            totalNotificationsSent: notificationsSentCount * riders.length,
+                            completed: true,
+                            lastBatchSentAt: new Date(),
+                            reason: `Ride status is ${ride.ride_status}, skipping notification`
+                        }));
+                        return {
+                            success: true,
+                            message: `Ride status is ${ride.ride_status}, no notifications sent`,
+                            riders_count: riders.length,
+                            total_notifications: 0
+                        };
+                    }
+
                     const rejectedDriverIds = (ride.rejected_by_drivers || []).map(r => r.driver.toString());
                     const eligibleRiders = riders.filter(r => !rejectedDriverIds.includes(r._id.toString()));
 
@@ -871,35 +888,13 @@ const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
                         };
                     }
 
-                    const notificationResults = await Promise.all(eligibleRiders.map(async (rider) => {
-                        if (!rider.fcmToken) return null;
-                        const payload = {
-                            event: 'NEW_RIDE_REQUEST',
-                            rideId,
-                            eta: rider.distance ? Math.ceil(rider.distance / 300) : 5,
-                            pickup: rideDetails.pickup,
-                            drop: rideDetails.drop,
-                            vehicleType: rideDetails.vehicleType,
-                            pricing: rideDetails.pricing,
-                            screen: 'RideRequestModal'
-                        };
-                        await sendNotification.sendNotification(
-                            rider.fcmToken,
-                            'A new ride is waiting — check your vehicle!',
-                            'You have a new ride nearby. Tap to view details.',
-                            payload,
-                            payload
-                        );
-                        return rider._id;
-                    }));
-
                     notificationsSentCount++;
 
                     const multi = redisClient.multi();
                     multi.set(notificationStateKey, JSON.stringify({
                         batchCount: notificationsSentCount,
                         totalNotificationsSent: notificationsSentCount * eligibleRiders.length,
-                        completed: notificationsSentCount >= (maxDuration / interval),
+                        completed: false,
                         lastBatchSentAt: new Date()
                     }));
 
@@ -922,6 +917,7 @@ const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
                     await new Promise(res => setTimeout(res, 100));
                 }
             }
+
             await new Promise(res => setTimeout(res, interval));
         }
 
@@ -954,6 +950,7 @@ const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
         };
     }
 };
+
 
 exports.cancelRideRequest = async (req, res) => {
     try {

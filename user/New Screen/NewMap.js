@@ -1,25 +1,21 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, Platform } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle } from 'react-native-svg';
 
-const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
 const LATITUDE_DELTA = 0.015;
 const LONGITUDE_DELTA = 0.015;
-const REACH_THRESHOLD = 100; // in meters
-const NEARBY_THRESHOLD = 50; // threshold for side-by-side positioning
-
-// Default coordinates (New York City as fallback)
+const REACH_THRESHOLD = 100;
+const NEARBY_THRESHOLD = 200;
 const DEFAULT_COORDINATES = {
   latitude: 40.7128,
   longitude: -74.0060
 };
 
-// Custom Car Icon Component
 const CarIcon = ({ color = '#000', size = 30, isNearby = false }) => (
   <View style={[
     styles.carIconContainer, 
@@ -40,7 +36,6 @@ const CarIcon = ({ color = '#000', size = 30, isNearby = false }) => (
   </View>
 );
 
-// Custom Person Icon Component
 const PersonIcon = ({ color = '#4CAF50', size = 30, isNearby = false }) => (
   <View style={[
     styles.personIconContainer, 
@@ -62,7 +57,6 @@ const PersonIcon = ({ color = '#4CAF50', size = 30, isNearby = false }) => (
   </View>
 );
 
-// Custom Drop-off Icon Component
 const DropOffIcon = ({ size = 35 }) => (
   <View style={[styles.dropIconContainer, { width: size, height: size }]}>
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -77,62 +71,32 @@ const DropOffIcon = ({ size = 35 }) => (
   </View>
 );
 
-// Status indicator component
-const StatusIndicator = ({ status, distance }) => {
-  const getStatusText = () => {
-    switch (status) {
-      case 'driver_assigned':
-        return distance < REACH_THRESHOLD ? 'Driver is nearby!' : 'Driver on the way';
-      case 'driver_arrived':
-        return 'Driver has arrived';
-      case 'in_progress':
-        return 'Trip in progress';
-      case 'trip_completed':
-        return 'Trip completed';
-      default:
-        return 'Finding driver...';
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (status) {
-      case 'driver_assigned':
-        return distance < REACH_THRESHOLD ? '#FF6B35' : '#2196F3';
-      case 'driver_arrived':
-        return '#4CAF50';
-      case 'in_progress':
-        return '#9C27B0';
-      case 'trip_completed':
-        return '#4CAF50';
-      default:
-        return '#666';
-    }
-  };
-
-  return (
-    <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
-      <Text style={styles.statusText}>{getStatusText()}</Text>
-      {/* {distance && distance < 1000 && (
-        <Text style={styles.distanceText}>{Math.round(distance)}m away</Text>
-      )} */}
-    </View>
-  );
-};
-
-export default function NewUserAndDriverMap({ userLocation, DriverLocation, DropLocation, rideStatus }) {
+export default function NewUserAndDriverMap({ 
+  userLocation, 
+  DriverLocation, 
+  DropLocation, 
+  rideStatus,
+  routeCoordinates = [] // For iOS polyline fallback
+}) {
   const mapRef = useRef(null);
   const [notified, setNotified] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [driverDistance, setDriverDistance] = useState(null);
+  const [directionsError, setDirectionsError] = useState(false);
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const [debouncedCoords, setDebouncedCoords] = useState({});
+  const debounceTimer = useRef(null);
+  
+  // Platform detection
+  const isAndroid = Platform.OS === 'android';
+  const mapProvider = isAndroid ? PROVIDER_GOOGLE : PROVIDER_DEFAULT;
 
   // Safe coordinate extraction with defaults
   const getSafeCoordinates = useCallback((location, type = 'object') => {
     try {
-      if (!location) return DEFAULT_COORDINATES;
+      if (!location) return null;
       
       if (type === 'array') {
-        // Handle array format [lng, lat] for DriverLocation and DropLocation
         if (Array.isArray(location) && location.length >= 2) {
           const lat = parseFloat(location[1]);
           const lng = parseFloat(location[0]);
@@ -142,8 +106,7 @@ export default function NewUserAndDriverMap({ userLocation, DriverLocation, Drop
           }
         }
       } else if (type === 'coords') {
-        // Handle userLocation format with coords property
-        if (typeof location === 'object' && location.coords) {
+        if (typeof location === 'object' && location?.coords) {
           const lat = parseFloat(location.coords.latitude);
           const lng = parseFloat(location.coords.longitude);
           
@@ -152,8 +115,7 @@ export default function NewUserAndDriverMap({ userLocation, DriverLocation, Drop
           }
         }
       } else {
-        // Handle object format {latitude, longitude}
-        if (typeof location === 'object' && location.latitude && location.longitude) {
+        if (typeof location === 'object' && location?.latitude && location?.longitude) {
           const lat = parseFloat(location.latitude);
           const lng = parseFloat(location.longitude);
           
@@ -163,18 +125,42 @@ export default function NewUserAndDriverMap({ userLocation, DriverLocation, Drop
         }
       }
       
-      console.warn('Invalid coordinates detected, using defaults:', location);
-      return DEFAULT_COORDINATES;
+      return null;
     } catch (error) {
       console.error('Error processing coordinates:', error);
-      return DEFAULT_COORDINATES;
+      return null;
     }
   }, []);
 
-  // Get safe coordinates for each location type
-  const driverCoords = getSafeCoordinates(DriverLocation, 'array');
-  const userCoords = getSafeCoordinates(userLocation, 'coords');
-  const dropCoords = getSafeCoordinates(DropLocation, 'array');
+  // Debounced coordinate processing
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      const driverCoords = getSafeCoordinates(DriverLocation, 'array');
+      const userCoords = getSafeCoordinates(userLocation, 'coords');
+      const dropCoords = getSafeCoordinates(DropLocation, 'array');
+
+      setDebouncedCoords({
+        driver: driverCoords,
+        user: userCoords,
+        drop: dropCoords
+      });
+    }, 1000);
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [DriverLocation, userLocation, DropLocation, getSafeCoordinates]);
+
+  // Use debounced coordinates or fallback
+  const driverCoords = debouncedCoords.driver || getSafeCoordinates(userLocation, 'coords') || DEFAULT_COORDINATES;
+  const userCoords = debouncedCoords.user || getSafeCoordinates(userLocation, 'coords') || DEFAULT_COORDINATES;
+  const dropCoords = debouncedCoords.drop;
 
   const getDistance = useCallback((lat1, lon1, lat2, lon2) => {
     try {
@@ -198,28 +184,64 @@ export default function NewUserAndDriverMap({ userLocation, DriverLocation, Drop
 
   // Calculate offset for nearby markers to prevent overlap
   const getMarkerOffset = useCallback((distance, isDriver = false) => {
-    if (distance > NEARBY_THRESHOLD) return { x: 0, y: 0 };
+    if (!distance || distance > NEARBY_THRESHOLD) return { x: 0, y: 0 };
     
-    const offsetDistance = 0.0001; // Small coordinate offset
+    const offsetDistance = 0.0001;
     return isDriver 
-      ? { x: -offsetDistance, y: offsetDistance }  // Driver slightly left and up
-      : { x: offsetDistance, y: -offsetDistance }; // User slightly right and down
+      ? { x: -offsetDistance, y: offsetDistance }
+      : { x: offsetDistance, y: -offsetDistance };
   }, []);
+
+  // Fit to markers function
+  const fitToMarkers = useCallback(() => {
+    if (!mapRef.current || !mapReady) return;
+    
+    try {
+      const coordinates = [];
+      
+      if (userCoords && userCoords.latitude !== DEFAULT_COORDINATES.latitude) {
+        coordinates.push(userCoords);
+      }
+      
+      if (driverCoords && driverCoords.latitude !== DEFAULT_COORDINATES.latitude && debouncedCoords.driver) {
+        coordinates.push(driverCoords);
+      }
+      
+      if (dropCoords && dropCoords.latitude !== DEFAULT_COORDINATES.latitude) {
+        coordinates.push(dropCoords);
+      }
+      
+      if (coordinates.length > 1) {
+        mapRef.current.fitToCoordinates(coordinates, {
+          edgePadding: { top: 100, right: 100, bottom: 200, left: 100 },
+          animated: true,
+        });
+      } else if (coordinates.length === 1) {
+        mapRef.current.animateToRegion({
+          ...coordinates[0],
+          latitudeDelta: LATITUDE_DELTA,
+          longitudeDelta: LONGITUDE_DELTA,
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Error fitting to markers:', error);
+    }
+  }, [mapReady, userCoords, driverCoords, dropCoords, debouncedCoords]);
 
   // Calculate distance and update state
   useEffect(() => {
-    if (driverCoords && userCoords) {
+    if (debouncedCoords.driver && debouncedCoords.user) {
       const distance = getDistance(
-        userCoords.latitude,
-        userCoords.longitude,
-        driverCoords.latitude,
-        driverCoords.longitude
+        debouncedCoords.user.latitude,
+        debouncedCoords.user.longitude,
+        debouncedCoords.driver.latitude,
+        debouncedCoords.driver.longitude
       );
       setDriverDistance(distance);
 
       // Animate pulse for nearby drivers
       if (distance < REACH_THRESHOLD) {
-        Animated.loop(
+        const animation = Animated.loop(
           Animated.sequence([
             Animated.timing(pulseAnim, {
               toValue: 1,
@@ -232,54 +254,56 @@ export default function NewUserAndDriverMap({ userLocation, DriverLocation, Drop
               useNativeDriver: true,
             }),
           ])
-        ).start();
+        );
+        animation.start();
+        
+        return () => animation.stop();
       }
     }
-  }, [driverCoords, userCoords, getDistance, pulseAnim]);
+  }, [debouncedCoords, getDistance, pulseAnim]);
 
-  // Fit map to show all markers
-  const fitToMarkers = useCallback(() => {
-    if (mapRef.current && mapReady) {
-      const coordinates = [userCoords, driverCoords, dropCoords].filter(Boolean);
-      
-      if (coordinates.length > 1) {
-        mapRef.current.fitToCoordinates(coordinates, {
-          edgePadding: { top: 100, right: 100, bottom: 200, left: 100 },
-          animated: true,
-        });
-      }
-    }
-  }, [mapReady, userCoords, driverCoords, dropCoords]);
-
+  // Auto-fit map when coordinates change
   useEffect(() => {
-    if (mapReady) {
+    if (mapReady && debouncedCoords.user) {
       const timer = setTimeout(() => {
         fitToMarkers();
-      }, 1000);
+      }, 1500);
       
       return () => clearTimeout(timer);
     }
-  }, [mapReady, fitToMarkers]);
+  }, [mapReady, debouncedCoords, fitToMarkers]);
 
   // Notification logic
-useEffect(() => {
-  if (
-    typeof driverDistance === 'number' &&
-    driverDistance < REACH_THRESHOLD &&
-    !notified &&
-    rideStatus !== 'in_progress' &&
-    rideStatus !== 'completed'
-  ) {
-    Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Driver Nearby!',
-        body: `Your driver is ${Math.round(driverDistance)}m away and approaching.`,
-      },
-      trigger: null,
-    });
-    setNotified(true);
-  }
-}, [driverDistance, notified, rideStatus]);
+  useEffect(() => {
+    if (
+      typeof driverDistance === 'number' &&
+      driverDistance > 0 &&
+      driverDistance < REACH_THRESHOLD &&
+      !notified &&
+      rideStatus !== 'in_progress' &&
+      rideStatus !== 'completed'
+    ) {
+      try {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Driver Nearby!',
+            body: `Your driver is ${Math.round(driverDistance)}m away and approaching.`,
+          },
+          trigger: null,
+        });
+        setNotified(true);
+      } catch (error) {
+        console.error('Error scheduling notification:', error);
+      }
+    }
+  }, [driverDistance, notified, rideStatus]);
+
+  // Handle directions error
+  const handleDirectionsError = useCallback((errorMessage) => {
+    console.warn('MapViewDirections Error:', errorMessage);
+    setDirectionsError(true);
+    setTimeout(() => setDirectionsError(false), 5000);
+  }, []);
 
   const isDriverNearby = driverDistance && driverDistance < NEARBY_THRESHOLD;
   const driverOffset = getMarkerOffset(driverDistance || 0, true);
@@ -289,7 +313,7 @@ useEffect(() => {
     <View style={styles.container}>
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        provider={mapProvider}
         style={styles.map}
         initialRegion={{
           latitude: userCoords.latitude,
@@ -305,30 +329,34 @@ useEffect(() => {
         rotateEnabled={true}
         scrollEnabled={true}
         zoomEnabled={true}
+        minZoomLevel={5}
+        maxZoomLevel={18}
       >
         {/* User Location Marker */}
-        <Marker
-          coordinate={{
-            latitude: userCoords.latitude + (isDriverNearby ? userOffset.x : 0),
-            longitude: userCoords.longitude + (isDriverNearby ? userOffset.y : 0),
-          }}
-          title="Your Location"
-          description="Pickup Point"
-          anchor={{ x: 0.5, y: 0.5 }}
-        >
-          <PersonIcon 
-            color="#4CAF50" 
-            size={35} 
-            isNearby={isDriverNearby}
-          />
-        </Marker>
-
-        {/* Driver Location Marker */}
-        {driverCoords && (
+        {userCoords && (
           <Marker
             coordinate={{
-              latitude: driverCoords.latitude + (isDriverNearby ? driverOffset.x : 0),
-              longitude: driverCoords.longitude + (isDriverNearby ? driverOffset.y : 0),
+              latitude: userCoords.latitude + (isDriverNearby ? userOffset.x : 0),
+              longitude: userCoords.longitude + (isDriverNearby ? userOffset.y : 0),
+            }}
+            title="Your Location"
+            description="Pickup Point"
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <PersonIcon 
+              color="#4CAF50" 
+              size={35} 
+              isNearby={isDriverNearby}
+            />
+          </Marker>
+        )}
+
+        {/* Driver Location Marker */}
+        {debouncedCoords.driver && (
+          <Marker
+            coordinate={{
+              latitude: debouncedCoords.driver.latitude + (isDriverNearby ? driverOffset.x : 0),
+              longitude: debouncedCoords.driver.longitude + (isDriverNearby ? driverOffset.y : 0),
             }}
             title="Driver"
             description={`${Math.round(driverDistance || 0)}m away`}
@@ -354,37 +382,69 @@ useEffect(() => {
           </Marker>
         )}
 
-        {/* Route from driver to user */}
-        {driverCoords && userCoords && rideStatus === 'driver_assigned' && (
+        {/* Route from driver to user - Android only */}
+        {isAndroid && 
+         debouncedCoords.driver && 
+         debouncedCoords.user && 
+         rideStatus === 'driver_assigned' && 
+         !directionsError && (
           <MapViewDirections
-            origin={driverCoords}
-            destination={userCoords}
+            origin={debouncedCoords.driver}
+            destination={debouncedCoords.user}
             apikey={GOOGLE_MAPS_APIKEY}
             strokeWidth={4}
             strokeColor="#2196F3"
             optimizeWaypoints={true}
-            onError={(errorMessage) => {
-              console.warn('MapViewDirections Error:', errorMessage);
+            mode="DRIVING"
+            onError={handleDirectionsError}
+            onReady={(result) => {
+              console.log('Route calculated - Distance:', result.distance, 'Duration:', result.duration);
             }}
           />
         )}
 
-        {/* Route from user to drop location */}
-        {userCoords && dropCoords && rideStatus === 'in_progress' && (
+        {/* Route from user to drop location - Android only */}
+        {isAndroid && 
+         debouncedCoords.user && 
+         dropCoords && 
+         rideStatus === 'in_progress' && 
+         !directionsError && (
           <MapViewDirections
-            origin={userCoords}
+            origin={debouncedCoords.user}
             destination={dropCoords}
             apikey={GOOGLE_MAPS_APIKEY}
             strokeWidth={4}
             strokeColor="#FF6B35"
             optimizeWaypoints={true}
-            onError={(errorMessage) => {
-              console.warn('MapViewDirections Error:', errorMessage);
+            mode="DRIVING"
+            onError={handleDirectionsError}
+            onReady={(result) => {
+              console.log('Route calculated - Distance:', result.distance, 'Duration:', result.duration);
             }}
+          />
+        )}
+
+        {/* iOS Polyline fallback */}
+        {!isAndroid && 
+         routeCoordinates && 
+         routeCoordinates.length > 0 && (
+          <Polyline 
+            coordinates={routeCoordinates} 
+            strokeWidth={4} 
+            strokeColor={rideStatus === 'driver_assigned' ? "#2196F3" : "#FF6B35"} 
+            lineDashPattern={[0]}
           />
         )}
       </MapView>
 
+      {/* Error indicator */}
+      {directionsError && (
+        <View style={styles.errorIndicator}>
+          <Text style={styles.errorText}>
+            Route calculation failed. Retrying...
+          </Text>
+        </View>
+      )}
 
       {/* Control Buttons */}
       <View style={styles.controlButtons}>
@@ -398,15 +458,33 @@ useEffect(() => {
         <TouchableOpacity 
           style={styles.controlButton}
           onPress={() => {
-            // Add refresh functionality here
             console.log('Refreshing location...');
+            setDirectionsError(false);
+            setNotified(false);
           }}
         >
           <Ionicons name="refresh" size={24} color="#2196F3" />
         </TouchableOpacity>
       </View>
 
-   
+      {/* Distance Card */}
+      {driverDistance && driverDistance > 0 && (
+        <View style={styles.distanceCard}>
+          <View style={styles.distanceInfo}>
+            <Ionicons name="car" size={20} color="#2196F3" />
+            <Text style={styles.distanceMainText}>
+              {Math.round(driverDistance)}m
+            </Text>
+            <Text style={styles.distanceSubText}>away</Text>
+          </View>
+          <View style={styles.etaInfo}>
+            <Ionicons name="time" size={16} color="#666" />
+            <Text style={styles.etaText}>
+              ETA: {Math.round(driverDistance / 50)} min
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -495,32 +573,21 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     opacity: 0.6,
   },
-  statusIndicator: {
+  errorIndicator: {
     position: 'absolute',
     top: 50,
     left: 20,
     right: 20,
+    backgroundColor: '#ff4444',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingVertical: 8,
+    borderRadius: 8,
     elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
-  statusText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  distanceText: {
+  errorText: {
     color: '#fff',
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 2,
-    opacity: 0.9,
   },
   controlButtons: {
     position: 'absolute',

@@ -6,7 +6,7 @@ import React, {
   memo, 
   useMemo 
 } from 'react';
-import { AppEventsLogger, Settings } from "react-native-fbsdk-next";
+
 import { 
   StyleSheet, 
   FlatList, 

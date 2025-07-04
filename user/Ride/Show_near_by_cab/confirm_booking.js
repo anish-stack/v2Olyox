@@ -18,16 +18,17 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import * as Location from 'expo-location';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE ,PROVIDER_DEFAULT } from 'react-native-maps';
 import { tokenCache } from '../../Auth/cache';
 import { useLocation } from '../../context/LocationContext';
 import { useRide } from '../../context/RideContext';
 import useNotificationPermission from '../../hooks/notification';
-
+import MapViewDirections from "react-native-maps-directions"
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
 const POLLING_INTERVAL = 8000;
 const BOOKING_TIMEOUT = 120000;
+const isAndroid = Platform.OS === "android"
 
 // Enhanced Color Palette
 const COLORS = {
@@ -85,7 +86,6 @@ const showNotification = (title, message, type = 'info') => {
   }
 };
 
-// Polyline decoding function
 const decodePolyline = (encoded) => {
   let points = [];
   let index = 0, len = encoded.length;
@@ -112,6 +112,7 @@ const decodePolyline = (encoded) => {
   }
   return points;
 };
+
 
 export default function BookingConfirmation() {
   const route = useRoute();
@@ -527,8 +528,7 @@ export default function BookingConfirmation() {
         <MapView
           ref={mapRef}
           style={styles.map}
-          provider={PROVIDER_GOOGLE}
-          googleMapId={GOOGLE_MAPS_APIKEY}
+          provider={isAndroid ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
           initialRegion={{
             latitude: (origin.latitude + destination.latitude) / 2,
             longitude: (origin.longitude + destination.longitude) / 2,
@@ -536,37 +536,69 @@ export default function BookingConfirmation() {
             longitudeDelta: Math.abs(origin.longitude - destination.longitude) * 2 || 0.01,
           }}
           onMapReady={fitMapToMarkers}
-          showsUserLocation={false}
-          showsMyLocationButton={false}
-          showsCompass={false}
+          showsUserLocation={true}
+          showsCompass={true}
+          showsMyLocationButton={true}
+          minZoomLevel={5}
+          maxZoomLevel={18}
           toolbarEnabled={false}
         >
+          {/* Pickup marker with custom styling */}
           <Marker
             coordinate={{ latitude: origin.latitude, longitude: origin.longitude }}
             title="Pickup"
             description={pickup?.description || 'Pickup location'}
           >
             <View style={styles.customMarker}>
-              <Icon name="map-marker-circle" size={32} color={COLORS.primary} />
+              <Icon name="circle" size={12} color="#35C14F" />
             </View>
           </Marker>
+
+          {/* Drop-off marker with custom styling */}
           <Marker
             coordinate={{ latitude: destination.latitude, longitude: destination.longitude }}
             title="Drop-off"
             description={dropoff?.description || 'Destination'}
           >
             <View style={styles.customMarker}>
-              <Icon name="flag-checkered" size={32} color={COLORS.secondary} />
+              <Icon name="square" size={12} color="#D93A2D" />
             </View>
           </Marker>
 
-          <Polyline
-            coordinates={coordinates}
-            strokeWidth={4}
-            strokeColor={COLORS.primary}
-            lineDashPattern={[0]}
-          />
+          {/* Platform-specific route rendering */}
+          {destination && (
+            <>
+              {/* Android: Use MapViewDirections for real-time routing */}
+              {isAndroid && (
+                <MapViewDirections
+                  origin={{
+                    latitude: origin.latitude,
+                    longitude: origin.longitude,
+                  }}
+                  destination={{
+                    latitude: destination.latitude,
+                    longitude: destination.longitude,
+                  }}
+                  apikey={GOOGLE_MAPS_APIKEY}
+                  strokeWidth={4}
+                  strokeColor="#000000"
+                  mode="DRIVING"
+                  onError={(errorMessage) => {
+                    console.warn("MapViewDirections Error:", errorMessage)
+                  }}
+                />
+              )}
 
+              {/* iOS: Use Polyline with fetched coordinates */}
+              {!isAndroid && coordinates.length > 0 && (
+                <Polyline
+                  coordinates={coordinates}
+                  strokeWidth={4}
+                  strokeColor="#000000"
+                />
+              )}
+            </>
+          )}
         </MapView>
       ) : (
         <View style={styles.mapPlaceholder}>
@@ -574,8 +606,16 @@ export default function BookingConfirmation() {
           <Text style={styles.mapPlaceholderText}>Loading map...</Text>
         </View>
       )}
+
+      {/* Recenter button */}
+      <TouchableOpacity style={styles.recenterButton} onPress={fitMapToMarkers}>
+        <Icon name="crosshairs" size={24} color="#000" />
+      </TouchableOpacity>
+
+
     </View>
   ));
+
 
   const LocationCard = React.memo(() => (
     <View style={styles.locationCard}>
@@ -871,6 +911,14 @@ const styles = StyleSheet.create({
   customMarker: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 
   // Location Card Styles

@@ -74,7 +74,6 @@ export default function RunningRide() {
 
         try {
             if (userData?.on_ride_id) {
-                console.log("📦 Fetching ride details for ride ID:", userData.on_ride_id);
 
                 const response = await axios.get(
                     `https://www.appv2.olyox.com/rider/${userData.on_ride_id}`,
