@@ -3,7 +3,8 @@ const {
   getCachedOrFetchTolls,
   getCachedOrFetchWeather,
 } = require('../services/supporter');
-const RidesSuggestionModel = require('./RideSuggestion.model');
+const RidesSuggestionModel = require('../../models/Admin/RidesSuggestion.model');
+
 
 // Helper function to determine if it's night time based on current hour
 const isNightTimeNow = (timezone = 'Asia/Kolkata') => {
