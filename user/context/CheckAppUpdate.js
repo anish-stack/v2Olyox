@@ -80,7 +80,7 @@ export default function OlyoxAppUpdate({ children }) {
                         </View>
 
                         {/* Clean Title */}
-                        <Text style={styles.title}>Update Available AT 07-07-2025 1.0.5 Version</Text>
+                        <Text style={styles.title}>Update Available AT 07-07-2025 1.0.5 Version (2)</Text>
 
                         <Text style={styles.subtitle}>
                             New features are ready for Olyox

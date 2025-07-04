@@ -236,11 +236,7 @@ const App = () => {
         });
       } else {
         console.log('🏠 Navigating to Home screen');
-        navigationRef.current.navigate("Home", {
-          fromNotification: true,
-          timestamp: Date.now(),
-          notificationData: data
-        });
+       
       }
     } catch (error) {
       console.error('❌ Navigation error:', error);

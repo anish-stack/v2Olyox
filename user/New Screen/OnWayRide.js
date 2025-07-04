@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     Modal,
     FlatList,
+    Platform,
     Alert,
     ActivityIndicator,
     SafeAreaView,
@@ -490,7 +491,7 @@ const styles = StyleSheet.create({
         color: "#666",
     },
     header: {
-        marginTop: 35,
+        marginTop: Platform.OS === 'android' ? 35 : 0,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",

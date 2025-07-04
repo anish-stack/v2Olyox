@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,9 @@ import {
   StyleSheet,
   ActivityIndicator,
   Linking,
+  StatusBar,
 } from 'react-native';
-import { useNavigation, useFocusEffect, useNavigationState } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import {
@@ -26,722 +27,646 @@ import { colors } from '../../NewConstant';
 import { useFetchUserDetails } from '../../../hooks/New Hookes/RiderDetailsHooks';
 
 const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1/rider';
-const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/'; // Replace with your sound URL
+const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/';
 
-const HeaderNew = ({ isRefresh }) => {
+// Memoized components to prevent re-renders
+const StatusIndicator = React.memo(({ isOnline, loading }) => (
+  <View style={styles.statusContainer}>
+    <View style={styles.statusWrapper}>
+      <View
+        style={[
+          styles.statusDot,
+          { 
+            backgroundColor: loading ? colors.gray400 : (isOnline ? '#00C851' : '#FF4444'),
+            shadowColor: loading ? colors.gray400 : (isOnline ? '#00C851' : '#FF4444'),
+          },
+        ]}
+      />
+      <Text style={[styles.statusText, { color: loading ? colors.gray600 : colors.textPrimary }]}>
+        {loading ? 'Updating...' : (isOnline ? 'Online' : 'Offline')}
+      </Text>
+    </View>
+  </View>
+));
+
+const ActiveRideButton = React.memo(({ onPress, activeRideData }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  if (!activeRideData || 
+      (activeRideData?.data?.ride_status === 'completed' && 
+       activeRideData?.data?.payment_status === 'completed')) {
+    return null;
+  }
+
+  return (
+    <TouchableOpacity style={styles.activeRideButton} onPress={onPress}>
+      <Animated.View style={[styles.pulseContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <View style={styles.activeRideContent}>
+          <MaterialCommunityIcons name="car" size={16} color="#FFFFFF" />
+          <Text style={styles.activeRideText}>ACTIVE RIDE</Text>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
+
+const HeaderButton = React.memo(({ icon, onPress, style, iconColor = colors.textSecondary }) => (
+  <TouchableOpacity style={[styles.headerButton, style]} onPress={onPress}>
+    <FontAwesome name={icon} size={20} color={iconColor} />
+  </TouchableOpacity>
+));
+
+const MenuModal = React.memo(({ 
+  visible, 
+  onClose, 
+  onLogout, 
+  onRefresh, 
+  onNavigate, 
+  loading, 
+  refreshing, 
+  userData 
+}) => {
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  const menuItems = useMemo(() => [
+    {
+      id: 'profile',
+      icon: 'account-circle',
+      title: 'Profile',
+      color: '#4285F4',
+      onPress: () => onNavigate('Profile'),
+    },
+    {
+      id: 'notifications',
+      icon: 'bell-outline',
+      title: 'Notification Settings',
+      color: '#FF9800',
+      onPress: async () => await Linking.openURL(NOTIFICATION_SOUND_URL),
+    },
+    {
+      id: 'recharge',
+      icon: 'wallet-outline',
+      title: 'Recharge Wallet',
+      color: '#4CAF50',
+      onPress: () => onNavigate('Recharge', {
+        showOnlyBikePlan: userData?.rideVehicleInfo?.vehicleName === "2 Wheeler" || 
+                          userData?.rideVehicleInfo?.vehicleName === "Bike",
+        role: userData?.category,
+        firstRecharge: userData?.isFirstRechargeDone || false,
+      }),
+    },
+    {
+      id: 'refresh',
+      icon: 'refresh',
+      title: refreshing ? 'Refreshing...' : 'Refresh Dashboard',
+      color: '#2196F3',
+      onPress: onRefresh,
+      disabled: refreshing,
+      loading: refreshing,
+    },
+  ], [refreshing, userData, onNavigate, onRefresh]);
+
+  return (
+    <Modal
+      animationType="none"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Animated.View
+          style={[
+            styles.menuContainer,
+            {
+              transform: [
+                {
+                  translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [400, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <View style={styles.menuHandle} />
+          
+          <View style={styles.menuHeader}>
+            <Text style={styles.menuTitle}>Menu</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.menuContent}>
+            {menuItems.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.menuItem, item.disabled && styles.menuItemDisabled]}
+                onPress={item.onPress}
+                disabled={item.disabled}
+              >
+                <View style={[styles.menuIconContainer, { backgroundColor: `${item.color}15` }]}>
+                  {item.loading ? (
+                    <ActivityIndicator size="small" color={item.color} />
+                  ) : (
+                    <MaterialCommunityIcons name={item.icon} size={22} color={item.color} />
+                  )}
+                </View>
+                <Text style={styles.menuItemText}>{item.title}</Text>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            ))}
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={[styles.menuItem, styles.logoutItem]}
+              onPress={onLogout}
+              disabled={loading}
+            >
+              <View style={[styles.menuIconContainer, { backgroundColor: '#FF444415' }]}>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FF4444" />
+                ) : (
+                  <MaterialCommunityIcons name="logout" size={22} color="#FF4444" />
+                )}
+              </View>
+              <Text style={[styles.menuItemText, { color: '#FF4444' }]}>
+                {loading ? 'Logging out...' : 'Logout'}
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#FF4444" />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+});
+
+const HeaderNew = React.memo(({ isRefresh }) => {
   const navigation = useNavigation();
   const { fetchUserDetails: reCallMe } = useFetchUserDetails();
+  
+  // Consolidated state
+  const [state, setState] = useState({
+    userData: null,
+    isOnline: false,
+    activeRideData: null,
+    menuVisible: false,
+    loading: false,
+    refreshing: false,
+  });
 
-  // All state management internal
-  const [user_data, setUserData] = useState(null);
-  const [isOnline, setIsOnline] = useState(false);
-  const [activeRideData, setActiveRideData] = useState(null);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(1));
-  const [refreshing, setRefreshing] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const intervalRef = useRef(null);
 
-  // Utility function for API calls with token
+  // Memoized API helper
   const makeAuthenticatedRequest = useCallback(async (url, options = {}) => {
     const token = await SecureStore.getItemAsync("auth_token_cab");
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
+    if (!token) throw new Error('No authentication token found');
+    
     return axios({
       ...options,
       url,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { ...options.headers, Authorization: `Bearer ${token}` },
     });
   }, []);
 
+  // Optimized state updater
+  const updateState = useCallback((updates) => {
+    setState(prev => ({ ...prev, ...updates }));
+  }, []);
 
-  useEffect(() => {
-    reCallMe()
-    fetchUserDetails()
-  }, [isRefresh])
-
-  // Enhanced logout function with proper error handling
-  const handleLogout = useCallback(
-    async (retryCount = 0, maxRetries = 3) => {
-      try {
-        setLoading(true);
-        if (isOnline === false) {
-          setIsOnline(true);
-        }
-
-        // Always delete the token first
-        await SecureStore.deleteItemAsync("auth_token_cab");
-
-        if (!user_data?._id) {
-          console.log("No user ID available", user_data);
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Onboarding" }],
-          });
-          return;
-        }
-        await toggleOnlineStatus();
-
-        // Attempt the logout API call
-        const response = await axios.get(
-          `${API_BASE_URL}/rider-logout/${user_data._id}`
-        );
-
-        console.log("Logout successful:", response.data);
-
-
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Onboarding" }],
-        });
-
-        BackHandler.exitApp();
-      } catch (error) {
-        console.error(`Logout Error (Attempt ${retryCount + 1}):`, error);
-
-        if (retryCount < maxRetries) {
-          console.log(`Retrying logout in 4 seconds... (Attempt ${retryCount + 1}/${maxRetries})`);
-
-          setTimeout(() => {
-            handleLogout(retryCount + 1, maxRetries);
-          }, 4000);
-        } else {
-          const errorMessage =
-            error?.response?.data?.message && error?.response?.data?.message !== "undefined"
-              ? error.response.data.message
-              : "Please try again. If you have an ongoing ride, please complete it first.";
-
-          Alert.alert("Unable to Logout", errorMessage, [
-            {
-              text: "Try Again",
-              onPress: () => handleLogout(0, maxRetries),
-            },
-            {
-              text: "Force Logout",
-              onPress: () => {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: "Onboarding" }],
-                });
-              },
-            },
-          ]);
-        }
-      } finally {
-        setLoading(false);
-        setMenuVisible(false);
-      }
-    },
-    [navigation, user_data]
-  );
-
-  // Toggle online/offline status
-  const toggleOnlineStatus = useCallback(async () => {
-    try {
-      console.log("Toggling online status, current status:", isOnline);
-      setLoading(true);
-
-      const expireDate = new Date(user_data?.RechargeData?.expireData);
-      const currentDate = new Date();
-      const goingOnline = !isOnline;
-
-      console.log("Setting status to:", goingOnline, "type:", typeof goingOnline);
-
-      // Check recharge expiry when going online
-      if (goingOnline && expireDate < currentDate) {
-        Alert.alert(
-          "Recharge Expired",
-          "You have been set to offline due to expired recharge.",
-          [
-            {
-              text: "Recharge Now",
-              style: "default",
-              onPress: () => navigation.navigate("Recharge", {
-                showOnlyBikePlan:
-                  user_data?.rideVehicleInfo?.vehicleName === "2 Wheeler" ||
-                  user_data?.rideVehicleInfo?.vehicleName === "Bike",
-                role: user_data?.category,
-                firstRecharge: user_data?.isFirstRechargeDone || false,
-              }),
-            },
-            {
-              text: "Cancel",
-              style: "cancel",
-            },
-          ]
-        );
-        setLoading(false);
-        return;
-      }
-
-      // Toggle status API call
-      const response = await makeAuthenticatedRequest(
-        `${API_BASE_URL}/toggleWorkStatusOfRider`,
-        {
-          method: 'POST',
-          data: { status: goingOnline },
-        }
-      );
-
-      // Refresh user data
-      await fetchUserDetails();
-
-      if (response.data.success) {
-        const newStatus = response.data.cabRider?.status === "online";
-        console.log("New status from API:", response.data.cabRider?.status);
-
-        setIsOnline(newStatus);
-        navigation.replace('Home');
-        // Animate the status change
-        Animated.sequence([
-          Animated.timing(fadeAnim, {
-            toValue: 0.7,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }
-    } catch (error) {
-      console.error(
-        "Toggle Status Error:",
-        error?.response?.data?.message || error.message
-      );
-      setIsOnline(null);
-
-      Alert.alert(
-        "Toggle Status Failed",
-        error?.response?.data?.message || "Something went wrong",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [isOnline, user_data, navigation, makeAuthenticatedRequest, fadeAnim]);
-
-  // Fetch user details
+  // Fetch user details with error handling
   const fetchUserDetails = useCallback(async () => {
     try {
-      console.log("Fetching user details");
-
       const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user-details`);
-
       if (response.data.partner) {
-        console.log("User details fetched successfully");
-        setUserData(response.data.partner);
-
-        const isAvailable = response.data.partner.isAvailable === true;
-        setIsOnline(isAvailable);
-        console.log("Setting isOnline to:", isAvailable, "type:", typeof isAvailable);
-
-        const userId = response?.data?.partner?._id ? String(response.data.partner._id) : "";
-        console.log("Initializing socket with userId:", userId);
-
-        // await initializeSocket({ userId });
-        return response.data.partner;
+        const userData = response.data.partner;
+        const isOnline = userData.isAvailable === true;
+        
+        updateState({ 
+          userData, 
+          isOnline,
+          loading: false 
+        });
+        
+        return userData;
       }
     } catch (error) {
-      console.error(
-        "Error fetching user details:",
-        error?.response?.data?.message || error.message
-      );
+      console.error('Error fetching user details:', error?.response?.data?.message || error.message);
+      updateState({ loading: false });
     }
-  }, [makeAuthenticatedRequest]);
+  }, [makeAuthenticatedRequest, updateState]);
 
   // Fetch active ride details
   const fetchActiveRideDetails = useCallback(async () => {
     try {
-      if (user_data?.on_ride_id) {
-
-        const response = await axios.get(
-          `https://www.appv2.olyox.com/rider/${user_data.on_ride_id}`
-        );
-
+      if (state.userData?.on_ride_id) {
+        const response = await axios.get(`https://www.appv2.olyox.com/rider/${state.userData.on_ride_id}`);
         if (response.data) {
-          // console.log("Active ride details fetched successfully:", response.data.data);
-          setActiveRideData(response.data);
+          updateState({ activeRideData: response.data });
         }
       } else {
-        setActiveRideData(null);
+        updateState({ activeRideData: null });
       }
     } catch (error) {
-      console.error(
-        "Error fetching ride details:",
-        error?.response?.data || error.message
-      );
-      setActiveRideData(null);
+      console.error('Error fetching ride details:', error?.response?.data || error.message);
+      updateState({ activeRideData: null });
     }
-  }, [user_data?.on_ride_id]);
+  }, [state.userData?.on_ride_id, updateState]);
 
-  // Refresh dashboard
-  const onSoftRefresh = useCallback(async () => {
+  // Optimized refresh function
+  const handleRefresh = useCallback(async () => {
+    if (state.refreshing) return;
+    
     try {
-      setRefreshing(true);
-      await fetchUserDetails();
-      await fetchActiveRideDetails();
-
-      // Show success feedback
-      Alert.alert(
-        "Dashboard Refreshed",
-        "Your dashboard has been updated successfully.",
-        [{ text: "OK" }]
-      );
+      updateState({ refreshing: true });
+      await Promise.all([
+        fetchUserDetails(),
+        fetchActiveRideDetails(),
+        reCallMe()
+      ]);
+      
+      Alert.alert("Success", "Dashboard refreshed successfully", [{ text: "OK" }]);
     } catch (error) {
-      Alert.alert(
-        "Refresh Failed",
-        "Unable to refresh dashboard. Please try again.",
-        [{ text: "OK" }]
-      );
+      Alert.alert("Error", "Failed to refresh dashboard", [{ text: "OK" }]);
     } finally {
-      setRefreshing(false);
+      updateState({ refreshing: false });
     }
-  }, [fetchUserDetails, fetchActiveRideDetails]);
+  }, [state.refreshing, fetchUserDetails, fetchActiveRideDetails, reCallMe, updateState]);
 
-  // Initialize data on component mount
+  // Toggle online status
+  const toggleOnlineStatus = useCallback(async () => {
+    if (state.loading) return;
+    
+    try {
+      updateState({ loading: true });
+      
+      const expireDate = new Date(state.userData?.RechargeData?.expireData);
+      const currentDate = new Date();
+      const goingOnline = !state.isOnline;
+
+      if (goingOnline && expireDate < currentDate) {
+        Alert.alert("Recharge Expired", "Please recharge to go online", [
+          {
+            text: "Recharge Now",
+            onPress: () => navigation.navigate("Recharge", {
+              showOnlyBikePlan: state.userData?.rideVehicleInfo?.vehicleName === "2 Wheeler" ||
+                               state.userData?.rideVehicleInfo?.vehicleName === "Bike",
+              role: state.userData?.category,
+              firstRecharge: state.userData?.isFirstRechargeDone || false,
+            }),
+          },
+          { text: "Cancel", style: "cancel" },
+        ]);
+        updateState({ loading: false });
+        return;
+      }
+
+      const response = await makeAuthenticatedRequest(`${API_BASE_URL}/toggleWorkStatusOfRider`, {
+        method: 'POST',
+        data: { status: goingOnline },
+      });
+
+      if (response.data.success) {
+        const newStatus = response.data.cabRider?.status === "online";
+        updateState({ isOnline: newStatus, loading: false });
+        
+        // Animate status change
+        Animated.sequence([
+          Animated.timing(fadeAnim, { toValue: 0.7, duration: 200, useNativeDriver: true }),
+          Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        ]).start();
+        
+        navigation.replace('Home');
+      }
+    } catch (error) {
+      console.error('Toggle Status Error:', error?.response?.data?.message || error.message);
+      Alert.alert("Error", error?.response?.data?.message || "Failed to toggle status");
+      updateState({ loading: false });
+    }
+  }, [state.loading, state.isOnline, state.userData, makeAuthenticatedRequest, updateState, fadeAnim, navigation]);
+
+  // Enhanced logout with retry logic
+  const handleLogout = useCallback(async (retryCount = 0, maxRetries = 3) => {
+    try {
+      updateState({ loading: true });
+      
+      await SecureStore.deleteItemAsync("auth_token_cab");
+      
+      if (!state.userData?._id) {
+        navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] });
+        return;
+      }
+
+      if (state.isOnline) {
+        await toggleOnlineStatus();
+      }
+
+      await axios.get(`${API_BASE_URL}/rider-logout/${state.userData._id}`);
+      
+      navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] });
+      BackHandler.exitApp();
+    } catch (error) {
+      console.error(`Logout Error (Attempt ${retryCount + 1}):`, error);
+      
+      if (retryCount < maxRetries) {
+        setTimeout(() => handleLogout(retryCount + 1, maxRetries), 2000);
+      } else {
+        Alert.alert("Logout Failed", "Please try again or force logout", [
+          { text: "Try Again", onPress: () => handleLogout(0, maxRetries) },
+          { 
+            text: "Force Logout", 
+            onPress: () => navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] })
+          },
+        ]);
+      }
+    } finally {
+      updateState({ loading: false, menuVisible: false });
+    }
+  }, [state.userData, state.isOnline, navigation, toggleOnlineStatus, updateState]);
+
+  // Navigation handler
+  const handleNavigation = useCallback((screen, params) => {
+    updateState({ menuVisible: false });
+    navigation.navigate(screen, params);
+  }, [navigation, updateState]);
+
+  // Initialize data
   useEffect(() => {
     fetchUserDetails();
-  }, [fetchUserDetails]);
+  }, []);
 
+  // Handle refresh prop
   useEffect(() => {
-    let interval;
+    if (isRefresh === true) {
+      handleRefresh();
+    }
+  }, [isRefresh, handleRefresh]);
 
+  // Active ride polling
+  useEffect(() => {
     const currentRouteName = navigation.getState()?.routes?.[navigation.getState().index]?.name;
-    console.log("Current route name:", currentRouteName);
+    const shouldPoll = state.userData?.on_ride_id && currentRouteName === 'Home';
 
-    const shouldFetch =
-      user_data?.on_ride_id && currentRouteName === 'Home';
-
-    if (shouldFetch) {
-      console.log("✅ On 'Home' screen with active ride. Starting interval to fetch ride details");
-
-      // Fetch once immediately
+    if (shouldPoll) {
       fetchActiveRideDetails();
-
-      // Then every 4 seconds
-      interval = setInterval(() => {
-        console.log("⏱️ Fetching active ride details every 4 seconds");
-        fetchActiveRideDetails();
-      }, 15000);
-    } else {
-      console.log("🔕 Conditions not met. Skipping ride detail polling.");
+      intervalRef.current = setInterval(fetchActiveRideDetails, 15000);
     }
 
     return () => {
-      if (interval) {
-        console.log("🧹 Clearing interval");
-        clearInterval(interval);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, [user_data?.on_ride_id, fetchActiveRideDetails, navigation]);
+  }, [state.userData?.on_ride_id, fetchActiveRideDetails, navigation]);
 
-
-  // Handle active ride button press
+  // Memoized handlers
   const handleActiveRidePress = useCallback(() => {
-    if (activeRideData) {
-      // Navigate to active ride screen
-      navigation.navigate('start', { rideData: user_data?.on_ride_id });
+    if (state.activeRideData) {
+      navigation.navigate('start', { rideData: state.userData?.on_ride_id });
     }
-  }, [activeRideData, navigation]);
+  }, [state.activeRideData, state.userData?.on_ride_id, navigation]);
 
-  // Handle notification press
   const handleNotificationPress = useCallback(() => {
     navigation.navigate('Notifications');
   }, [navigation]);
 
-  // Menu component with enhanced styling
-  const Menu = useMemo(() => {
-    if (!menuVisible) return null;
-
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={menuVisible}
-        onRequestClose={() => setMenuVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setMenuVisible(false)}
-        >
-          <View style={styles.menuContainer}>
-            <View style={styles.menuHandle} />
-
-            <View style={styles.menuHeader}>
-              <Text style={styles.menuHeaderText}>Driver Menu</Text>
-              <TouchableOpacity
-                onPress={() => setMenuVisible(false)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                navigation.navigate("Profile");
-              }}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
-                <MaterialCommunityIcons
-                  name="account"
-                  size={20}
-                  color={colors.red400}
-                />
-              </View>
-              <Text style={styles.menuText}>Profile</Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={async () => {
-                setMenuVisible(false);
-                await Linking.openURL(NOTIFICATION_SOUND_URL);
-
-              }}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
-                <MaterialCommunityIcons
-                  name="bell"
-                  size={20}
-                  color={colors.red400}
-                />
-              </View>
-              <Text style={styles.menuText}>Set A Notification</Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-
-
-            <View style={styles.menuDivider} />
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                navigation.navigate("Recharge", {
-                  showOnlyBikePlan:
-                    user_data?.rideVehicleInfo?.vehicleName === "2 Wheeler" ||
-                    user_data?.rideVehicleInfo?.vehicleName === "Bike",
-                  role: user_data?.category,
-                  firstRecharge: user_data?.isFirstRechargeDone || false,
-                });
-              }}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
-                <MaterialCommunityIcons
-                  name="wallet"
-                  size={20}
-                  color={colors.red400}
-                />
-              </View>
-              <Text style={styles.menuText}>Recharge</Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.menuDivider} />
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                onSoftRefresh();
-              }}
-              disabled={refreshing}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.red50 }]}>
-                {refreshing ? (
-                  <ActivityIndicator size="small" color={colors.red400} />
-                ) : (
-                  <MaterialCommunityIcons
-                    name="refresh"
-                    size={20}
-                    color={colors.red400}
-                  />
-                )}
-              </View>
-              <Text style={styles.menuText}>
-                {refreshing ? 'Refreshing...' : 'Refresh Dashboard'}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.menuDivider} />
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={handleLogout}
-              disabled={loading}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: colors.red100 }]}>
-                {loading ? (
-                  <ActivityIndicator size="small" color={colors.red500} />
-                ) : (
-                  <MaterialCommunityIcons
-                    name="logout"
-                    size={20}
-                    color={colors.red500}
-                  />
-                )}
-              </View>
-              <Text style={[styles.menuText, { color: colors.red500 }]}>
-                {loading ? 'Logging out...' : 'Logout'}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color={colors.red500}
-              />
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-    );
-  }, [menuVisible, navigation, handleLogout, onSoftRefresh, user_data, loading, refreshing]);
-
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        {/* Left side - Logo/Title */}
-        <View style={styles.leftSection}>
-          <Text style={styles.appTitle}>Olyox</Text>
-          <Text style={styles.appSubtitle}>Driver</Text>
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.container}>
+        <View style={styles.header}>
+          {/* Left Section - App Branding */}
+          <View style={styles.leftSection}>
+            <Text style={styles.appTitle}>Olyox</Text>
+            <Text style={styles.appSubtitle}>Driver</Text>
+          </View>
+
+          {/* Center/Right Section */}
+          <View style={styles.rightSection}>
+            {!state.activeRideData ? (
+              // Online/Offline Controls
+              <Animated.View style={[styles.statusSection, { opacity: fadeAnim }]}>
+                <StatusIndicator isOnline={state.isOnline} loading={state.loading} />
+                <Switch
+                  trackColor={{ false: '#E0E0E0', true: '#00C851' }}
+                  thumbColor={state.isOnline ? '#FFFFFF' : '#F4F4F4'}
+                  ios_backgroundColor="#E0E0E0"
+                  onValueChange={toggleOnlineStatus}
+                  value={state.isOnline}
+                  disabled={state.loading}
+                  style={styles.switch}
+                />
+              </Animated.View>
+            ) : (
+              // Active Ride Button
+              <ActiveRideButton 
+                onPress={handleActiveRidePress} 
+                activeRideData={state.activeRideData} 
+              />
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <HeaderButton 
+                icon="bell" 
+                onPress={handleNotificationPress}
+                iconColor={colors.textSecondary}
+              />
+              <HeaderButton 
+                icon="bars" 
+                onPress={() => updateState({ menuVisible: true })}
+                style={styles.menuButton}
+                iconColor="#FFFFFF"
+              />
+            </View>
+          </View>
         </View>
 
-        {/* Center - Online/Offline Switch */}
-
-        {!activeRideData ? (
-          // No active ride view
-          <Animated.View style={[styles.centerSection, { opacity: fadeAnim }]}>
-            <View style={styles.statusContainer}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: isOnline ? colors.success : colors.red300 },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusText,
-                  { color: isOnline ? colors.success : colors.red400 },
-                ]}
-              >
-                {isOnline ? 'On Duty' : 'Off Duty'}
-              </Text>
-            </View>
-
-            <Switch
-              trackColor={{
-                false: colors.red100,
-                true: colors.success,
-              }}
-              thumbColor={isOnline ? colors.backgroundPaper : colors.red200}
-              ios_backgroundColor={colors.red100}
-              onValueChange={toggleOnlineStatus}
-              value={isOnline}
-              disabled={loading}
-            />
-
-            {/* Notification Bell */}
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={handleNotificationPress}
-            >
-              <FontAwesome name="bell" size={18} color={colors.red400} />
-            </TouchableOpacity>
-
-            {/* Menu Button */}
-            <TouchableOpacity
-              style={[styles.iconButton, styles.menuButton]}
-              onPress={() => setMenuVisible(true)}
-            >
-              <FontAwesome name="bars" size={18} color={colors.textLight} />
-            </TouchableOpacity>
-          </Animated.View>
-        ) : (
-          // Active ride view (only if not completed with payment)
-          <View style={styles.rightSection}>
-            {activeRideData?.data?.ride_status !== 'completed' ||
-              activeRideData?.data?.payment_status !== 'completed' ? (
-              <>
-                {/* Active Ride Button */}
-                <TouchableOpacity
-                  style={styles.activeRideButton}
-                  onPress={handleActiveRidePress}
-                >
-                  <MaterialCommunityIcons
-                    name="car-speed-limiter"
-                    size={16}
-                    color={colors.textLight}
-                  />
-                  <Text style={styles.activeRideText}>Active</Text>
-                  <View style={styles.pulseDot} />
-                </TouchableOpacity>
-
-                {/* Notification Bell */}
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={handleNotificationPress}
-                >
-                  <FontAwesome name="bell" size={18} color={colors.red400} />
-                </TouchableOpacity>
-
-                {/* Menu Button */}
-                <TouchableOpacity
-                  style={[styles.iconButton, styles.menuButton]}
-                  onPress={() => setMenuVisible(true)}
-                >
-                  <FontAwesome name="bars" size={18} color={colors.textLight} />
-                </TouchableOpacity>
-              </>
-            ) : null}
-          </View>
-        )}
-
-
-
+        {/* Menu Modal */}
+        <MenuModal
+          visible={state.menuVisible}
+          onClose={() => updateState({ menuVisible: false })}
+          onLogout={handleLogout}
+          onRefresh={handleRefresh}
+          onNavigate={handleNavigation}
+          loading={state.loading}
+          refreshing={state.refreshing}
+          userData={state.userData}
+        />
       </View>
-
-      {Menu}
-    </View>
+    </>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.backgroundPaper,
-
-    shadowColor: colors.textDark,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 4.65,
-    elevation: 6,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: colors.backgroundPaper,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
   },
   leftSection: {
-    flex: 1,
-  },
-  centerSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     flex: 1,
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 2,
     justifyContent: 'flex-end',
-    flex: 1,
   },
   appTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.red400,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: -0.5,
   },
   appSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
+    fontSize: 13,
+    color: '#666666',
+    fontWeight: '500',
     marginTop: -2,
   },
-  statusContainer: {
+  statusSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
+  statusContainer: {
+    marginRight: 12,
+  },
+  statusWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statusText: {
     fontSize: 14,
     fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  switch: {
+    transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
   },
   activeRideButton: {
+    marginRight: 12,
+  },
+  pulseContainer: {
+    backgroundColor: '#FF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    shadowColor: '#FF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  activeRideContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.red400,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    position: 'relative',
   },
   activeRideText: {
-    color: colors.textLight,
+    color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
+    fontWeight: '700',
+    marginLeft: 6,
+    letterSpacing: 0.5,
   },
-  pulseDot: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.red200,
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  iconButton: {
-    padding: 10,
-    marginLeft: 4,
-    borderRadius: 8,
+  headerButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    backgroundColor: '#F8F8F8',
   },
   menuButton: {
-    backgroundColor: colors.red400,
+    backgroundColor: '#1A1A1A',
   },
-  // Modal styles
+  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: colors.backgroundOverlay,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   menuContainer: {
-    backgroundColor: colors.backgroundPaper,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    paddingBottom: 35,
-    maxHeight: '70%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 34,
+    maxHeight: '75%',
   },
   menuHandle: {
-    width: 50,
-    height: 5,
-    backgroundColor: colors.red200,
-    borderRadius: 3,
+    width: 40,
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
     marginBottom: 20,
@@ -750,44 +675,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 25,
+    paddingHorizontal: 24,
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    borderBottomColor: '#F0F0F0',
   },
-  menuHeaderText: {
+  menuTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.red400,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   closeButton: {
-    padding: 5,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+  },
+  menuContent: {
+    paddingTop: 8,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 25,
-    paddingVertical: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
   },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  menuItemDisabled: {
+    opacity: 0.6,
+  },
+  menuIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: 16,
   },
-  menuText: {
+  menuItemText: {
     fontSize: 16,
-    color: colors.textPrimary,
-    flex: 1,
     fontWeight: '500',
+    color: '#1A1A1A',
+    flex: 1,
   },
   menuDivider: {
     height: 1,
-    backgroundColor: colors.borderLight,
-    marginHorizontal: 25,
-    marginVertical: 5,
+    backgroundColor: '#F0F0F0',
+    marginHorizontal: 24,
+    marginVertical: 8,
+  },
+  logoutItem: {
+    marginTop: 8,
   },
 });
 

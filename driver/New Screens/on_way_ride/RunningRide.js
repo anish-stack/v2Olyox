@@ -13,487 +13,500 @@ import {
     Dimensions,
     Image,
     FlatList,
+    StatusBar,
+    Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import HeaderNew from "../components/Header/HeaderNew";
-import React, { useEffect, useState, useCallback } from "react";
-import { CommonActions, useNavigation, useRoute, useFocusEffect, useNavigationState } from "@react-navigation/native";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { CommonActions, useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
 import { useFetchUserDetails } from "../../hooks/New Hookes/RiderDetailsHooks";
 import NewMap from "../components/running-ride/NewMap";
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
 import { API_BASE_URL, colors } from "../NewConstant";
-import * as Updates from 'expo-updates'; // ✅ Import expo-updates
+import * as Updates from 'expo-updates';
+import HeaderNew from "../components/Header/HeaderNew";
 
 const { width, height } = Dimensions.get('window');
+
+// Enhanced color scheme
+const COLORS = {
+    primary: '#1a73e8',
+    secondary: '#34a853',
+    danger: '#ea4335',
+    warning: '#fbbc04',
+    success: '#34a853',
+    background: '#f8f9fa',
+    surface: '#ffffff',
+    text: {
+        primary: '#202124',
+        secondary: '#5f6368',
+        light: '#9aa0a6',
+    },
+    border: '#e8eaed',
+    shadow: 'rgba(0, 0, 0, 0.1)',
+};
 
 export default function RunningRide() {
     const route = useRoute();
     const { rideData } = route.params || {};
-    const navigate = useNavigation()
+    const navigation = useNavigation();
     const { fetchUserDetails, userData } = useFetchUserDetails();
-    const [isReached, setIsReached] = useState(false);
+    
+    // Animation refs
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const slideAnim = useRef(new Animated.Value(50)).current;
+    
+    // Core state
     const [activeRideData, setActiveRideData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [userLoading, setUserLoading] = useState(true);
     const [error, setError] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
-    const [cancelReasons, setCancelReasons] = useState([])
-    const [showCancelModal, setCancelModal] = useState(false)
-    const [selectedReason, setSelectedReason] = useState(null)
-    const [cancelling, setCancelling] = useState(false)
-    // New states for enhanced functionality
-    const [rideStep, setRideStep] = useState('pickup'); // pickup, otp, drop, payment
+    
+    // Modal states
+    const [showCancelModal, setCancelModal] = useState(false);
     const [showOtpModal, setShowOtpModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    
+    // Form states
+    const [cancelReasons, setCancelReasons] = useState([]);
+    const [selectedReason, setSelectedReason] = useState(null);
+    const [cancelling, setCancelling] = useState(false);
     const [otp, setOtp] = useState('');
     const [otpLoading, setOtpLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState('user'); // user, ride, fare
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('cash');
+    
+    // UI states
+    const [activeTab, setActiveTab] = useState('user');
+    const [rideStep, setRideStep] = useState('pickup');
 
-    // Fetch user details with loading state
+    // Memoized values
+    const rideStatus = useMemo(() => activeRideData?.ride_status, [activeRideData?.ride_status]);
+    const paymentStatus = useMemo(() => activeRideData?.payment_status, [activeRideData?.payment_status]);
+    const totalFare = useMemo(() => activeRideData?.pricing?.total_fare?.toFixed(2), [activeRideData?.pricing?.total_fare]);
+
+    // Animation effects
+    useEffect(() => {
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+            Animated.timing(slideAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    }, []);
+
+    // Optimized user details fetch
     const handleFetchUserDetails = useCallback(async () => {
         try {
             setUserLoading(true);
             await fetchUserDetails();
         } catch (error) {
             console.error("❌ Error fetching user details:", error);
-            setError("Failed to fetch user details");
+            setError("Unable to load user information. Please try again.");
         } finally {
             setUserLoading(false);
         }
     }, [fetchUserDetails]);
 
-    // Fetch ride details with proper error handling and retry
+    // Enhanced ride details fetch with better error handling
     const fetchActiveRideDetails = useCallback(async (isRetry = false) => {
-        if (!isRetry) {
-            setLoading(false);
-        }
+        if (!isRetry) setLoading(true);
         setError(null);
 
         try {
             if (userData?.on_ride_id) {
-
                 const response = await axios.get(
                     `https://www.appv2.olyox.com/rider/${userData.on_ride_id}`,
-                    {
-                        timeout: 10000,
-                    }
+                    { timeout: 15000 }
                 );
 
                 if (response.data?.data) {
                     setActiveRideData(response.data.data);
                     setRetryCount(0);
-                    // console.log("✅ Ride details fetched successfully", response.data.data);
-
-                    // Set ride step based on ride status
+                    
+                    // Update ride step based on status
                     const status = response.data.data.ride_status;
-                    if (status === 'driver_assigned') {
-                        setRideStep('pickup');
-                    } else if (status === 'driver_arrived') {
-                        setRideStep('otp');
-                    } else if (status === 'in_progress') {
-                        setRideStep('drop');
-                    } else if (status === 'completed') {
-                        setRideStep('payment');
+                    switch (status) {
+                        case 'driver_assigned':
+                            setRideStep('pickup');
+                            break;
+                        case 'driver_arrived':
+                            setRideStep('otp');
+                            break;
+                        case 'in_progress':
+                            setRideStep('drop');
+                            break;
+                        case 'completed':
+                            setRideStep('payment');
+                            break;
+                        default:
+                            setRideStep('pickup');
                     }
                 } else {
-                    throw new Error("No ride data received");
+                    throw new Error("No ride data available");
                 }
             } else {
                 setActiveRideData(null);
-                console.log("ℹ️ No on_ride_id found in userData");
             }
         } catch (error) {
-            console.error("❌ Error fetching ride details:", error?.response?.data || error.message);
-            const errorMessage = error?.response?.data?.error ||
-                error?.code === 'ECONNABORTED' ? "Request timeout" :
-                "Failed to fetch ride details";
+            console.error("❌ Error fetching ride details:", error);
+            
+            let errorMessage = "Something went wrong. Please try again.";
+            if (error?.code === 'ECONNABORTED') {
+                errorMessage = "Connection timeout. Please check your internet.";
+            } else if (error?.response?.status === 404) {
+                errorMessage = "Ride not found. It may have been completed or cancelled.";
+            } else if (error?.response?.status >= 500) {
+                errorMessage = "Server is temporarily unavailable. Please try again.";
+            }
+            
             setError(errorMessage);
             setActiveRideData(null);
-
+            
+            // Auto retry with exponential backoff
             if (retryCount < 3 && userData?.on_ride_id) {
-                console.log(`🔄 Auto retry ${retryCount + 1}/3 in 2 seconds...`);
+                const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
                 setTimeout(() => {
                     setRetryCount(prev => prev + 1);
                     fetchActiveRideDetails(true);
-                }, 2000);
+                }, delay);
             }
         } finally {
-            if (!isRetry) {
-                setLoading(false);
-            }
+            if (!isRetry) setLoading(false);
         }
     }, [userData?.on_ride_id, retryCount]);
 
+    // Optimized polling with proper cleanup
+    useFocusEffect(
+        useCallback(() => {
+            if (!activeRideData) return;
 
+            const currentRoute = navigation.getState()?.routes?.[navigation.getState().index]?.name;
+            if (currentRoute !== 'start') return;
+
+            const pollingInterval = rideStatus === 'in_progress' ? 5000 : 10000;
+            
+            const interval = setInterval(async () => {
+                try {
+                    await fetchActiveRideDetails(true);
+                    
+                    const isCancelled = rideStatus === 'cancelled';
+                    const isCompleted = rideStatus === 'completed' && paymentStatus === 'completed';
+                    
+                    if (isCancelled || isCompleted) {
+                        clearInterval(interval);
+                        
+                        Alert.alert(
+                            "Ride Update",
+                            isCancelled ? "Your ride has been cancelled." : "Ride completed successfully!",
+                            [{
+                                text: "OK",
+                                onPress: async () => {
+                                    await Updates.reloadAsync();
+                                    navigation.dispatch(
+                                        CommonActions.reset({
+                                            index: 0,
+                                            routes: [{ name: 'Home' }],
+                                        })
+                                    );
+                                },
+                            }],
+                            { cancelable: false }
+                        );
+                    }
+                } catch (err) {
+                    console.error("Polling error:", err);
+                }
+            }, pollingInterval);
+
+            return () => clearInterval(interval);
+        }, [rideStatus, paymentStatus, navigation, fetchActiveRideDetails])
+    );
+
+    // Enhanced API calls with better UX
+    const markReached = useCallback(async () => {
+        try {
+            const response = await axios.post(`${API_BASE_URL}/new/change-ride-status`, {
+                riderId: userData?._id,
+                rideId: activeRideData?._id,
+                status: 'driver_arrived'
+            });
+
+            if (response.data.success) {
+                setRideStep('otp');
+                setShowOtpModal(true);
+                await fetchActiveRideDetails();
+                
+                Alert.alert(
+                    'Location Reached! 🎯',
+                    'You have successfully reached the pickup location.',
+                    [{ text: 'OK' }]
+                );
+            }
+        } catch (error) {
+            Alert.alert(
+                'Unable to Update Status',
+                'Please check your connection and try again.',
+                [{ text: 'OK' }]
+            );
+        }
+    }, [userData?._id, activeRideData?._id, fetchActiveRideDetails]);
+
+    const verifyOtp = useCallback(async () => {
+        if (!otp || otp.length !== 4) {
+            Alert.alert('Invalid OTP', 'Please enter a valid 4-digit OTP');
+            return;
+        }
+
+        setOtpLoading(true);
+        try {
+            const response = await axios.post(`${API_BASE_URL}/new/verify-ride-otp`, {
+                riderId: userData?._id,
+                rideId: activeRideData?._id,
+                otp: otp
+            });
+
+            if (response.data.success) {
+                setOtp('');
+                setShowOtpModal(false);
+                setRideStep('drop');
+                
+                Alert.alert(
+                    'Ride Started! 🚗',
+                    'OTP verified successfully. Have a safe journey!',
+                    [{ text: 'OK' }]
+                );
+                
+                await fetchActiveRideDetails();
+            }
+        } catch (error) {
+            Alert.alert(
+                'OTP Verification Failed',
+                error.response?.data?.message || 'Please check the OTP and try again.'
+            );
+        } finally {
+            setOtpLoading(false);
+        }
+    }, [otp, userData?._id, activeRideData?._id, fetchActiveRideDetails]);
+
+    const markDrop = useCallback(async () => {
+        try {
+            const response = await axios.post(`${API_BASE_URL}/new/change-ride-status`, {
+                riderId: userData?._id,
+                rideId: activeRideData?._id,
+                status: 'completed'
+            });
+
+            if (response.data.success) {
+                setRideStep('payment');
+                setShowPaymentModal(true);
+                await fetchActiveRideDetails();
+                
+                Alert.alert(
+                    'Ride Completed! 🎉',
+                    'You have successfully completed the ride.',
+                    [{ text: 'OK' }]
+                );
+            }
+        } catch (error) {
+            Alert.alert(
+                'Unable to Complete Ride',
+                'Please try again or contact support.',
+                [{ text: 'OK' }]
+            );
+        }
+    }, [userData?._id, activeRideData?._id, fetchActiveRideDetails]);
+
+    const collectPayment = useCallback(async () => {
+        try {
+            const response = await axios.post(`${API_BASE_URL}/new/collect-payment`, {
+                riderId: userData?._id,
+                rideId: activeRideData?._id,
+                amount: activeRideData?.pricing?.total_fare,
+                mode: paymentMethod
+            });
+
+            if (response.data.success) {
+                setShowPaymentModal(false);
+                
+                Alert.alert(
+                    'Payment Collected! 💰',
+                    `₹${totalFare} has been collected successfully.`,
+                    [{
+                        text: 'OK',
+                        onPress: () => {
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'Home' }],
+                            });
+                        }
+                    }]
+                );
+            }
+        } catch (error) {
+            Alert.alert(
+                'Payment Collection Failed',
+                error.response?.data?.message || 'Please try again.',
+                [{ text: 'OK' }]
+            );
+        }
+    }, [userData?._id, activeRideData?._id, paymentMethod, totalFare, navigation]);
+
+    // Enhanced cancel functionality
     const fetchCancelReasons = useCallback(async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`)
+            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`);
             if (response.data?.data) {
-                setCancelReasons(response.data.data)
+                setCancelReasons(response.data.data);
             }
         } catch (err) {
-            Alert.alert("Error", "Failed to fetch cancel reasons")
+            Alert.alert("Error", "Unable to load cancellation reasons");
         }
-    }, [])
+    }, []);
 
-
-    // 1. Fix the handleCancel function - use activeRideData._id instead of undefined ride_id
     const handleCancel = useCallback(async () => {
-        if (!selectedReason || !activeRideData?._id) return
+        if (!selectedReason || !activeRideData?._id) return;
 
-        setCancelling(true)
+        setCancelling(true);
         try {
-            // Use activeRideData._id instead of ride_id
             await axios.post(`${API_BASE_URL}/new/ride/cancel`, {
                 ride: activeRideData._id,
                 cancelBy: 'driver',
                 reason_id: selectedReason._id,
                 reason: selectedReason.name,
-            })
+            });
 
-            Alert.alert("Success", "Ride cancelled successfully", [
-                {
+            Alert.alert(
+                "Ride Cancelled",
+                "The ride has been cancelled successfully.",
+                [{
                     text: "OK",
-                    onPress: () => {
-                        setCancelModal(false)
-                        setSelectedReason(null) // Reset selected reason
-                        // Navigate back or to appropriate screen
-
-                        navigate.dispatch(
+                    onPress: async () => {
+                        setCancelModal(false);
+                        setSelectedReason(null);
+                        await Updates.reloadAsync();
+                        navigation.dispatch(
                             CommonActions.reset({
                                 index: 0,
                                 routes: [{ name: 'Home' }],
                             })
                         );
                     },
-                },
-            ])
-            await Updates.reloadAsync(); // 🔁 Force app reload
-
+                }]
+            );
         } catch (err) {
-            console.error("Cancel ride error:", err.response?.data || err.message)
-            Alert.alert("Error", err.response?.data?.message || "Failed to cancel ride. Please try again.")
+            Alert.alert(
+                "Cancellation Failed",
+                "Unable to cancel the ride. Please try again."
+            );
         } finally {
-            setCancelling(false)
+            setCancelling(false);
         }
-    }, [selectedReason, activeRideData?._id])
+    }, [selectedReason, activeRideData?._id, navigation]);
 
+    // Utility functions
+    const makePhoneCall = useCallback((phoneNumber) => {
+        Linking.openURL(`tel:${phoneNumber}`);
+    }, []);
 
-    // Manual retry function
-    const handleRetry = useCallback(() => {
-        setRetryCount(0);
-        fetchActiveRideDetails();
-    }, [fetchActiveRideDetails]);
-
-    // Refresh function for pull-to-refresh
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         setRetryCount(0);
         try {
             await handleFetchUserDetails();
-            setTimeout(async () => {
-                await fetchActiveRideDetails();
-                setRefreshing(false);
-            }, 500);
-        } catch (error) {
+            await fetchActiveRideDetails();
+        } finally {
             setRefreshing(false);
         }
     }, [handleFetchUserDetails, fetchActiveRideDetails]);
 
-    // Initial data fetch
-    useEffect(() => {
-        if (rideData) {
-            console.log("🚀 Starting initial data fetch...");
-            handleFetchUserDetails();
-        }
-    }, [rideData, handleFetchUserDetails]);
+    const handleRetry = useCallback(() => {
+        setRetryCount(0);
+        fetchActiveRideDetails();
+    }, [fetchActiveRideDetails]);
 
-
-
-    useFocusEffect(
-        useCallback(() => {
-            const currentRouteName = navigate.getState()?.routes?.[navigate.getState().index]?.name;
-            console.log("🔍 Current route name:", currentRouteName);
-
-            if (currentRouteName !== 'start') {
-                console.log("🔕 Current route is not 'Start'. Skipping polling.");
-                return;
-            }
-
-            console.log("📡 Ride status polling started At Screen Start");
-
-            const pollingInterval =
-                activeRideData?.ride_status === 'in_progress' ? 5000 : 10000;
-
-            console.log(`⏱️ Setting polling interval to ${pollingInterval / 1000} seconds`);
-
-            const interval = setInterval(async () => {
-                console.log("⏱️ Checking ride status...", activeRideData?.ride_status);
-
-                try {
-                    await fetchActiveRideDetails();
-                    console.log("✅ Ride details refreshed");
-
-                    const rideStatus = activeRideData?.ride_status;
-                    const paymentStatus = activeRideData?.payment_status;
-
-                    const isCancelled = rideStatus === 'cancelled';
-                    const isCompletedWithPayment =
-                        rideStatus === 'completed' && paymentStatus === 'completed';
-
-                    if (isCancelled || isCompletedWithPayment) {
-                        console.log(`🚨 Ride status is ${rideStatus}. Showing alert and resetting navigation.`);
-
-                        Alert.alert(
-                            "Ride Status",
-                            isCancelled
-                                ? "Your ride has been cancelled."
-                                : "Your ride has been completed successfully.",
-                            [
-                                {
-                                    text: "OK",
-                                    onPress: async () => {
-                                        await Updates.reloadAsync(); // 🔁 Force app reload
-
-                                        console.log("🔄 Navigating to Home screen...");
-                                        navigate.dispatch(
-                                            CommonActions.reset({
-                                                index: 0,
-                                                routes: [{ name: 'Home' }],
-                                            })
-                                        );
-                                    },
-                                },
-                            ],
-                            { cancelable: false }
-                        );
-
-                        clearInterval(interval);
-                        console.log("🛑 Polling stopped after ride status was handled");
-                    }
-                } catch (err) {
-                    console.error("❌ Error while polling ride status:", err);
-                }
-            }, pollingInterval);
-
-            return () => {
-                console.log("🧹 Cleanup: clearing ride status polling interval");
-                clearInterval(interval);
-            };
-        }, [activeRideData?.ride_status, activeRideData?.payment_status, navigate])
-    );
-    // Fetch ride details when userData is available
-    useEffect(() => {
-        if (userData && !userLoading) {
-            console.log("👤 User data available, fetching ride details...");
-            fetchActiveRideDetails();
-        }
-    }, [userData, userLoading, fetchActiveRideDetails]);
-
-    // Handle isReached callback
-    const handleIsReached = useCallback(() => {
-
-        setIsReached(true);
-    }, []);
-
-    // API calls
-    const markReached = async () => {
-        try {
-            const data = {
-                riderId: userData?._id,
-                rideId: activeRideData?._id,
-                status: 'driver_arrived'
-            }
-
-
-            const response = await axios.post(`${API_BASE_URL}/new/change-ride-status`, data);
-            if (response.data.success) {
-                setRideStep('otp');
-                setShowOtpModal(true);
-                await onRefresh()
-                Alert.alert('Success', 'Pickup location reached!', [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            navigate.replace(route.name, route.params); // Reloads screen
-                        },
-                    },
-                ]);
-            }
-        } catch (error) {
-            console.log(error.response.data)
-            Alert.alert('Error', 'Failed to mark as reached');
-        }
-    };
-
-    const verifyOtp = async () => {
-        if (!otp || otp.length !== 4) {
-            Alert.alert('Error', 'Please enter a valid 4-digit OTP');
-            return;
-        }
-        const data = {
-            riderId: userData?._id,
-            rideId: activeRideData?._id,
-            otp: otp
-        }
-        setOtpLoading(true);
-        try {
-            const response = await axios.post(`${API_BASE_URL}/new/verify-ride-otp`, data);
-
-            if (response.data.success) {
-                setOtp('');
-                setShowOtpModal(false);
-                setRideStep('drop');
-                Alert.alert('Success', 'OTP verified! Ride started!', [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            navigate.replace(route.name, route.params); // Reloads screen
-                        },
-                    },
-                ]);
-
-                fetchActiveRideDetails();
-            }
-        } catch (error) {
-            Alert.alert('Error', error.response.data.message);
-        } finally {
-            setOtpLoading(false);
-        }
-    };
-
-    const markDrop = async () => {
-        try {
-
-            const data = {
-                riderId: userData?._id,
-                rideId: activeRideData?._id,
-                status: 'completed'
-            }
-            const response = await axios.post(`${API_BASE_URL}/new/change-ride-status`, data);
-            if (response.data.success) {
-                setRideStep('payment');
-                await onRefresh()
-
-                setShowPaymentModal(true);
-                Alert.alert('Success', 'Ride completed!');
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Failed to mark as dropped');
-        }
-    };
-
-    const collectPayment = async () => {
-        try {
-            const data = {
-                riderId: userData?._id,
-                rideId: activeRideData?._id,
-                amount: activeRideData?.pricing?.total_fare,
-                mode: paymentMethod
-            }
-            const response = await axios.post(`${API_BASE_URL}/new/collect-payment`, data);
-
-            if (response.data.success) {
-                setShowPaymentModal(false);
-                Alert.alert('Success', 'Payment collected successfully!');
-                fetchActiveRideDetails();
-
-                navigate.reset({
-                    index: 0,
-                    routes: [{ name: 'Home' }], // or 'Home' if that's your route name
-                });
-
-            }
-        } catch (error) {
-            console.log(error.response.data.message)
-            Alert.alert('Error', error.response.data.message);
-        }
-    };
-
-    // Helper functions
-    const makePhoneCall = (phoneNumber) => {
-        Linking.openURL(`tel:${phoneNumber}`);
-    };
-
+    // UI helper functions
     const getBottomButtonText = () => {
         switch (rideStep) {
-            case 'pickup':
-                return 'Mark Reached';
-            case 'otp':
-                return 'Enter OTP';
-            case 'drop':
-                return 'Mark Drop';
-            case 'payment':
-                return 'Payment';
-            default:
-                return 'Mark Reached';
+            case 'pickup': return 'Mark Reached';
+            case 'otp': return 'Enter OTP';
+            case 'drop': return 'Mark Drop';
+            case 'payment': return 'Collect Payment';
+            default: return 'Mark Reached';
         }
     };
 
     const handleBottomButtonPress = () => {
         switch (rideStep) {
-            case 'pickup':
-                markReached();
-                break;
-            case 'otp':
-                setShowOtpModal(true);
-                break;
-            case 'drop':
-                markDrop();
-                break;
-            case 'payment':
-                setShowPaymentModal(true);
-                break;
+            case 'pickup': markReached(); break;
+            case 'otp': setShowOtpModal(true); break;
+            case 'drop': markDrop(); break;
+            case 'payment': setShowPaymentModal(true); break;
         }
     };
 
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'driver_assigned': return COLORS.warning;
+            case 'driver_arrived': return COLORS.primary;
+            case 'in_progress': return COLORS.success;
+            case 'completed': return COLORS.success;
+            case 'cancelled': return COLORS.danger;
+            default: return COLORS.text.secondary;
+        }
+    };
 
-
-
-
-    // Render tab content
+    // Enhanced tab content rendering
     const renderTabContent = () => {
         if (!activeRideData) return null;
 
         switch (activeTab) {
             case 'user':
                 return (
-                    <View style={styles.tabContent}>
+                    <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
                         <View style={styles.userCard}>
                             <View style={styles.userHeader}>
-                                <MaterialIcons name="person" size={24} color="#0d6efd" />
-                                <Text style={styles.userName}>{activeRideData.user?.name || 'N/A'}</Text>
+                                <View style={styles.userAvatar}>
+                                    <MaterialIcons name="person" size={24} color={COLORS.primary} />
+                                </View>
+                                <View style={styles.userInfo}>
+                                    <Text style={styles.userName}>{activeRideData.user?.name || 'N/A'}</Text>
+                                    <Text style={styles.userPhone}>{activeRideData.user?.number || 'N/A'}</Text>
+                                </View>
                                 <TouchableOpacity
                                     style={styles.callButton}
                                     onPress={() => makePhoneCall(activeRideData.user?.number)}
+                                    activeOpacity={0.8}
                                 >
                                     <MaterialIcons name="phone" size={20} color="#fff" />
                                 </TouchableOpacity>
                             </View>
 
-                            {/* <View style={styles.userDetails}>
-                                <Text style={styles.userPhone}>{activeRideData.user?.number || 'N/A'}</Text>
-                                <Text style={styles.userEmail}>{activeRideData.user?.email || 'N/A'}</Text>
-                            </View> */}
-
                             <View style={styles.addressSection}>
                                 <View style={styles.addressItem}>
-                                    <MaterialIcons name="my-location" size={20} color="#28a745" />
-                                    <View style={styles.addressText}>
-                                        <Text style={styles.addressLabel}>Pickup</Text>
+                                    <View style={[styles.locationDot, { backgroundColor: COLORS.success }]} />
+                                    <View style={styles.addressContent}>
+                                        <Text style={styles.addressLabel}>Pickup Location</Text>
                                         <Text style={styles.addressValue}>
                                             {activeRideData.pickup_address?.formatted_address || 'N/A'}
                                         </Text>
                                     </View>
                                 </View>
-
+                                
+                                <View style={styles.routeLine} />
+                                
                                 <View style={styles.addressItem}>
-                                    <MaterialIcons name="location-on" size={20} color="#f44336" />
-                                    <View style={styles.addressText}>
-                                        <Text style={styles.addressLabel}>Drop</Text>
+                                    <View style={[styles.locationDot, { backgroundColor: COLORS.danger }]} />
+                                    <View style={styles.addressContent}>
+                                        <Text style={styles.addressLabel}>Drop Location</Text>
                                         <Text style={styles.addressValue}>
                                             {activeRideData.drop_address?.formatted_address || 'N/A'}
                                         </Text>
@@ -501,106 +514,89 @@ export default function RunningRide() {
                                 </View>
                             </View>
                         </View>
-                    </View>
+                    </Animated.View>
                 );
 
             case 'ride':
                 return (
-                    <View style={styles.tabContent}>
+                    <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
                         <View style={styles.rideDetailsCard}>
-
-                            {/* <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Status:</Text>
-                                <View style={[styles.statusBadge, getStatusBadgeStyle(activeRideData.ride_status)]}>
-                                    <Text style={styles.statusText}>{activeRideData.ride_status}</Text>
+                            <View style={styles.statusContainer}>
+                                <Text style={styles.statusLabel}>Ride Status</Text>
+                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(rideStatus) }]}>
+                                    <Text style={styles.statusText}>{rideStatus?.replace('_', ' ').toUpperCase()}</Text>
                                 </View>
-                            </View> */}
-
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Distance:</Text>
-                                <Text style={styles.detailValue}>{activeRideData.route_info?.distance} km</Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Duration:</Text>
-                                <Text style={styles.detailValue}>{activeRideData.route_info?.duration} min</Text>
                             </View>
 
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Payment Method:</Text>
-                                <Text style={styles.detailValue}>{activeRideData.payment_method}</Text>
+                            <View style={styles.rideMetrics}>
+                                <View style={styles.metricItem}>
+                                    <MaterialIcons name="straighten" size={20} color={COLORS.primary} />
+                                    <Text style={styles.metricLabel}>Distance</Text>
+                                    <Text style={styles.metricValue}>{activeRideData.route_info?.distance} km</Text>
+                                </View>
+                                <View style={styles.metricItem}>
+                                    <MaterialIcons name="schedule" size={20} color={COLORS.primary} />
+                                    <Text style={styles.metricLabel}>Duration</Text>
+                                    <Text style={styles.metricValue}>{activeRideData.route_info?.duration} min</Text>
+                                </View>
+                                <View style={styles.metricItem}>
+                                    <MaterialIcons name="payment" size={20} color={COLORS.primary} />
+                                    <Text style={styles.metricLabel}>Payment</Text>
+                                    <Text style={styles.metricValue}>{activeRideData.payment_method}</Text>
+                                </View>
                             </View>
 
                             <TouchableOpacity
-                                style={styles.menuItem}
+                                style={styles.cancelButton}
                                 onPress={() => {
-                                    fetchCancelReasons()
-                                    setCancelModal(true) // Add this line to show the modal
+                                    fetchCancelReasons();
+                                    setCancelModal(true);
                                 }}
+                                activeOpacity={0.8}
                             >
-                                <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
-                                <Text style={[styles.menuText, { color: "#FF3B30" }]}>Cancel Ride</Text>
+                                <MaterialIcons name="cancel" size={20} color={COLORS.danger} />
+                                <Text style={styles.cancelButtonText}>Cancel Ride</Text>
                             </TouchableOpacity>
-
                         </View>
-                    </View>
+                    </Animated.View>
                 );
 
             case 'fare':
                 return (
-                    <View style={styles.tabContent}>
+                    <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
                         <View style={styles.fareCard}>
                             <Text style={styles.fareTitle}>Fare Breakdown</Text>
-
-                            <View style={styles.fareItem}>
-                                <Text style={styles.fareLabel}>Base Fare</Text>
-                                <Text style={styles.fareValue}>₹{activeRideData.pricing?.base_fare}</Text>
+                            
+                            <View style={styles.fareItems}>
+                                {[
+                                    { label: 'Base Fare', value: activeRideData.pricing?.base_fare },
+                                    { label: 'Distance Fare', value: activeRideData.pricing?.distance_fare?.toFixed(2) },
+                                    { label: 'Time Fare', value: activeRideData.pricing?.time_fare?.toFixed(2) },
+                                    { label: 'Platform Fee', value: activeRideData.pricing?.platform_fee?.toFixed(2) },
+                                    { label: 'Night Charge', value: activeRideData.pricing?.night_charge?.toFixed(2) },
+                                ].map((item, index) => (
+                                    <View key={index} style={styles.fareItem}>
+                                        <Text style={styles.fareLabel}>{item.label}</Text>
+                                        <Text style={styles.fareValue}>₹{item.value || '0.00'}</Text>
+                                    </View>
+                                ))}
+                                
+                                {activeRideData.pricing?.discount > 0 && (
+                                    <View style={styles.fareItem}>
+                                        <Text style={styles.fareLabel}>Discount</Text>
+                                        <Text style={[styles.fareValue, styles.discountText]}>
+                                            -₹{activeRideData.pricing.discount}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
-                            <View style={styles.fareItem}>
-                                <Text style={styles.fareLabel}>Distance Fare</Text>
-                                <Text style={styles.fareValue}>₹{activeRideData.pricing?.distance_fare?.toFixed(2)}</Text>
-                            </View>
-                            <View style={styles.fareItem}>
-                                <Text style={styles.fareLabel}>Time Fare</Text>
-                                <Text style={styles.fareValue}>₹{activeRideData.pricing?.time_fare?.toFixed(2)}</Text>
-                            </View>
-                            <View style={styles.fareItem}>
-                                <Text style={styles.fareLabel}>Extra Earning Fee</Text>
-                                <Text style={styles.fareValue}>₹{activeRideData.pricing?.platform_fee?.toFixed(2)}</Text>
-                            </View>
-                            <View style={styles.fareItem}>
-                                <Text style={styles.fareLabel}>Night Charge</Text>
-                                <Text style={styles.fareValue}>₹{activeRideData.pricing?.night_charge?.toFixed(2)}</Text>
-                            </View>
-                            {activeRideData.pricing?.rain_charge > 0 && (
-                                <View style={styles.fareItem}>
-                                    <Text style={styles.fareLabel}>Rain Charge</Text>
-                                    <Text style={styles.fareValue}>₹{activeRideData.pricing.rain_charge}</Text>
-                                </View>
-                            )}
-
-                            {activeRideData.pricing?.toll_charge > 0 && (
-                                <View style={styles.fareItem}>
-                                    <Text style={styles.fareLabel}>Toll Charge</Text>
-                                    <Text style={styles.fareValue}>₹{activeRideData.pricing.toll_charge}</Text>
-                                </View>
-                            )}
-
-                            {activeRideData.pricing?.discount > 0 && (
-                                <View style={styles.fareItem}>
-                                    <Text style={styles.fareLabel}>Discount</Text>
-                                    <Text style={[styles.fareValue, styles.discountText]}>
-                                        -₹{activeRideData.pricing.discount}
-                                    </Text>
-                                </View>
-                            )}
-
 
                             <View style={styles.fareTotal}>
                                 <Text style={styles.fareTotalLabel}>Total Fare</Text>
-                                <Text style={styles.fareTotalValue}>₹{activeRideData.pricing?.total_fare?.toFixed(2)}</Text>
+                                <Text style={styles.fareTotalValue}>₹{totalFare}</Text>
                             </View>
                         </View>
-                    </View>
+                    </Animated.View>
                 );
 
             default:
@@ -608,15 +604,27 @@ export default function RunningRide() {
         }
     };
 
+    // Initialize data
+    useEffect(() => {
+        if (rideData) {
+            handleFetchUserDetails();
+        }
+    }, [rideData, handleFetchUserDetails]);
 
+    useEffect(() => {
+        if (userData && !userLoading) {
+            fetchActiveRideDetails();
+        }
+    }, [userData, userLoading, fetchActiveRideDetails]);
 
     const showLoading = userLoading || loading;
     const showRetryButton = error && !showLoading && retryCount >= 3;
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
             <HeaderNew />
-
+            
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContainer}
@@ -624,43 +632,53 @@ export default function RunningRide() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={['#0d6efd']}
-                        tintColor="#0d6efd"
+                        colors={[COLORS.primary]}
+                        tintColor={COLORS.primary}
                     />
                 }
             >
-                <View style={styles.container}>
+                <Animated.View 
+                    style={[
+                        styles.container,
+                        {
+                            opacity: fadeAnim,
+                            transform: [{ translateY: slideAnim }]
+                        }
+                    ]}
+                >
                     {/* Map Component */}
                     {(activeRideData?.pickup_location && activeRideData?.drop_location) && (
-                        <NewMap
-                            ride_status={activeRideData?.ride_status}
-                            pickup={activeRideData?.pickup_location?.coordinates}
-                            drop={activeRideData?.drop_location?.coordinates}
-                            isReached={handleIsReached}
-                        />
+                        <View style={styles.mapContainer}>
+                            <NewMap
+                                ride_status={activeRideData?.ride_status}
+                                pickup={activeRideData?.pickup_location?.coordinates}
+                                drop={activeRideData?.drop_location?.coordinates}
+                                isReached={() => {}}
+                            />
+                        </View>
                     )}
-
 
                     {/* Loading State */}
                     {showLoading && (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#0d6efd" />
+                            <ActivityIndicator size="large" color={COLORS.primary} />
                             <Text style={styles.loadingText}>
-                                {userLoading ? "Loading user details..." : "Loading ride details..."}
+                                {userLoading ? "Loading your details..." : "Getting ride information..."}
                             </Text>
                             {retryCount > 0 && (
                                 <Text style={styles.retryText}>
-                                    Retry attempt: {retryCount}/3
+                                    Attempt {retryCount} of 3
                                 </Text>
                             )}
                         </View>
                     )}
 
-                    {/* Error State with Retry */}
+                    {/* Error State */}
                     {error && !showLoading && (
                         <View style={styles.errorContainer}>
-                            <MaterialIcons name="error-outline" size={24} color="#f44336" />
-                            <Text style={styles.errorText}>Error: {error}</Text>
+                            <MaterialIcons name="error-outline" size={32} color={COLORS.danger} />
+                            <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
+                            <Text style={styles.errorText}>{error}</Text>
                             {showRetryButton && (
                                 <TouchableOpacity
                                     style={styles.retryButton}
@@ -668,40 +686,41 @@ export default function RunningRide() {
                                     activeOpacity={0.8}
                                 >
                                     <MaterialIcons name="refresh" size={20} color="#fff" />
-                                    <Text style={styles.retryButtonText}>Retry</Text>
+                                    <Text style={styles.retryButtonText}>Try Again</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
                     )}
 
-                    {/* Success State - Tabs and Content */}
+                    {/* Success State */}
                     {!showLoading && !error && activeRideData && (
                         <>
                             {/* Tab Navigation */}
                             <View style={styles.tabContainer}>
-                                <TouchableOpacity
-                                    style={[styles.tab, activeTab === 'user' && styles.activeTab]}
-                                    onPress={() => setActiveTab('user')}
-                                >
-                                    <MaterialIcons name="person" size={20} color={activeTab === 'user' ? '#fff' : '#6c757d'} />
-                                    <Text style={[styles.tabText, activeTab === 'user' && styles.activeTabText]}>User</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[styles.tab, activeTab === 'ride' && styles.activeTab]}
-                                    onPress={() => setActiveTab('ride')}
-                                >
-                                    <MaterialIcons name="directions-car" size={20} color={activeTab === 'ride' ? '#fff' : '#6c757d'} />
-                                    <Text style={[styles.tabText, activeTab === 'ride' && styles.activeTabText]}>Ride</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[styles.tab, activeTab === 'fare' && styles.activeTab]}
-                                    onPress={() => setActiveTab('fare')}
-                                >
-                                    <MaterialIcons name="attach-money" size={20} color={activeTab === 'fare' ? '#fff' : '#6c757d'} />
-                                    <Text style={[styles.tabText, activeTab === 'fare' && styles.activeTabText]}>Fare</Text>
-                                </TouchableOpacity>
+                                {[
+                                    { key: 'user', icon: 'person', label: 'Rider' },
+                                    { key: 'ride', icon: 'directions-car', label: 'Trip' },
+                                    { key: 'fare', icon: 'attach-money', label: 'Fare' },
+                                ].map((tab) => (
+                                    <TouchableOpacity
+                                        key={tab.key}
+                                        style={[styles.tab, activeTab === tab.key && styles.activeTab]}
+                                        onPress={() => setActiveTab(tab.key)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <MaterialIcons 
+                                            name={tab.icon} 
+                                            size={20} 
+                                            color={activeTab === tab.key ? '#fff' : COLORS.text.secondary} 
+                                        />
+                                        <Text style={[
+                                            styles.tabText, 
+                                            activeTab === tab.key && styles.activeTabText
+                                        ]}>
+                                            {tab.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
                             </View>
 
                             {/* Tab Content */}
@@ -712,54 +731,70 @@ export default function RunningRide() {
                     {/* No Data State */}
                     {!showLoading && !error && !activeRideData && (
                         <View style={styles.noDataContainer}>
-                            <MaterialIcons name="info-outline" size={48} color="#6c757d" />
-                            <Text style={styles.noDataText}>No active ride found</Text>
-                            <Text style={styles.noDataSubtext}>
-                                Pull down to refresh or check back later
+                            <MaterialIcons name="info-outline" size={64} color={COLORS.text.light} />
+                            <Text style={styles.noDataTitle}>No Active Ride</Text>
+                            <Text style={styles.noDataText}>
+                                You don't have any active rides at the moment.
                             </Text>
+                            <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+                                <Text style={styles.refreshButtonText}>Refresh</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
-                </View>
+                </Animated.View>
             </ScrollView>
 
             {/* Fixed Bottom Button */}
             {!showLoading && !error && activeRideData && (
-                <View style={styles.bottomButtonContainer}>
+                <Animated.View 
+                    style={[
+                        styles.bottomButtonContainer,
+                        { opacity: fadeAnim }
+                    ]}
+                >
                     <TouchableOpacity
                         style={styles.bottomButton}
                         onPress={handleBottomButtonPress}
                         activeOpacity={0.8}
                     >
                         <Text style={styles.bottomButtonText}>{getBottomButtonText()}</Text>
+                        <MaterialIcons name="arrow-forward" size={20} color="#fff" />
                     </TouchableOpacity>
-                </View>
+                </Animated.View>
             )}
-            <Modal visible={showCancelModal} transparent animationType="slide" onRequestClose={() => setCancelModal(false)}>
+
+            {/* Enhanced Modals */}
+            {/* Cancel Modal */}
+            <Modal visible={showCancelModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Cancel Ride</Text>
-                            <TouchableOpacity onPress={() => {
-
-                                fetchCancelReasons()
-                                setCancelModal(true)
-                            }}>
-                                <Ionicons name="close" size={24} color="#333" />
+                            <TouchableOpacity onPress={() => setCancelModal(false)}>
+                                <MaterialIcons name="close" size={24} color={COLORS.text.primary} />
                             </TouchableOpacity>
                         </View>
-
-                        <Text style={styles.modalSubtitle}>Please select a reason for cancellation:</Text>
-
+                        
+                        <Text style={styles.modalSubtitle}>
+                            Please select a reason for cancellation:
+                        </Text>
+                        
                         <FlatList
                             data={cancelReasons}
                             keyExtractor={(item) => item._id}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
-                                    style={[styles.reasonItem, selectedReason?._id === item._id && styles.selectedReason]}
+                                    style={[
+                                        styles.reasonItem,
+                                        selectedReason?._id === item._id && styles.selectedReason
+                                    ]}
                                     onPress={() => setSelectedReason(item)}
+                                    activeOpacity={0.8}
                                 >
                                     <View style={styles.radioButton}>
-                                        {selectedReason?._id === item._id && <View style={styles.radioSelected} />}
+                                        {selectedReason?._id === item._id && (
+                                            <View style={styles.radioSelected} />
+                                        )}
                                     </View>
                                     <View style={styles.reasonContent}>
                                         <Text style={styles.reasonName}>{item.name}</Text>
@@ -769,13 +804,19 @@ export default function RunningRide() {
                             )}
                             style={styles.reasonsList}
                         />
-
+                        
                         <View style={styles.modalActions}>
-                            <TouchableOpacity style={styles.cancelModalButton} onPress={() => setCancelModal(false)}>
+                            <TouchableOpacity 
+                                style={styles.cancelModalButton} 
+                                onPress={() => setCancelModal(false)}
+                            >
                                 <Text style={styles.cancelModalText}>Back</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.confirmButton, !selectedReason && styles.disabledButton]}
+                                style={[
+                                    styles.confirmButton,
+                                    !selectedReason && styles.disabledButton
+                                ]}
                                 onPress={handleCancel}
                                 disabled={!selectedReason || cancelling}
                             >
@@ -791,17 +832,15 @@ export default function RunningRide() {
             </Modal>
 
             {/* OTP Modal */}
-            <Modal
-                visible={showOtpModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowOtpModal(false)}
-            >
+            <Modal visible={showOtpModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.otpModal}>
+                        <MaterialIcons name="lock-outline" size={48} color={COLORS.primary} />
                         <Text style={styles.otpTitle}>Enter OTP</Text>
-                        <Text style={styles.otpSubtitle}>Enter the 4-digit OTP provided by the rider</Text>
-
+                        <Text style={styles.otpSubtitle}>
+                            Please enter the 4-digit OTP provided by the rider
+                        </Text>
+                        
                         <TextInput
                             style={styles.otpInput}
                             value={otp}
@@ -810,8 +849,9 @@ export default function RunningRide() {
                             maxLength={4}
                             placeholder="0000"
                             textAlign="center"
+                            autoFocus
                         />
-
+                        
                         <View style={styles.otpButtons}>
                             <TouchableOpacity
                                 style={styles.otpCancelButton}
@@ -822,16 +862,15 @@ export default function RunningRide() {
                             >
                                 <Text style={styles.otpCancelText}>Cancel</Text>
                             </TouchableOpacity>
-
                             <TouchableOpacity
                                 style={styles.otpVerifyButton}
                                 onPress={verifyOtp}
-                                disabled={otpLoading}
+                                disabled={otpLoading || otp.length !== 4}
                             >
                                 {otpLoading ? (
                                     <ActivityIndicator size="small" color="#fff" />
                                 ) : (
-                                    <Text style={styles.otpVerifyText}>Verify</Text>
+                                    <Text style={styles.otpVerifyText}>Verify OTP</Text>
                                 )}
                             </TouchableOpacity>
                         </View>
@@ -840,49 +879,53 @@ export default function RunningRide() {
             </Modal>
 
             {/* Payment Modal */}
-            <Modal
-                visible={showPaymentModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowPaymentModal(false)}
-            >
+            <Modal visible={showPaymentModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.paymentModal}>
+                        <MaterialIcons name="payment" size={48} color={COLORS.success} />
                         <Text style={styles.paymentTitle}>Collect Payment</Text>
-                        <Text style={styles.paymentAmount}>₹{activeRideData?.pricing?.total_fare?.toFixed(2)}</Text>
-
-                        {/* Payment Method Selection */}
+                        <Text style={styles.paymentAmount}>₹{totalFare}</Text>
+                        
                         <View style={styles.paymentMethods}>
-                            <TouchableOpacity
-                                style={[styles.paymentMethod, paymentMethod === 'cash' && styles.activePaymentMethod]}
-                                onPress={() => setPaymentMethod('cash')}
-                            >
-                                <MaterialIcons name="money" size={24} color={paymentMethod === 'cash' ? '#fff' : '#6c757d'} />
-                                <Text style={[styles.paymentMethodText, paymentMethod === 'cash' && styles.activePaymentMethodText]}>Cash</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.paymentMethod, paymentMethod === 'digital' && styles.activePaymentMethod]}
-                                onPress={() => setPaymentMethod('digital')}
-                            >
-                                <MaterialIcons name="qr-code" size={24} color={paymentMethod === 'digital' ? '#fff' : '#6c757d'} />
-                                <Text style={[styles.paymentMethodText, paymentMethod === 'digital' && styles.activePaymentMethodText]}>Digital</Text>
-                            </TouchableOpacity>
+                            {[
+                                { key: 'cash', icon: 'money', label: 'Cash' },
+                                { key: 'digital', icon: 'qr-code', label: 'Digital' },
+                            ].map((method) => (
+                                <TouchableOpacity
+                                    key={method.key}
+                                    style={[
+                                        styles.paymentMethod,
+                                        paymentMethod === method.key && styles.activePaymentMethod
+                                    ]}
+                                    onPress={() => setPaymentMethod(method.key)}
+                                    activeOpacity={0.8}
+                                >
+                                    <MaterialIcons 
+                                        name={method.icon} 
+                                        size={24} 
+                                        color={paymentMethod === method.key ? '#fff' : COLORS.text.secondary} 
+                                    />
+                                    <Text style={[
+                                        styles.paymentMethodText,
+                                        paymentMethod === method.key && styles.activePaymentMethodText
+                                    ]}>
+                                        {method.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
-
-                        {/* QR Code for Digital Payment */}
+                        
                         {paymentMethod === 'digital' && userData?.YourQrCodeToMakeOnline && (
                             <View style={styles.qrContainer}>
                                 <Image
                                     source={{ uri: userData.YourQrCodeToMakeOnline }}
-                                    style={{ width: 150, height: 150, borderRadius: 8 }}
+                                    style={styles.qrImage}
                                     resizeMode="contain"
                                 />
-                                <Text style={styles.qrText}>Show this QR code to the user</Text>
+                                <Text style={styles.qrText}>Show this QR code to the rider</Text>
                             </View>
                         )}
-
-
+                        
                         <View style={styles.paymentButtons}>
                             <TouchableOpacity
                                 style={styles.paymentCancelButton}
@@ -890,7 +933,6 @@ export default function RunningRide() {
                             >
                                 <Text style={styles.paymentCancelText}>Cancel</Text>
                             </TouchableOpacity>
-
                             <TouchableOpacity
                                 style={styles.paymentCollectButton}
                                 onPress={collectPayment}
@@ -905,72 +947,84 @@ export default function RunningRide() {
     );
 }
 
-
-
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: "#f8f9fa",
+        backgroundColor: COLORS.background,
     },
     scrollContainer: {
-        paddingBottom: 100, // Space for fixed bottom button
+        paddingBottom: 120,
     },
     container: {
         padding: 16,
     },
-    heading: {
-        fontSize: 22,
-        fontWeight: "bold",
-        color: "#212529",
+    mapContainer: {
+        borderRadius: 16,
+        overflow: 'hidden',
         marginBottom: 16,
-        marginTop: 12,
+        elevation: 4,
+        shadowColor: COLORS.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
     },
+    
+    // Loading States
     loadingContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 32,
+        paddingVertical: 48,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        marginVertical: 16,
     },
     loadingText: {
-        marginTop: 12,
+        marginTop: 16,
         fontSize: 16,
-        color: "#6c757d",
+        color: COLORS.text.secondary,
         textAlign: 'center',
+        fontWeight: '500',
     },
     retryText: {
         marginTop: 8,
         fontSize: 14,
-        color: "#0d6efd",
-        fontWeight: '500',
+        color: COLORS.primary,
+        fontWeight: '600',
     },
+    
+    // Error States
     errorContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 24,
-        paddingHorizontal: 16,
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        marginVertical: 8,
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
-        shadowOffset: { width: 0, height: 2 },
-        shadowRadius: 6,
-        elevation: 3,
+        paddingVertical: 32,
+        paddingHorizontal: 24,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        marginVertical: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: COLORS.danger,
+    },
+    errorTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.text.primary,
+        marginTop: 12,
+        marginBottom: 8,
     },
     errorText: {
-        color: "#f44336",
-        fontSize: 16,
-        marginVertical: 12,
+        color: COLORS.text.secondary,
+        fontSize: 14,
         textAlign: 'center',
-        fontWeight: '500',
+        lineHeight: 20,
+        marginBottom: 16,
     },
     retryButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#0d6efd',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-        marginTop: 12,
+        backgroundColor: COLORS.primary,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 24,
     },
     retryButtonText: {
         color: '#fff',
@@ -978,20 +1032,19 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 8,
     },
-
-    // Tab Styles
+    
+    // Tab Navigation
     tabContainer: {
-        marginTop: 8,
         flexDirection: 'row',
-        backgroundColor: '#fff',
-        borderRadius: 12,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
         padding: 4,
         marginBottom: 16,
-        shadowColor: "#000",
+        elevation: 2,
+        shadowColor: COLORS.shadow,
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
-        shadowOffset: { width: 0, height: 2 },
-        shadowRadius: 6,
-        elevation: 3,
+        shadowRadius: 4,
     },
     tab: {
         flex: 1,
@@ -1000,71 +1053,89 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 12,
         paddingHorizontal: 8,
-        borderRadius: 8,
+        borderRadius: 12,
     },
     activeTab: {
-        backgroundColor: colors.red400,
+        backgroundColor: COLORS.primary,
+        elevation: 2,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
     },
     tabText: {
         marginLeft: 6,
         fontSize: 14,
         fontWeight: '600',
-        color: '#6c757d',
+        color: COLORS.text.secondary,
     },
     activeTabText: {
         color: '#fff',
     },
-
-    // Tab Content Styles
+    
+    // Tab Content
     tabContent: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 16,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        padding: 20,
         marginBottom: 16,
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
+        elevation: 2,
+        shadowColor: COLORS.shadow,
         shadowOffset: { width: 0, height: 2 },
-        shadowRadius: 6,
-        elevation: 3,
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
     },
-
-    // User Tab Styles
+    
+    // User Tab
     userCard: {
-        backgroundColor: '#fff',
+        backgroundColor: COLORS.surface,
     },
     userHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 16,
-        paddingBottom: 12,
+        marginBottom: 24,
+        paddingBottom: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#f1f3f5',
+        borderBottomColor: COLORS.border,
+    },
+    userAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: `${COLORS.primary}15`,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    userInfo: {
+        flex: 1,
     },
     userName: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#212529',
-        marginLeft: 8,
-        flex: 1,
-    },
-    callButton: {
-        backgroundColor: '#28a745',
-        padding: 8,
-        borderRadius: 20,
-    },
-    userDetails: {
-        marginBottom: 16,
-    },
-    userPhone: {
-        fontSize: 16,
-        color: '#0d6efd',
-        fontWeight: '600',
+        color: COLORS.text.primary,
         marginBottom: 4,
     },
-    userEmail: {
+    userPhone: {
         fontSize: 14,
-        color: '#6c757d',
+        color: COLORS.text.secondary,
+        fontWeight: '500',
     },
+    callButton: {
+        backgroundColor: COLORS.success,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 2,
+        shadowColor: COLORS.success,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
+    
+    // Address Section
     addressSection: {
         marginTop: 8,
     },
@@ -1073,187 +1144,395 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         marginBottom: 16,
     },
-    addressText: {
-        marginLeft: 12,
+    locationDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginTop: 4,
+        marginRight: 16,
+    },
+    routeLine: {
+        width: 2,
+        height: 20,
+        backgroundColor: COLORS.border,
+        marginLeft: 5,
+        marginBottom: 8,
+    },
+    addressContent: {
         flex: 1,
     },
     addressLabel: {
         fontSize: 12,
-        color: '#6c757d',
+        color: COLORS.text.secondary,
         fontWeight: '600',
         textTransform: 'uppercase',
         marginBottom: 4,
+        letterSpacing: 0.5,
     },
     addressValue: {
         fontSize: 14,
-        color: '#212529',
+        color: COLORS.text.primary,
         lineHeight: 20,
+        fontWeight: '500',
     },
-
-    // Ride Tab Styles
+    
+    // Ride Tab
     rideDetailsCard: {
-        backgroundColor: '#fff',
+        backgroundColor: COLORS.surface,
     },
-    detailRow: {
+    statusContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
-        paddingVertical: 4,
+        marginBottom: 24,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
     },
-    detailLabel: {
-        fontSize: 14,
-        color: '#6c757d',
-        fontWeight: '500',
-        flex: 1,
-    },
-    detailValue: {
-        fontSize: 14,
-        color: '#212529',
+    statusLabel: {
+        fontSize: 16,
         fontWeight: '600',
-        flex: 1,
-        textAlign: 'right',
-    },
-    otpText: {
-        fontSize: 18,
-        color: '#0d6efd',
-        fontWeight: 'bold',
+        color: COLORS.text.primary,
     },
     statusBadge: {
         paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-        alignSelf: 'flex-end',
+        paddingVertical: 6,
+        borderRadius: 16,
     },
     statusText: {
         color: '#fff',
         fontSize: 12,
-        fontWeight: '600',
-        textTransform: 'capitalize',
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
-
-    // Fare Tab Styles
+    rideMetrics: {
+        marginBottom: 24,
+    },
+    metricItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    metricLabel: {
+        fontSize: 14,
+        color: COLORS.text.secondary,
+        fontWeight: '500',
+        marginLeft: 12,
+        flex: 1,
+    },
+    metricValue: {
+        fontSize: 14,
+        color: COLORS.text.primary,
+        fontWeight: '600',
+    },
+    cancelButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: `${COLORS.danger}10`,
+        borderWidth: 1,
+        borderColor: `${COLORS.danger}30`,
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: COLORS.danger,
+        marginLeft: 8,
+    },
+    
+    // Fare Tab
     fareCard: {
-        backgroundColor: '#fff',
+        backgroundColor: COLORS.surface,
     },
     fareTitle: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: 'bold',
-        color: '#212529',
-        marginBottom: 16,
+        color: COLORS.text.primary,
+        marginBottom: 20,
         textAlign: 'center',
+    },
+    fareItems: {
+        marginBottom: 20,
     },
     fareItem: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 8,
+        paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#f8f9fa',
+        borderBottomColor: COLORS.border,
     },
     fareLabel: {
         fontSize: 14,
-        color: '#6c757d',
+        color: COLORS.text.secondary,
         fontWeight: '500',
     },
     fareValue: {
         fontSize: 14,
-        color: '#212529',
+        color: COLORS.text.primary,
         fontWeight: '600',
     },
     discountText: {
-        color: '#28a745',
+        color: COLORS.success,
     },
     fareTotal: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 12,
-        marginTop: 8,
-        borderTopWidth: 2,
-        borderTopColor: '#0d6efd',
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        backgroundColor: `${COLORS.primary}10`,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: `${COLORS.primary}20`,
     },
     fareTotalLabel: {
         fontSize: 16,
-        color: '#212529',
+        color: COLORS.text.primary,
         fontWeight: 'bold',
     },
     fareTotalValue: {
-        fontSize: 18,
-        color: '#0d6efd',
+        fontSize: 20,
+        color: COLORS.primary,
         fontWeight: 'bold',
     },
-
-    // Bottom Button Styles
+    
+    // Bottom Button
     bottomButtonContainer: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: '#fff',
+        backgroundColor: COLORS.surface,
         padding: 16,
         paddingBottom: 32,
         borderTopWidth: 1,
-        borderTopColor: '#f1f3f5',
-        shadowColor: "#000",
+        borderTopColor: COLORS.border,
+        elevation: 8,
+        shadowColor: COLORS.shadow,
+        shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.1,
-        shadowOffset: { width: 0, height: -2 },
-        shadowRadius: 6,
-        elevation: 5,
+        shadowRadius: 12,
     },
     bottomButton: {
-        backgroundColor: colors.activeRed,
+        backgroundColor: COLORS.primary,
         paddingVertical: 16,
-        borderRadius: 12,
+        paddingHorizontal: 24,
+        borderRadius: 16,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        elevation: 4,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
     },
     bottomButtonText: {
         color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
+        marginRight: 8,
     },
-
+    
+    // No Data State
+    noDataContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 64,
+        paddingHorizontal: 32,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        marginVertical: 16,
+    },
+    noDataTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: COLORS.text.primary,
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    noDataText: {
+        fontSize: 14,
+        color: COLORS.text.secondary,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 24,
+    },
+    refreshButton: {
+        backgroundColor: COLORS.primary,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 24,
+    },
+    refreshButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    
     // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
     },
-
-    // OTP Modal Styles
+    modalContent: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+        maxHeight: height * 0.8,
+        width: width * 0.9,
+        maxWidth: 400,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: COLORS.text.primary,
+    },
+    modalSubtitle: {
+        fontSize: 16,
+        color: COLORS.text.secondary,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        lineHeight: 22,
+    },
+    
+    // Cancel Modal
+    reasonsList: {
+        maxHeight: height * 0.4,
+    },
+    reasonItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    selectedReason: {
+        backgroundColor: `${COLORS.primary}10`,
+    },
+    radioButton: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: COLORS.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    radioSelected: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: COLORS.primary,
+    },
+    reasonContent: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    reasonName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: COLORS.text.primary,
+        marginBottom: 4,
+    },
+    reasonDescription: {
+        fontSize: 14,
+        color: COLORS.text.secondary,
+        lineHeight: 18,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        paddingVertical: 20,
+        borderTopWidth: 1,
+        borderTopColor: COLORS.border,
+    },
+    cancelModalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        alignItems: 'center',
+        marginRight: 8,
+        backgroundColor: COLORS.background,
+    },
+    cancelModalText: {
+        fontSize: 16,
+        color: COLORS.text.primary,
+        fontWeight: '600',
+    },
+    confirmButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: COLORS.danger,
+        alignItems: 'center',
+        marginLeft: 8,
+    },
+    disabledButton: {
+        backgroundColor: COLORS.text.light,
+    },
+    confirmButtonText: {
+        fontSize: 16,
+        color: '#fff',
+        fontWeight: '600',
+    },
+    
+    // OTP Modal
     otpModal: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 24,
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+        padding: 32,
         width: width * 0.9,
         maxWidth: 400,
         alignItems: 'center',
     },
     otpTitle: {
-        fontSize: 20,
+        fontSize: 24,
         fontWeight: 'bold',
-        color: '#212529',
+        color: COLORS.text.primary,
+        marginTop: 16,
         marginBottom: 8,
     },
     otpSubtitle: {
         fontSize: 14,
-        color: '#6c757d',
+        color: COLORS.text.secondary,
         textAlign: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
+        lineHeight: 20,
     },
     otpInput: {
         borderWidth: 2,
-        borderColor: '#0d6efd',
-        borderRadius: 12,
-        padding: 16,
-        fontSize: 24,
+        borderColor: COLORS.primary,
+        borderRadius: 16,
+        padding: 20,
+        fontSize: 32,
         fontWeight: 'bold',
-        width: 120,
-        marginBottom: 24,
-        letterSpacing: 8,
+        width: 140,
+        marginBottom: 32,
+        letterSpacing: 12,
+        textAlign: 'center',
+        backgroundColor: `${COLORS.primary}05`,
     },
     otpButtons: {
         flexDirection: 'row',
@@ -1262,22 +1541,24 @@ const styles = StyleSheet.create({
     },
     otpCancelButton: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
-        paddingVertical: 12,
-        borderRadius: 8,
+        backgroundColor: COLORS.background,
+        paddingVertical: 14,
+        borderRadius: 12,
         alignItems: 'center',
         marginRight: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border,
     },
     otpCancelText: {
-        color: '#6c757d',
+        color: COLORS.text.primary,
         fontSize: 16,
         fontWeight: '600',
     },
     otpVerifyButton: {
         flex: 1,
-        backgroundColor: '#0d6efd',
-        paddingVertical: 12,
-        borderRadius: 8,
+        backgroundColor: COLORS.primary,
+        paddingVertical: 14,
+        borderRadius: 12,
         alignItems: 'center',
         marginLeft: 8,
     },
@@ -1286,27 +1567,28 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-
-    // Payment Modal Styles
+    
+    // Payment Modal
     paymentModal: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 24,
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+        padding: 32,
         width: width * 0.9,
         maxWidth: 400,
         alignItems: 'center',
     },
     paymentTitle: {
-        fontSize: 20,
+        fontSize: 24,
         fontWeight: 'bold',
-        color: '#212529',
+        color: COLORS.text.primary,
+        marginTop: 16,
         marginBottom: 8,
     },
     paymentAmount: {
-        fontSize: 32,
+        fontSize: 36,
         fontWeight: 'bold',
-        color: '#0d6efd',
-        marginBottom: 24,
+        color: COLORS.success,
+        marginBottom: 32,
     },
     paymentMethods: {
         flexDirection: 'row',
@@ -1318,20 +1600,23 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
+        paddingVertical: 16,
         paddingHorizontal: 16,
-        borderRadius: 8,
-        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        backgroundColor: COLORS.background,
         marginHorizontal: 4,
+        borderWidth: 1,
+        borderColor: COLORS.border,
     },
     activePaymentMethod: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
     },
     paymentMethodText: {
         marginLeft: 8,
         fontSize: 14,
         fontWeight: '600',
-        color: '#6c757d',
+        color: COLORS.text.secondary,
     },
     activePaymentMethodText: {
         color: '#fff',
@@ -1339,15 +1624,23 @@ const styles = StyleSheet.create({
     qrContainer: {
         alignItems: 'center',
         marginBottom: 24,
-        padding: 16,
-        backgroundColor: '#f8f9fa',
+        padding: 20,
+        backgroundColor: COLORS.background,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    qrImage: {
+        width: 160,
+        height: 160,
         borderRadius: 12,
     },
     qrText: {
         marginTop: 12,
         fontSize: 12,
-        color: '#6c757d',
+        color: COLORS.text.secondary,
         textAlign: 'center',
+        fontWeight: '500',
     },
     paymentButtons: {
         flexDirection: 'row',
@@ -1356,22 +1649,24 @@ const styles = StyleSheet.create({
     },
     paymentCancelButton: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
-        paddingVertical: 12,
-        borderRadius: 8,
+        backgroundColor: COLORS.background,
+        paddingVertical: 14,
+        borderRadius: 12,
         alignItems: 'center',
         marginRight: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border,
     },
     paymentCancelText: {
-        color: '#6c757d',
+        color: COLORS.text.primary,
         fontSize: 16,
         fontWeight: '600',
     },
     paymentCollectButton: {
         flex: 1,
-        backgroundColor: '#28a745',
-        paddingVertical: 12,
-        borderRadius: 8,
+        backgroundColor: COLORS.success,
+        paddingVertical: 14,
+        borderRadius: 12,
         alignItems: 'center',
         marginLeft: 8,
     },
@@ -1380,180 +1675,4 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-
-    noDataContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 48,
-        paddingHorizontal: 24,
-    },
-    noDataText: {
-        fontSize: 18,
-        color: "#6c757d",
-        marginTop: 16,
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    noDataSubtext: {
-        fontSize: 14,
-        color: "#adb5bd",
-        marginTop: 8,
-        textAlign: 'center',
-    },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#ffe5e5',
-        marginBottom: 10,
-    },
-    menuText: {
-        fontSize: 16,
-        fontWeight: '500',
-        marginLeft: 10,
-        color: '#333',
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.5)",
-        justifyContent: "flex-end",
-    },
-    modalContent: {
-        backgroundColor: "#fff",
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: height * 0.8,
-    },
-    modalHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: "#f0f0f0",
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: "600",
-        color: "#333",
-    },
-    modalSubtitle: {
-        fontSize: 16,
-        color: "#666",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-    },
-    reasonsList: {
-        maxHeight: height * 0.4,
-    },
-    reasonItem: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: "#f8f8f8",
-    },
-    selectedReason: {
-        backgroundColor: "#E3F2FD",
-    },
-    radioButton: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        borderWidth: 2,
-        borderColor: "#007AFF",
-        justifyContent: "center",
-        alignItems: "center",
-        marginTop: 2,
-    },
-    radioSelected: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: "#007AFF",
-    },
-    reasonContent: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    reasonName: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#333",
-    },
-    reasonDescription: {
-        fontSize: 14,
-        color: "#666",
-        marginTop: 4,
-    },
-    modalActions: {
-        flexDirection: "row",
-        paddingHorizontal: 20,
-        paddingVertical: 20,
-        borderTopWidth: 1,
-        borderTopColor: "#f0f0f0",
-    },
-    cancelModalButton: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: "#ddd",
-        alignItems: "center",
-        marginRight: 8,
-    },
-    cancelModalText: {
-        fontSize: 16,
-        color: "#333",
-        fontWeight: "500",
-    },
-    confirmButton: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 8,
-        backgroundColor: "#FF3B30",
-        alignItems: "center",
-        marginLeft: 8,
-    },
-    disabledButton: {
-        backgroundColor: "#ccc",
-    },
-    confirmButtonText: {
-        fontSize: 16,
-        color: "#fff",
-        fontWeight: "600",
-    },
-    errorContainer: {
-        position: "absolute",
-        top: 100,
-        left: 16,
-        right: 16,
-        backgroundColor: "#FF3B30",
-        padding: 16,
-        borderRadius: 12,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-    },
-    errorText: {
-        color: "#fff",
-        fontSize: 14,
-        flex: 1,
-    },
-    retryButton: {
-        backgroundColor: "#fff",
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-    },
-    retryText: {
-        color: "#FF3B30",
-        fontWeight: "600",
-    },
-})
+});

@@ -47,8 +47,8 @@ exports.webhookExotelApi = async (req, res) => {
             // Check if it's a user calling and link to current ride
             console.log('Looking for active or completed ride associated with this user...');
             const rideRequest = await rideRequestModel
-                .findOne({ user: checkThisWithOurUser._id, rideStatus: { $in: ['active', 'completed'] } })
-                .populate('rider', 'phone')
+                .findOne({ user: checkThisWithOurUser._id })
+                .populate('driver', 'phone')
                 .sort({ createdAt: -1 });
             
             console.log('Active/completed ride lookup result:', rideRequest ? 'Ride found' : 'No active ride found');

@@ -1,11 +1,11 @@
 import { View, Text, RefreshControl, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import HeaderNew from '../../New Screens/components/Header/HeaderNew'
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
+import HeaderNew from '../../New Screens/components/Header/HeaderNew';
 
 export default function AllRides() {
   const [allRides, setAllRides] = useState([]);

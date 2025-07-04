@@ -10,6 +10,10 @@ import {
   Platform,
   StatusBar,
   Animated,
+  KeyboardAvoidingView,
+  ScrollView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import React, { useState, useRef, useEffect } from 'react';
 import { useRoute, useNavigation, CommonActions } from '@react-navigation/native';
@@ -161,102 +165,123 @@ export default function RateRiderOrRide() {
     return texts[rating] || '';
   };
 
+  const dismissKeyboard = () => {
+    Keyboard.dismiss();
+  };
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
       <StatusBar barStyle="light-content" backgroundColor="#B91C1C" />
       
-      <Animated.View 
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.heading}>Rate Your Ride</Text>
-          <Text style={styles.subText}>Ride ID: #{rideId}</Text>
-        </View>
-
-        {/* Rating Card */}
-        <View style={styles.ratingCard}>
-          <Text style={styles.ratingTitle}>How was your experience?</Text>
-          
-          <View style={styles.starsContainer}>
-            {[1, 2, 3, 4, 5].map((num) => (
-              <TouchableOpacity
-                key={num}
-                onPress={() => handleRating(num)}
-                style={styles.starButton}
-                activeOpacity={0.7}
-              >
-                <Animated.View
-                  style={{
-                    transform: [{ scale: starAnimations[num - 1] }],
-                  }}
-                >
-                  <FontAwesome
-                    name={num <= formData.rating ? 'star' : 'star-o'}
-                    size={36}
-                    color={num <= formData.rating ? '#FFC107' : '#E5E7EB'}
-                    style={styles.star}
-                  />
-                </Animated.View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {formData.rating > 0 && (
-            <Animated.View style={styles.ratingTextContainer}>
-              <Text style={styles.ratingText}>
-                {getRatingText(formData.rating)}
-              </Text>
-            </Animated.View>
-          )}
-        </View>
-
-        {/* Feedback Section */}
-        {showFeedback && (
-          <Animated.View style={styles.feedbackCard}>
-            <Text style={styles.feedbackTitle}>
-              Tell us more (Optional)
-            </Text>
-            <TextInput
-              placeholder="Share your experience to help us improve..."
-              placeholderTextColor="#9CA3AF"
-              value={formData.feedback}
-              onChangeText={(text) => setFormData((prev) => ({ ...prev, feedback: text }))}
-              style={styles.input}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </Animated.View>
-        )}
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[
-            styles.submitButton,
-            formData.rating === 0 && styles.submitButtonDisabled,
-          ]}
-          onPress={handleSubmit}
-          disabled={loading || formData.rating === 0}
-          activeOpacity={0.8}
+      <TouchableWithoutFeedback onPress={dismissKeyboard}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator color="#FFFFFF" size="small" />
-              <Text style={styles.loadingText}>Submitting...</Text>
+          <Animated.View 
+            style={[
+              styles.content,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.heading}>Rate Your Ride</Text>
+              <Text style={styles.subText}>Ride ID: #{rideId}</Text>
             </View>
-          ) : (
-            <Text style={styles.submitText}>Submit Rating</Text>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
+
+            {/* Rating Card */}
+            <View style={styles.ratingCard}>
+              <Text style={styles.ratingTitle}>How was your experience?</Text>
+              
+              <View style={styles.starsContainer}>
+                {[1, 2, 3, 4, 5].map((num) => (
+                  <TouchableOpacity
+                    key={num}
+                    onPress={() => handleRating(num)}
+                    style={styles.starButton}
+                    activeOpacity={0.7}
+                  >
+                    <Animated.View
+                      style={{
+                        transform: [{ scale: starAnimations[num - 1] }],
+                      }}
+                    >
+                      <FontAwesome
+                        name={num <= formData.rating ? 'star' : 'star-o'}
+                        size={36}
+                        color={num <= formData.rating ? '#FFC107' : '#E5E7EB'}
+                        style={styles.star}
+                      />
+                    </Animated.View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {formData.rating > 0 && (
+                <Animated.View style={styles.ratingTextContainer}>
+                  <Text style={styles.ratingText}>
+                    {getRatingText(formData.rating)}
+                  </Text>
+                </Animated.View>
+              )}
+            </View>
+
+            {/* Feedback Section */}
+            {showFeedback && (
+              <Animated.View style={styles.feedbackCard}>
+                <Text style={styles.feedbackTitle}>
+                  Tell us more (Optional)
+                </Text>
+                <TextInput
+                  placeholder="Share your experience to help us improve..."
+                  placeholderTextColor="#9CA3AF"
+                  value={formData.feedback}
+                  onChangeText={(text) => setFormData((prev) => ({ ...prev, feedback: text }))}
+                  style={styles.input}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                />
+              </Animated.View>
+            )}
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={[
+                styles.submitButton,
+                formData.rating === 0 && styles.submitButtonDisabled,
+              ]}
+              onPress={handleSubmit}
+              disabled={loading || formData.rating === 0}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={styles.loadingText}>Submitting...</Text>
+                </View>
+              ) : (
+                <Text style={styles.submitText}>Submit Rating</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Extra space for keyboard */}
+            <View style={styles.bottomSpacer} />
+          </Animated.View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -264,12 +289,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#DC2626',
+  },
+  scrollContainer: {
+    flexGrow: 1,
     paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 20,
   },
   content: {
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+    minHeight: Dimensions.get('window').height - (Platform.OS === 'ios' ? 100 : 80),
   },
   header: {
     alignItems: 'center',
@@ -403,5 +432,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 10,
+  },
+  bottomSpacer: {
+    height: 20,
   },
 });

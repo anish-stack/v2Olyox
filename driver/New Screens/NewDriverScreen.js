@@ -16,7 +16,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useKeepAwake } from 'expo-keep-awake';
 import BackgroundService from 'react-native-background-actions';
-import HeaderNew from './components/Header/HeaderNew';
 import RiderDataAndRechargeInfo from './components/HomeScreen/RiderDataAndRechargeInfo';
 import RideSearching from './components/HomeScreen/RideSearching';
 import Report from '../screens/Report/Report';
@@ -26,6 +25,7 @@ import useNotificationPermission from '../hooks/notification';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { useFetchUserDetails } from '../hooks/New Hookes/RiderDetailsHooks';
+import HeaderNew from './components/Header/HeaderNew';
 
 const urlForUpdateFcmToken = `https://www.appv2.olyox.com/api/v1/rider/update-fcm`;
 const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/'; // Replace with your sound URL

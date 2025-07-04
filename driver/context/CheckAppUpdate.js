@@ -80,7 +80,7 @@ export default function CheckAppUpdate({ children }) {
                         </View>
 
                         {/* Driver-focused messaging */}
-                        <Text style={styles.title}>Update 30-6-2025 !</Text>
+                        <Text style={styles.title}>Update 04-7-2025 !</Text>
 
                         <Text style={styles.subtitle}>
                             Driver App mein naye features available hain
