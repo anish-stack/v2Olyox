@@ -608,12 +608,6 @@ export default function BookingConfirmation() {
         </View>
       )}
 
-      {/* Recenter button */}
-      <TouchableOpacity style={styles.recenterButton} onPress={fitMapToMarkers}>
-        <Icon name="crosshairs" size={24} color="#000" />
-      </TouchableOpacity>
-
-
     </View>
   ));
 
@@ -684,7 +678,11 @@ export default function BookingConfirmation() {
           {selectedRide && settings && (
             <>
               <Text style={styles.fareLabel}>
-                Offer Discount ({settings.ride_percentage_off}%): ₹
+                Offer Discount ({settings.ride_percentage_off}%)
+
+              </Text>
+              <Text style={styles.fareValue}>
+                ₹
                 {(selectedRide.totalPrice * settings.ride_percentage_off / 100).toFixed(0)}
               </Text>
             </>

@@ -21,27 +21,36 @@ const BottomNav = () => {
     const route = useRoute();
     const { isGuest } = useGuest();
     const { cart } = useFood();
-    
+
     const [currentRide, setCurrentRide] = useState(null);
     const [selectedTab, setSelectedTab] = useState(0);
     const slideAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     // Initialize ride data
+    const fetchRideData = async () => {
+        try {
+            const data = await find_me();
+            setCurrentRide(data?.user?.currentRide || null);
+        } catch (error) {
+            console.error('Error fetching ride data:', error);
+        }
+    };
+
     useEffect(() => {
-        const fetchRideData = async () => {
-            try {
-                const data = await find_me();
-                console.log("Fetched ride data:", data?.user?.currentRide);
-                setCurrentRide(data?.user?.currentRide || null);
-            } catch (error) {
-                console.error('Error fetching ride data:', error);
-            }
-        };
+        // Call once immediately
         fetchRideData();
+
+        // Set up interval
+        const interval = setInterval(() => {
+            fetchRideData();
+        }, 5000); // every 5 seconds
+
+        // Cleanup on unmount
+        return () => clearInterval(interval);
     }, []);
 
-    console.log("currentRide",currentRide)
+
 
     // Base navigation tabs
     const baseTabs = [
@@ -51,7 +60,7 @@ const BottomNav = () => {
         { name: isGuest ? 'Login' : 'Profile', icon: '👤', route: isGuest ? 'Onboarding' : 'Profile' }
     ];
 
-    // Add running ride tab if active
+
     const tabs = currentRide ? [
         ...baseTabs.slice(0, 2),
         { name: 'Ride', icon: '🚗', route: 'RideStarted', isRide: true },
@@ -87,9 +96,9 @@ const BottomNav = () => {
         if (tab.route === 'Checkout') {
             handleCheckout();
         } else if (tab.route === 'RideStarted' && currentRide) {
-            navigation.navigate('RideStarted', { 
-                driver: currentRide, 
-                ride: currentRide 
+            navigation.navigate('RideStarted', {
+                driver: currentRide,
+                ride: currentRide
             });
         } else {
             navigation.navigate(tab.route);
@@ -98,7 +107,7 @@ const BottomNav = () => {
 
     const handleCheckout = () => {
         if (cart.length === 0) return;
-        
+
         const total = cart.reduce((sum, item) => sum + item.food_price * item.quantity, 0);
         const restaurantId = cart[0]?.restaurant_id?._id;
 
@@ -136,7 +145,7 @@ const BottomNav = () => {
                     ]}>
                         {tab.icon}
                     </Text>
-                    
+
                     <Text style={[
                         styles.tabLabel,
                         isActive && styles.activeLabel,
@@ -177,7 +186,7 @@ const BottomNav = () => {
                     }
                 ]}
             />
-            
+
             {/* Tabs */}
             <View style={styles.tabsContainer}>
                 {tabs.map((tab, index) => renderTab(tab, index))}

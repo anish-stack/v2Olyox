@@ -166,33 +166,26 @@ export default function ShowMap() {
   }, [])
 
   // Handle booking
-const handleBookNow = useCallback(() => {
-  if (!selectedRide) {
-    showToast("Please select a ride option");
-    console.log("❌ Book Now blocked: No ride selected");
-    return;
-  }
+  const handleBookNow = useCallback(() => {
+    if (!selectedRide) {
+      showToast("Please select a ride option");
+      console.log("❌ Book Now blocked: No ride selected");
+      return;
+    }
 
-  hapticFeedback();
+    hapticFeedback();
 
-  // Log all data before navigating
-  console.log("✅ Proceeding to confirm_screen with the following data:");
-  console.log("Origin:", origin);
-  console.log("Destination:", destination);
-  console.log("Selected Ride:", selectedRide);
-  console.log("Route Info:", routeInfo);
-  console.log("Dropoff:", dropoff);
-  console.log("Pickup:", pickup);
 
-  navigation.navigate("confirm_screen", {
-    origin,
-    destination,
-    selectedRide,
-    routeInfo,
-    dropoff,
-    pickup,
-  });
-}, [selectedRide, navigation, origin, destination, routeInfo, dropoff, pickup]);
+
+    navigation.navigate("confirm_screen", {
+      origin,
+      destination,
+      selectedRide,
+      routeInfo,
+      dropoff,
+      pickup,
+    });
+  }, [selectedRide, navigation, origin, destination, routeInfo, dropoff, pickup]);
 
   // Format price
   const formatPrice = useCallback((price) => {
@@ -371,21 +364,25 @@ const handleBookNow = useCallback(() => {
             </View>
           </View>
 
-         <View style={styles.rideRight}>
-  {/* Original price with 15% markup, shown cut */}
-  <Text style={styles.originalPrice}>
-    {formatPrice(ride.totalPrice * 1.15)}
-  </Text>
+          <View style={styles.rideRight}>
+            {/* Original price with 15% markup, shown cut */}
+            {ride?.totalPrice && settings?.ride_percentage_off ? (
+              <Text style={styles.originalPrice}>
+                {formatPrice(
+                  ride.totalPrice * (1 + Number(settings.ride_percentage_off) / 100)
+                )}
+              </Text>
+            ) : null}
 
-  {/* Actual price */}
-  <Text style={styles.ridePrice}>
-    {formatPrice(ride.totalPrice)}
-  </Text>
+            {/* Actual price */}
+            <Text style={styles.ridePrice}>
+              {formatPrice(ride.totalPrice)}
+            </Text>
 
-  <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
-    {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
-  </View>
-</View>
+            <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
+              {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+            </View>
+          </View>
         </TouchableOpacity>
       </Animated.View>
     )
@@ -936,7 +933,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
   },
-   originalPrice: {
+  originalPrice: {
     fontSize: 14,
     color: '#888',
     textDecorationLine: 'line-through',

@@ -589,7 +589,7 @@ export default function RunningRide() {
                 return (
                     <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
                         <View style={styles.fare_dCard}>
-                           
+
 
                             <Text style={styles.fare_dLabel}>Total Fare to be Collected from User</Text>
 
