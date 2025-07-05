@@ -18,12 +18,13 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import * as Location from 'expo-location';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE ,PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
 import { tokenCache } from '../../Auth/cache';
 import { useLocation } from '../../context/LocationContext';
 import { useRide } from '../../context/RideContext';
 import useNotificationPermission from '../../hooks/notification';
 import MapViewDirections from "react-native-maps-directions"
+import useSettings from '../../hooks/Settings';
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
 const POLLING_INTERVAL = 8000;
@@ -120,7 +121,7 @@ export default function BookingConfirmation() {
   const { location: contextLocation } = useLocation();
   const { saveRide, updateRideStatus } = useRide();
   const { fcmToken } = useNotificationPermission();
-
+  const { settings } = useSettings()
   const { origin, destination, selectedRide, dropoff, pickup } = route.params || {};
 
   // State management
@@ -671,23 +672,26 @@ export default function BookingConfirmation() {
       <View style={styles.fareSection}>
         <Text style={styles.fareSectionTitle}>Fare Breakdown</Text>
         <View style={styles.fareRow}>
-          <Text style={styles.fareLabel}>Base Fare</Text>
+          <Text style={styles.fareLabel}>Total Fare</Text>
           <Text style={styles.fareValue}>
-            ₹{selectedRide?.pricing?.baseFare?.toFixed(0) || '0'}
+            ₹
+            {selectedRide && settings
+              ? (selectedRide.totalPrice * (1 + settings.ride_percentage_off / 100)).toFixed(0)
+              : '0'}
           </Text>
         </View>
         <View style={styles.fareRow}>
-          <Text style={styles.fareLabel}>Distance Cost</Text>
-          <Text style={styles.fareValue}>
-            ₹{selectedRide?.pricing?.distanceCost?.toFixed(0) || '0'}
-          </Text>
+          {selectedRide && settings && (
+            <>
+              <Text style={styles.fareLabel}>
+                Offer Discount ({settings.ride_percentage_off}%): ₹
+                {(selectedRide.totalPrice * settings.ride_percentage_off / 100).toFixed(0)}
+              </Text>
+            </>
+          )}
+
         </View>
-        <View style={styles.fareRow}>
-          <Text style={styles.fareLabel}>Time Cost</Text>
-          <Text style={styles.fareValue}>
-            ₹{selectedRide?.pricing?.timeCost?.toFixed(0) || '0'}
-          </Text>
-        </View>
+
         <View style={styles.totalFareRow}>
           <Text style={styles.totalFareLabel}>Total Fare</Text>
           <Text style={styles.totalFareValue}>
@@ -697,7 +701,7 @@ export default function BookingConfirmation() {
       </View>
 
       <Text style={styles.disclaimer}>
-        * Fare may vary based on distance, traffic, and tolls.
+        * MCD and toll taxes are excluded in this fare. Please do not pay any additional charges to the driver
       </Text>
     </View>
   ));
@@ -738,12 +742,6 @@ export default function BookingConfirmation() {
         </View>
       </View>
 
-      {rideOtp && (
-        <View style={styles.otpSection}>
-          <Text style={styles.otpLabel}>Your Ride OTP</Text>
-          <Text style={styles.otpValue}>{rideOtp}</Text>
-        </View>
-      )}
 
       <TouchableOpacity
         style={styles.cancelButton}

@@ -77,7 +77,7 @@ export function RideConfirmed() {
     const fetchReason = useCallback(async () => {
         try {
             setIsLoading(true);
-            const { data } = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`);
+            const { data } = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active&type=user`);
             setCancelReason(data.data || []);
         } catch (error) {
             console.log("Error Fetching in Reasons", error);

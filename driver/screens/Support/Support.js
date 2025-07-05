@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -8,29 +8,50 @@ import {
     ScrollView,
     Linking,
     Platform,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useSettings from '../../hooks/settings.hook';
+import { useFetchUserDetails } from '../../hooks/New Hookes/RiderDetailsHooks';
 
 export default function SupportScreen() {
     const { settings, loading, error } = useSettings();
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
+    const [mobile, setMobile] = useState('');
     const [message, setMessage] = useState('');
+    const [bhId, setBhId] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { fetchUserDetails, userData } = useFetchUserDetails();
 
+    const handleSubmit = async () => {
+        if (!name.trim() || !mobile.trim() || !message.trim() || !bhId.trim()) {
+            Alert.alert('Error', 'Please fill in all fields');
+            return;
+        }
 
+        setIsSubmitting(true);
 
-    // console.log(settings)
-    const handleSubmit = () => {
-        // Handle form submission here
-        console.log({ name, email, message });
-        // Reset form
-        setName('');
-        setEmail('');
-        setMessage('');
+        try {
+            const formattedMessage = `Name: ${name}\nMobile: ${mobile}\nBH ID: ${bhId}\nMessage: ${message}`;
+            const apiUrl = `http://api.wtap.sms4power.com/wapp/v2/api/send?apikey=968791cad69d4ec0a97639f33c19ce68&mobile=8059025804&msg=${encodeURIComponent(formattedMessage)}`;
+
+            const response = await fetch(apiUrl);
+            const result = await response.json();
+
+            if (response.ok) {
+                Alert.alert('Success', 'Your message has been sent successfully!');
+
+            } else {
+                Alert.alert('Error', 'Failed to send message. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            Alert.alert('Error', 'Network error. Please check your connection and try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
-    console.log(settings)
 
     const whatsappNumber = '+91 7015716178';
     const openWhatsApp = () => {
@@ -38,44 +59,47 @@ export default function SupportScreen() {
         Linking.openURL(url);
     };
 
+    useEffect(() => {
+        fetchUserDetails()
+        if (userData) {
+            setBhId(userData?.BH || 'BH')
+            setName(userData?.name || '')
+            setMobile(userData?.phone || '')
+        }
+    }, [])
+
     const makeCall = () => {
         const url = Platform.OS === 'ios' ? `telprompt:${settings?.support_number || '01141236789'}` : `tel:${settings?.support_number || '01141236789'}`;
         Linking.openURL(url);
     };
 
-    const sendEmail = () => {
-        Linking.openURL(`mailto:${settings?.adminEmail || 'helpcenter@olyox.com'}`);
-    };
-
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView style={styles.container}>
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>How can we help?</Text>
-                    <Text style={styles.subtitle}>We're here to assist you</Text>
+                    <Text style={styles.title}>Need Help?</Text>
+                    <Text style={styles.subtitle}>We're here to support you 24/7</Text>
                 </View>
 
                 <View style={styles.contactCards}>
                     <TouchableOpacity style={styles.card} onPress={makeCall}>
-                        <Ionicons name="call" size={24} color="#F59E0B" />
+                        <View style={styles.iconContainer}>
+                            <Ionicons name="call" size={28} color="#FFFFFF" />
+                        </View>
                         <Text style={styles.cardTitle}>Call Us</Text>
                         <Text style={styles.cardText}>
                             {settings?.support_number
                                 ? (settings.support_number.toString().startsWith('0')
                                     ? settings.support_number
                                     : '0' + settings.support_number)
-                                : phoneNumber}
+                                : "Available 24/7"}
                         </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.card} onPress={sendEmail}>
-                        <Ionicons name="mail" size={24} color="#F59E0B" />
-                        <Text style={styles.cardTitle}>Email Us</Text>
-                        <Text style={styles.cardText}>{settings?.adminEmail || emailAddress}</Text>
-                    </TouchableOpacity>
-
                     <TouchableOpacity style={styles.card} onPress={openWhatsApp}>
-                        <Ionicons name="logo-whatsapp" size={24} color="#F59E0B" />
+                        <View style={styles.iconContainer}>
+                            <Ionicons name="logo-whatsapp" size={28} color="#FFFFFF" />
+                        </View>
                         <Text style={styles.cardTitle}>WhatsApp</Text>
                         <Text style={styles.cardText}>Chat with us</Text>
                     </TouchableOpacity>
@@ -83,36 +107,66 @@ export default function SupportScreen() {
 
                 <View style={styles.formContainer}>
                     <Text style={styles.formTitle}>Send us a message</Text>
+                    <Text style={styles.formSubtitle}>Fill out the form below and we'll get back to you</Text>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Your Name"
-                        value={name}
-                        onChangeText={setName}
-                        placeholderTextColor="#666"
-                    />
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="person-outline" size={20} color="#DC2626" style={styles.inputIcon} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Your Name"
+                            value={name}
+                            readOnly={true}
+                            onChangeText={setName}
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="id-card-outline" size={20} color="#DC2626" style={styles.inputIcon} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="BH ID"
+                            value={bhId}
+                            readOnly={true}
+                            onChangeText={setBhId}
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="call-outline" size={20} color="#DC2626" style={styles.inputIcon} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Mobile Number"
+                            value={mobile}
+                            onChangeText={setMobile}
+                            keyboardType="phone-pad"
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Your Email"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        placeholderTextColor="#666"
-                    />
 
-                    <TextInput
-                        style={styles.messageInput}
-                        placeholder="Your Message"
-                        value={message}
-                        onChangeText={setMessage}
-                        multiline
-                        numberOfLines={4}
-                        placeholderTextColor="#666"
-                    />
 
-                    <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                        <Text style={styles.submitButtonText}>Submit</Text>
+                    <View style={styles.messageContainer}>
+                        <Ionicons name="chatbubble-outline" size={20} color="#DC2626" style={styles.messageIcon} />
+                        <TextInput
+                            style={styles.messageInput}
+                            placeholder="Your Message"
+                            value={message}
+                            onChangeText={setMessage}
+                            multiline
+                            numberOfLines={4}
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
+
+                    <TouchableOpacity
+                        style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+                        onPress={handleSubmit}
+                        disabled={isSubmitting}
+                    >
+                        <Text style={styles.submitButtonText}>
+                            {isSubmitting ? 'Sending...' : 'Send Message'}
+                        </Text>
+                        {!isSubmitting && <Ionicons name="send" size={20} color="#FFFFFF" style={styles.submitIcon} />}
                     </TouchableOpacity>
                 </View>
             </ScrollView>
@@ -123,7 +177,7 @@ export default function SupportScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#FFFBEB',
+        backgroundColor: '#FAFAFA',
     },
     container: {
         flex: 1,
@@ -131,97 +185,157 @@ const styles = StyleSheet.create({
     },
     header: {
         marginBottom: 30,
+        alignItems: 'center',
     },
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#F59E0B',
+        color: '#DC2626',
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 16,
-        color: '#666',
+        color: '#64748B',
+        textAlign: 'center',
     },
     contactCards: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
+        justifyContent: 'space-around',
         marginBottom: 30,
     },
     card: {
-        width: '31%',
-        backgroundColor: '#FEF3C7',
-        padding: 15,
-        borderRadius: 12,
+        width: '45%',
+        backgroundColor: '#FFFFFF',
+        padding: 20,
+        borderRadius: 16,
         alignItems: 'center',
-        marginBottom: 15,
-        shadowColor: '#F59E0B',
+        shadowColor: '#DC2626',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
         shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3,
+        shadowRadius: 6,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    iconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#DC2626',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
     },
     cardTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#92400E',
-        marginTop: 8,
-        marginBottom: 4,
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#DC2626',
+        marginBottom: 6,
     },
     cardText: {
         fontSize: 12,
-        color: '#666',
+        color: '#64748B',
         textAlign: 'center',
     },
     formContainer: {
-        backgroundColor: '#FEF3C7',
-        padding: 20,
-        borderRadius: 16,
-        shadowColor: '#F59E0B',
+        backgroundColor: '#FFFFFF',
+        padding: 25,
+        borderRadius: 20,
+        shadowColor: '#DC2626',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
         shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3,
+        shadowRadius: 8,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
     },
     formTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: '#92400E',
-        marginBottom: 20,
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#DC2626',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    formSubtitle: {
+        fontSize: 14,
+        color: '#64748B',
+        textAlign: 'center',
+        marginBottom: 25,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        paddingHorizontal: 15,
+    },
+    inputIcon: {
+        marginRight: 12,
     },
     input: {
-        backgroundColor: '#FFFBEB',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 15,
+        flex: 1,
+        paddingVertical: 14,
+        fontSize: 16,
+        color: '#1E293B',
+    },
+    messageContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        marginBottom: 25,
         borderWidth: 1,
-        borderColor: '#FDE68A',
+        borderColor: '#E2E8F0',
+        paddingHorizontal: 15,
+        paddingTop: 15,
+        alignItems: 'flex-start',
+    },
+    messageIcon: {
+        marginRight: 12,
+        marginTop: 2,
     },
     messageInput: {
-        backgroundColor: '#FFFBEB',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 20,
+        flex: 1,
         minHeight: 100,
         textAlignVertical: 'top',
-        borderWidth: 1,
-        borderColor: '#FDE68A',
+        fontSize: 16,
+        color: '#1E293B',
+        paddingBottom: 15,
     },
     submitButton: {
-        backgroundColor: '#F59E0B',
-        padding: 15,
-        borderRadius: 8,
+        backgroundColor: '#DC2626',
+        padding: 16,
+        borderRadius: 12,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        shadowColor: '#DC2626',
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        elevation: 5,
+    },
+    submitButtonDisabled: {
+        backgroundColor: '#94A3B8',
+        shadowOpacity: 0.1,
     },
     submitButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+    },
+    submitIcon: {
+        marginLeft: 8,
     },
 });

@@ -316,7 +316,7 @@ const onRefresh = useCallback(async () => {
     await setupFCMToken();
     await startLocationTracking();
     setLocationStarted(true);
-    reCallMe()
+    // reCallMe()
     console.log('✅ Complete restart successful');
       setRefreshing(false);
 

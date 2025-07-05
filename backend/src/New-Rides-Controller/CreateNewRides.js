@@ -2006,17 +2006,17 @@ exports.changeCurrentRiderRideStatus = async (req, res) => {
                 );
             }
 
-            if (driver?.fcmToken) {
-                await sendNotification.sendNotification(
-                    driver.fcmToken,
-                    "Ride Completed",
-                    "You've successfully completed the ride. Great job!",
-                    {
-                        event: 'RIDE_COMPLETED_DRIVER',
-                        rideId: foundRide._id,
-                    }
-                );
-            }
+            // if (driver?.fcmToken) {
+            //     await sendNotification.sendNotification(
+            //         driver.fcmToken,
+            //         "Ride Completed",
+            //         "You've successfully completed the ride. Great job!",
+            //         {
+            //             event: 'RIDE_COMPLETED_DRIVER',
+            //             rideId: foundRide._id,
+            //         }
+            //     );
+            // }
         }
 
         if (status === 'cancelled') {
@@ -2339,14 +2339,14 @@ exports.verifyRideOtp = async (req, res) => {
             );
         }
 
-        if (driver?.fcmToken) {
-            await sendNotification.sendNotification(
-                driver.fcmToken,
-                "Ride Started",
-                "OTP verified. You can now begin the ride.",
-                { event: 'RIDE_STARTED_DRIVER', rideId }
-            );
-        }
+        // if (driver?.fcmToken) {
+        //     await sendNotification.sendNotification(
+        //         driver.fcmToken,
+        //         "Ride Started",
+        //         "OTP verified. You can now begin the ride.",
+        //         { event: 'RIDE_STARTED_DRIVER', rideId }
+        //     );
+        // }
 
         return res.status(200).json({
             success: true,

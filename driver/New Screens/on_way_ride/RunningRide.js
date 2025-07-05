@@ -20,10 +20,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { CommonActions, useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
+import { Audio } from "expo-av"
+
 import { useFetchUserDetails } from "../../hooks/New Hookes/RiderDetailsHooks";
 import NewMap from "../components/running-ride/NewMap";
-import { Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
-import { API_BASE_URL, colors } from "../NewConstant";
+import { MaterialIcons } from '@expo/vector-icons';
+import { API_BASE_URL } from "../NewConstant";
 import * as Updates from 'expo-updates';
 import HeaderNew from "../components/Header/HeaderNew";
 import useSettings from "../../hooks/settings.hook";
@@ -48,16 +50,18 @@ const COLORS = {
     shadow: 'rgba(0, 0, 0, 0.1)',
 };
 
+
+
 export default function RunningRide() {
     const route = useRoute();
     const { rideData } = route.params || {};
     const navigation = useNavigation();
     const { fetchUserDetails, userData } = useFetchUserDetails();
-    const { settings } = useSettings()
+
     // Animation refs
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
-
+    const { settings } = useSettings()
     // Core state
     const [activeRideData, setActiveRideData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -328,14 +332,34 @@ export default function RunningRide() {
 
     const collectPayment = useCallback(async () => {
         try {
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                staysActiveInBackground: false,
+                playsInSilentModeIOS: true,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+            });
+
+            const { sound } = await Audio.Sound.createAsync(
+                require("./coin-sound.mp3"),
+                {
+                    shouldPlay: false,
+                    isLooping: false,
+                    volume: 1.0,
+                }
+            );
+
             const response = await axios.post(`${API_BASE_URL}/new/collect-payment`, {
                 riderId: userData?._id,
                 rideId: activeRideData?._id,
                 amount: activeRideData?.pricing?.total_fare,
-                mode: paymentMethod
+                mode: paymentMethod,
             });
 
             if (response.data.success) {
+                // ✅ Play the sound
+                await sound.playAsync();
+
                 setShowPaymentModal(false);
 
                 Alert.alert(
@@ -346,25 +370,24 @@ export default function RunningRide() {
                         onPress: () => {
                             navigation.reset({
                                 index: 0,
-                                routes: [{ name: 'Home' }],
+                                routes: [{ name: "Home" }],
                             });
-                        }
-                    }]
-                );
+                        },
+                    },
+                    ]);
             }
         } catch (error) {
             Alert.alert(
-                'Payment Collection Failed',
-                error.response?.data?.message || 'Please try again.',
-                [{ text: 'OK' }]
+                "Payment Collection Failed",
+                error.response?.data?.message || "Please try again.",
+                [{ text: "OK" }]
             );
         }
     }, [userData?._id, activeRideData?._id, paymentMethod, totalFare, navigation]);
-
     // Enhanced cancel functionality
     const fetchCancelReasons = useCallback(async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`);
+            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active&type=driver`);
             if (response.data?.data) {
                 setCancelReasons(response.data.data);
             }
@@ -565,42 +588,20 @@ export default function RunningRide() {
             case 'fare':
                 return (
                     <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
-                        <View style={styles.fareCard}>
-                            <Text style={styles.fareTitle}>Fare Breakdown</Text>
+                        <View style={styles.fare_dCard}>
+                           
 
-                            {/* <View style={styles.fareItems}>
-                                {[
-                                    { label: 'Base Fare', value: activeRideData.pricing?.base_fare },
-                                    { label: 'Distance Fare', value: activeRideData.pricing?.distance_fare?.toFixed(2) },
-                                    { label: 'Time Fare', value: activeRideData.pricing?.time_fare?.toFixed(2) },
-                                    { label: 'Platform Fee', value: activeRideData.pricing?.platform_fee?.toFixed(2) },
-                                    { label: 'Night Charge', value: activeRideData.pricing?.night_charge?.toFixed(2) },
-                                ].map((item, index) => (
-                                    <View key={index} style={styles.fareItem}>
-                                        <Text style={styles.fareLabel}>{item.label}</Text>
-                                        <Text style={styles.fareValue}>₹{item.value || '0.00'}</Text>
-                                    </View>
-                                ))}
+                            <Text style={styles.fare_dLabel}>Total Fare to be Collected from User</Text>
 
-                                {activeRideData.pricing?.discount > 0 && (
-                                    <View style={styles.fareItem}>
-                                        <Text style={styles.fareLabel}>Discount</Text>
-                                        <Text style={[styles.fareValue, styles.discountText]}>
-                                            -₹{activeRideData.pricing.discount}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View> */}
-
-                            <View style={styles.fareTotal}>
-                                <Text style={styles.fareTotalLabel}>Total Fare to be Collected from User</Text>
-                                <Text style={styles.fareTotalNote}>
+                            <View style={styles.fare_dNoteContainer}>
+                                <Text style={styles.fare_dNote}>
                                     This fare includes MCD and toll taxes. Please do not collect any additional charges from the user.
                                 </Text>
-                                <Text style={styles.fareTotalValue}>₹{totalFare}</Text>
                             </View>
 
+                            <Text style={styles.fare_dValue}>₹{totalFare}</Text>
                         </View>
+
                     </Animated.View>
                 );
 
@@ -705,7 +706,7 @@ export default function RunningRide() {
                                 {[
                                     { key: 'user', icon: 'person', label: 'Rider' },
                                     { key: 'ride', icon: 'directions-car', label: 'Trip' },
-                                    { key: 'fare', icon: 'attach-money', label: 'Fare' },
+                                    { key: 'fare', icon: 'currency-rupee', label: 'Fare' },
                                 ].map((tab) => (
                                     <TouchableOpacity
                                         key={tab.key}
@@ -1301,6 +1302,12 @@ const styles = StyleSheet.create({
         color: COLORS.text.primary,
         fontWeight: 'bold',
     },
+    fareTotalNote: {
+        fontSize: 14,
+        color: '#4377a2',
+        marginBottom: 12,
+        lineHeight: 20,
+    },
     fareTotalValue: {
         fontSize: 32,
         color: COLORS.primary,
@@ -1622,6 +1629,54 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: COLORS.text.secondary,
+    },
+    fare_dCard: {
+        backgroundColor: '#fff',
+
+        borderRadius: 16,
+        padding: 14,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+        borderWidth: 1,
+        borderColor: '#f44336', // red outline for alert context
+    },
+    fare_dTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#003873',
+        // marginBottom: 16,
+    },
+    fare_dLabel: {
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#212529',
+        marginBottom: 10,
+    },
+    fare_dNoteContainer: {
+        backgroundColor: '#ffecec',
+        padding: 14,
+        borderRadius: 10,
+        marginBottom: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#f44336',
+    },
+    fare_dNote: {
+        fontSize: 15,
+        color: '#212529',
+        lineHeight: 22,
+    },
+    fare_dAlert: {
+        fontWeight: 'bold',
+        color: '#d32f2f', // deep red
+    },
+    fare_dValue: {
+        fontSize: 34,
+        fontWeight: '900',
+        color: '#d32f2f',
+        textAlign: 'right',
     },
     activePaymentMethodText: {
         color: '#fff',

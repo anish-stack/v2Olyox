@@ -36,7 +36,7 @@ const StatusIndicator = React.memo(({ isOnline, loading }) => (
       <View
         style={[
           styles.statusDot,
-          { 
+          {
             backgroundColor: loading ? colors.gray400 : (isOnline ? '#00C851' : '#FF4444'),
             shadowColor: loading ? colors.gray400 : (isOnline ? '#00C851' : '#FF4444'),
           },
@@ -71,9 +71,9 @@ const ActiveRideButton = React.memo(({ onPress, activeRideData }) => {
     return () => pulse.stop();
   }, []);
 
-  if (!activeRideData || 
-      (activeRideData?.data?.ride_status === 'completed' && 
-       activeRideData?.data?.payment_status === 'completed')) {
+  if (!activeRideData ||
+    (activeRideData?.data?.ride_status === 'completed' &&
+      activeRideData?.data?.payment_status === 'completed')) {
     return null;
   }
 
@@ -95,15 +95,15 @@ const HeaderButton = React.memo(({ icon, onPress, style, iconColor = colors.text
   </TouchableOpacity>
 ));
 
-const MenuModal = React.memo(({ 
-  visible, 
-  onClose, 
-  onLogout, 
-  onRefresh, 
-  onNavigate, 
-  loading, 
-  refreshing, 
-  userData 
+const MenuModal = React.memo(({
+  visible,
+  onClose,
+  onLogout,
+  onRefresh,
+  onNavigate,
+  loading,
+  refreshing,
+  userData
 }) => {
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -145,8 +145,8 @@ const MenuModal = React.memo(({
       title: 'Recharge Wallet',
       color: '#4CAF50',
       onPress: () => onNavigate('Recharge', {
-        showOnlyBikePlan: userData?.rideVehicleInfo?.vehicleName === "2 Wheeler" || 
-                          userData?.rideVehicleInfo?.vehicleName === "Bike",
+        showOnlyBikePlan: userData?.rideVehicleInfo?.vehicleName === "2 Wheeler" ||
+          userData?.rideVehicleInfo?.vehicleName === "Bike",
         role: userData?.category,
         firstRecharge: userData?.isFirstRechargeDone || false,
       }),
@@ -160,6 +160,13 @@ const MenuModal = React.memo(({
       disabled: refreshing,
       loading: refreshing,
     },
+    {
+      id: 'help',
+      icon: 'help-circle',
+      title: 'Help',
+      color: '#4285F4',
+      onPress: () => onNavigate('support'),
+    }
   ], [refreshing, userData, onNavigate, onRefresh]);
 
   return (
@@ -187,7 +194,7 @@ const MenuModal = React.memo(({
           ]}
         >
           <View style={styles.menuHandle} />
-          
+
           <View style={styles.menuHeader}>
             <Text style={styles.menuTitle}>Menu</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -244,7 +251,7 @@ const MenuModal = React.memo(({
 const HeaderNew = React.memo(({ isRefresh }) => {
   const navigation = useNavigation();
   const { fetchUserDetails: reCallMe } = useFetchUserDetails();
-  
+
   // Consolidated state
   const [state, setState] = useState({
     userData: null,
@@ -262,7 +269,7 @@ const HeaderNew = React.memo(({ isRefresh }) => {
   const makeAuthenticatedRequest = useCallback(async (url, options = {}) => {
     const token = await SecureStore.getItemAsync("auth_token_cab");
     if (!token) throw new Error('No authentication token found');
-    
+
     return axios({
       ...options,
       url,
@@ -282,13 +289,13 @@ const HeaderNew = React.memo(({ isRefresh }) => {
       if (response.data.partner) {
         const userData = response.data.partner;
         const isOnline = userData.isAvailable === true;
-        
-        updateState({ 
-          userData, 
+
+        updateState({
+          userData,
           isOnline,
-          loading: false 
+          loading: false
         });
-        
+
         return userData;
       }
     } catch (error) {
@@ -317,7 +324,7 @@ const HeaderNew = React.memo(({ isRefresh }) => {
   // Optimized refresh function
   const handleRefresh = useCallback(async () => {
     if (state.refreshing) return;
-    
+
     try {
       updateState({ refreshing: true });
       await Promise.all([
@@ -325,7 +332,7 @@ const HeaderNew = React.memo(({ isRefresh }) => {
         fetchActiveRideDetails(),
         reCallMe()
       ]);
-      
+
       Alert.alert("Success", "Dashboard refreshed successfully", [{ text: "OK" }]);
     } catch (error) {
       Alert.alert("Error", "Failed to refresh dashboard", [{ text: "OK" }]);
@@ -337,10 +344,10 @@ const HeaderNew = React.memo(({ isRefresh }) => {
   // Toggle online status
   const toggleOnlineStatus = useCallback(async () => {
     if (state.loading) return;
-    
+
     try {
       updateState({ loading: true });
-      
+
       const expireDate = new Date(state.userData?.RechargeData?.expireData);
       const currentDate = new Date();
       const goingOnline = !state.isOnline;
@@ -351,7 +358,7 @@ const HeaderNew = React.memo(({ isRefresh }) => {
             text: "Recharge Now",
             onPress: () => navigation.navigate("Recharge", {
               showOnlyBikePlan: state.userData?.rideVehicleInfo?.vehicleName === "2 Wheeler" ||
-                               state.userData?.rideVehicleInfo?.vehicleName === "Bike",
+                state.userData?.rideVehicleInfo?.vehicleName === "Bike",
               role: state.userData?.category,
               firstRecharge: state.userData?.isFirstRechargeDone || false,
             }),
@@ -370,13 +377,13 @@ const HeaderNew = React.memo(({ isRefresh }) => {
       if (response.data.success) {
         const newStatus = response.data.cabRider?.status === "online";
         updateState({ isOnline: newStatus, loading: false });
-        
+
         // Animate status change
         Animated.sequence([
           Animated.timing(fadeAnim, { toValue: 0.7, duration: 200, useNativeDriver: true }),
           Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         ]).start();
-        
+
         navigation.replace('Home');
       }
     } catch (error) {
@@ -390,9 +397,9 @@ const HeaderNew = React.memo(({ isRefresh }) => {
   const handleLogout = useCallback(async (retryCount = 0, maxRetries = 3) => {
     try {
       updateState({ loading: true });
-      
+
       await SecureStore.deleteItemAsync("auth_token_cab");
-      
+
       if (!state.userData?._id) {
         navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] });
         return;
@@ -403,19 +410,19 @@ const HeaderNew = React.memo(({ isRefresh }) => {
       }
 
       await axios.get(`${API_BASE_URL}/rider-logout/${state.userData._id}`);
-      
+
       navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] });
       BackHandler.exitApp();
     } catch (error) {
       console.error(`Logout Error (Attempt ${retryCount + 1}):`, error);
-      
+
       if (retryCount < maxRetries) {
         setTimeout(() => handleLogout(retryCount + 1, maxRetries), 2000);
       } else {
         Alert.alert("Logout Failed", "Please try again or force logout", [
           { text: "Try Again", onPress: () => handleLogout(0, maxRetries) },
-          { 
-            text: "Force Logout", 
+          {
+            text: "Force Logout",
             onPress: () => navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] })
           },
         ]);
@@ -501,21 +508,21 @@ const HeaderNew = React.memo(({ isRefresh }) => {
               </Animated.View>
             ) : (
               // Active Ride Button
-              <ActiveRideButton 
-                onPress={handleActiveRidePress} 
-                activeRideData={state.activeRideData} 
+              <ActiveRideButton
+                onPress={handleActiveRidePress}
+                activeRideData={state.activeRideData}
               />
             )}
 
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
-              <HeaderButton 
-                icon="bell" 
+              <HeaderButton
+                icon="bell"
                 onPress={handleNotificationPress}
                 iconColor={colors.textSecondary}
               />
-              <HeaderButton 
-                icon="bars" 
+              <HeaderButton
+                icon="bars"
                 onPress={() => updateState({ menuVisible: true })}
                 style={styles.menuButton}
                 iconColor="#FFFFFF"

@@ -598,10 +598,14 @@ export default function RideSearching({ refreshing, id }) {
                                     <Text style={styles.totalLabel}>Total Earning To This Ride:</Text>
                                     <Text style={styles.totalValue}>{formatCurrency(ride?.pricing?.total_fare)}</Text>
                                 </View>
-                                <View style={[styles.detailRow, styles.totalRow]}>
-                                    <Text style={styles.totalLabel}>MCD and toll taxes are included in this fare. Please do not collect any additional charges from the user.</Text>
-
+                                <View style={styles.fareTotal}>
+                                    <Text style={styles.fareTotalLabel}>Total Fare to be Collected from User</Text>
+                                    <Text style={styles.fareTotalNote}>
+                                        This fare includes MCD and toll taxes. Please do not collect any additional charges from the user.
+                                    </Text>
+                        
                                 </View>
+
                             </View>
                         </ScrollView>
 
@@ -838,6 +842,36 @@ const styles = StyleSheet.create({
         fontWeight: "800",
         color: colors.success,
     },
+      fareTotal: {
+    backgroundColor: '#f0fffe', // light background
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    marginHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  fareTotalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#003873',
+    marginBottom: 8,
+  },
+  fareTotalNote: {
+    fontSize: 14,
+    color: '#4377a2',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  fareTotalValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#00aaa9',
+    textAlign: 'right',
+  },
     otp: {
         fontWeight: "700",
         fontSize: 16,
