@@ -20,10 +20,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { CommonActions, useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
+import { Audio } from "expo-av"
+
 import { useFetchUserDetails } from "../../hooks/New Hookes/RiderDetailsHooks";
 import NewMap from "../components/running-ride/NewMap";
-import { Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
-import { API_BASE_URL, colors } from "../NewConstant";
+import { MaterialIcons } from '@expo/vector-icons';
+import { API_BASE_URL } from "../NewConstant";
 import * as Updates from 'expo-updates';
 import HeaderNew from "../components/Header/HeaderNew";
 
@@ -47,16 +49,18 @@ const COLORS = {
     shadow: 'rgba(0, 0, 0, 0.1)',
 };
 
+
+
 export default function RunningRide() {
     const route = useRoute();
     const { rideData } = route.params || {};
     const navigation = useNavigation();
     const { fetchUserDetails, userData } = useFetchUserDetails();
-    
+
     // Animation refs
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
-    
+
     // Core state
     const [activeRideData, setActiveRideData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -64,12 +68,12 @@ export default function RunningRide() {
     const [error, setError] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
-    
+
     // Modal states
     const [showCancelModal, setCancelModal] = useState(false);
     const [showOtpModal, setShowOtpModal] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    
+
     // Form states
     const [cancelReasons, setCancelReasons] = useState([]);
     const [selectedReason, setSelectedReason] = useState(null);
@@ -77,7 +81,7 @@ export default function RunningRide() {
     const [otp, setOtp] = useState('');
     const [otpLoading, setOtpLoading] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('cash');
-    
+
     // UI states
     const [activeTab, setActiveTab] = useState('user');
     const [rideStep, setRideStep] = useState('pickup');
@@ -131,7 +135,7 @@ export default function RunningRide() {
                 if (response.data?.data) {
                     setActiveRideData(response.data.data);
                     setRetryCount(0);
-                    
+
                     // Update ride step based on status
                     const status = response.data.data.ride_status;
                     switch (status) {
@@ -158,7 +162,7 @@ export default function RunningRide() {
             }
         } catch (error) {
             console.error("❌ Error fetching ride details:", error);
-            
+
             let errorMessage = "Something went wrong. Please try again.";
             if (error?.code === 'ECONNABORTED') {
                 errorMessage = "Connection timeout. Please check your internet.";
@@ -167,10 +171,10 @@ export default function RunningRide() {
             } else if (error?.response?.status >= 500) {
                 errorMessage = "Server is temporarily unavailable. Please try again.";
             }
-            
+
             setError(errorMessage);
             setActiveRideData(null);
-            
+
             // Auto retry with exponential backoff
             if (retryCount < 3 && userData?.on_ride_id) {
                 const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
@@ -193,17 +197,17 @@ export default function RunningRide() {
             if (currentRoute !== 'start') return;
 
             const pollingInterval = rideStatus === 'in_progress' ? 5000 : 10000;
-            
+
             const interval = setInterval(async () => {
                 try {
                     await fetchActiveRideDetails(true);
-                    
+
                     const isCancelled = rideStatus === 'cancelled';
                     const isCompleted = rideStatus === 'completed' && paymentStatus === 'completed';
-                    
+
                     if (isCancelled || isCompleted) {
                         clearInterval(interval);
-                        
+
                         Alert.alert(
                             "Ride Update",
                             isCancelled ? "Your ride has been cancelled." : "Ride completed successfully!",
@@ -244,7 +248,7 @@ export default function RunningRide() {
                 setRideStep('otp');
                 setShowOtpModal(true);
                 await fetchActiveRideDetails();
-                
+
                 Alert.alert(
                     'Location Reached! 🎯',
                     'You have successfully reached the pickup location.',
@@ -278,13 +282,13 @@ export default function RunningRide() {
                 setOtp('');
                 setShowOtpModal(false);
                 setRideStep('drop');
-                
+
                 Alert.alert(
                     'Ride Started! 🚗',
                     'OTP verified successfully. Have a safe journey!',
                     [{ text: 'OK' }]
                 );
-                
+
                 await fetchActiveRideDetails();
             }
         } catch (error) {
@@ -309,7 +313,7 @@ export default function RunningRide() {
                 setRideStep('payment');
                 setShowPaymentModal(true);
                 await fetchActiveRideDetails();
-                
+
                 Alert.alert(
                     'Ride Completed! 🎉',
                     'You have successfully completed the ride.',
@@ -327,43 +331,60 @@ export default function RunningRide() {
 
     const collectPayment = useCallback(async () => {
         try {
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                staysActiveInBackground: false,
+                playsInSilentModeIOS: true,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+            });
+
+            const { sound } = await Audio.Sound.createAsync(
+                require("./coin-sound.mp3"),
+                {
+                    shouldPlay: false,
+                    isLooping: false,
+                    volume: 1.0,
+                }
+            );
+
             const response = await axios.post(`${API_BASE_URL}/new/collect-payment`, {
                 riderId: userData?._id,
                 rideId: activeRideData?._id,
                 amount: activeRideData?.pricing?.total_fare,
-                mode: paymentMethod
+                mode: paymentMethod,
             });
 
             if (response.data.success) {
+                // ✅ Play the sound
+                await sound.playAsync();
+
                 setShowPaymentModal(false);
-                
-                Alert.alert(
-                    'Payment Collected! 💰',
-                    `₹${totalFare} has been collected successfully.`,
-                    [{
-                        text: 'OK',
+
+                Alert.alert("Payment Collected! 💰", `₹${totalFare} has been collected successfully.`, [
+                    {
+                        text: "OK",
                         onPress: () => {
                             navigation.reset({
                                 index: 0,
-                                routes: [{ name: 'Home' }],
+                                routes: [{ name: "Home" }],
                             });
-                        }
-                    }]
-                );
+                        },
+                    },
+                ]);
             }
         } catch (error) {
             Alert.alert(
-                'Payment Collection Failed',
-                error.response?.data?.message || 'Please try again.',
-                [{ text: 'OK' }]
+                "Payment Collection Failed",
+                error.response?.data?.message || "Please try again.",
+                [{ text: "OK" }]
             );
         }
     }, [userData?._id, activeRideData?._id, paymentMethod, totalFare, navigation]);
-
     // Enhanced cancel functionality
     const fetchCancelReasons = useCallback(async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`);
+            const response = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active&type=driver`);
             if (response.data?.data) {
                 setCancelReasons(response.data.data);
             }
@@ -500,9 +521,9 @@ export default function RunningRide() {
                                         </Text>
                                     </View>
                                 </View>
-                                
+
                                 <View style={styles.routeLine} />
-                                
+
                                 <View style={styles.addressItem}>
                                     <View style={[styles.locationDot, { backgroundColor: COLORS.danger }]} />
                                     <View style={styles.addressContent}>
@@ -566,7 +587,7 @@ export default function RunningRide() {
                     <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
                         <View style={styles.fareCard}>
                             <Text style={styles.fareTitle}>Fare Breakdown</Text>
-                            
+
                             <View style={styles.fareItems}>
                                 {[
                                     { label: 'Base Fare', value: activeRideData.pricing?.base_fare },
@@ -580,7 +601,7 @@ export default function RunningRide() {
                                         <Text style={styles.fareValue}>₹{item.value || '0.00'}</Text>
                                     </View>
                                 ))}
-                                
+
                                 {activeRideData.pricing?.discount > 0 && (
                                     <View style={styles.fareItem}>
                                         <Text style={styles.fareLabel}>Discount</Text>
@@ -624,7 +645,7 @@ export default function RunningRide() {
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
             <HeaderNew />
-            
+
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContainer}
@@ -637,7 +658,7 @@ export default function RunningRide() {
                     />
                 }
             >
-                <Animated.View 
+                <Animated.View
                     style={[
                         styles.container,
                         {
@@ -653,7 +674,7 @@ export default function RunningRide() {
                                 ride_status={activeRideData?.ride_status}
                                 pickup={activeRideData?.pickup_location?.coordinates}
                                 drop={activeRideData?.drop_location?.coordinates}
-                                isReached={() => {}}
+                                isReached={() => { }}
                             />
                         </View>
                     )}
@@ -708,13 +729,13 @@ export default function RunningRide() {
                                         onPress={() => setActiveTab(tab.key)}
                                         activeOpacity={0.8}
                                     >
-                                        <MaterialIcons 
-                                            name={tab.icon} 
-                                            size={20} 
-                                            color={activeTab === tab.key ? '#fff' : COLORS.text.secondary} 
+                                        <MaterialIcons
+                                            name={tab.icon}
+                                            size={20}
+                                            color={activeTab === tab.key ? '#fff' : COLORS.text.secondary}
                                         />
                                         <Text style={[
-                                            styles.tabText, 
+                                            styles.tabText,
                                             activeTab === tab.key && styles.activeTabText
                                         ]}>
                                             {tab.label}
@@ -746,7 +767,7 @@ export default function RunningRide() {
 
             {/* Fixed Bottom Button */}
             {!showLoading && !error && activeRideData && (
-                <Animated.View 
+                <Animated.View
                     style={[
                         styles.bottomButtonContainer,
                         { opacity: fadeAnim }
@@ -774,11 +795,11 @@ export default function RunningRide() {
                                 <MaterialIcons name="close" size={24} color={COLORS.text.primary} />
                             </TouchableOpacity>
                         </View>
-                        
+
                         <Text style={styles.modalSubtitle}>
                             Please select a reason for cancellation:
                         </Text>
-                        
+
                         <FlatList
                             data={cancelReasons}
                             keyExtractor={(item) => item._id}
@@ -804,10 +825,10 @@ export default function RunningRide() {
                             )}
                             style={styles.reasonsList}
                         />
-                        
+
                         <View style={styles.modalActions}>
-                            <TouchableOpacity 
-                                style={styles.cancelModalButton} 
+                            <TouchableOpacity
+                                style={styles.cancelModalButton}
                                 onPress={() => setCancelModal(false)}
                             >
                                 <Text style={styles.cancelModalText}>Back</Text>
@@ -840,7 +861,7 @@ export default function RunningRide() {
                         <Text style={styles.otpSubtitle}>
                             Please enter the 4-digit OTP provided by the rider
                         </Text>
-                        
+
                         <TextInput
                             style={styles.otpInput}
                             value={otp}
@@ -851,7 +872,7 @@ export default function RunningRide() {
                             textAlign="center"
                             autoFocus
                         />
-                        
+
                         <View style={styles.otpButtons}>
                             <TouchableOpacity
                                 style={styles.otpCancelButton}
@@ -885,7 +906,7 @@ export default function RunningRide() {
                         <MaterialIcons name="payment" size={48} color={COLORS.success} />
                         <Text style={styles.paymentTitle}>Collect Payment</Text>
                         <Text style={styles.paymentAmount}>₹{totalFare}</Text>
-                        
+
                         <View style={styles.paymentMethods}>
                             {[
                                 { key: 'cash', icon: 'money', label: 'Cash' },
@@ -900,10 +921,10 @@ export default function RunningRide() {
                                     onPress={() => setPaymentMethod(method.key)}
                                     activeOpacity={0.8}
                                 >
-                                    <MaterialIcons 
-                                        name={method.icon} 
-                                        size={24} 
-                                        color={paymentMethod === method.key ? '#fff' : COLORS.text.secondary} 
+                                    <MaterialIcons
+                                        name={method.icon}
+                                        size={24}
+                                        color={paymentMethod === method.key ? '#fff' : COLORS.text.secondary}
                                     />
                                     <Text style={[
                                         styles.paymentMethodText,
@@ -914,7 +935,7 @@ export default function RunningRide() {
                                 </TouchableOpacity>
                             ))}
                         </View>
-                        
+
                         {paymentMethod === 'digital' && userData?.YourQrCodeToMakeOnline && (
                             <View style={styles.qrContainer}>
                                 <Image
@@ -925,7 +946,7 @@ export default function RunningRide() {
                                 <Text style={styles.qrText}>Show this QR code to the rider</Text>
                             </View>
                         )}
-                        
+
                         <View style={styles.paymentButtons}>
                             <TouchableOpacity
                                 style={styles.paymentCancelButton}
@@ -968,7 +989,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
     },
-    
+
     // Loading States
     loadingContainer: {
         alignItems: 'center',
@@ -991,7 +1012,7 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         fontWeight: '600',
     },
-    
+
     // Error States
     errorContainer: {
         alignItems: 'center',
@@ -1032,7 +1053,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 8,
     },
-    
+
     // Tab Navigation
     tabContainer: {
         flexDirection: 'row',
@@ -1072,7 +1093,7 @@ const styles = StyleSheet.create({
     activeTabText: {
         color: '#fff',
     },
-    
+
     // Tab Content
     tabContent: {
         backgroundColor: COLORS.surface,
@@ -1085,7 +1106,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
     },
-    
+
     // User Tab
     userCard: {
         backgroundColor: COLORS.surface,
@@ -1134,7 +1155,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 4,
     },
-    
+
     // Address Section
     addressSection: {
         marginTop: 8,
@@ -1175,7 +1196,7 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         fontWeight: '500',
     },
-    
+
     // Ride Tab
     rideDetailsCard: {
         backgroundColor: COLORS.surface,
@@ -1244,7 +1265,7 @@ const styles = StyleSheet.create({
         color: COLORS.danger,
         marginLeft: 8,
     },
-    
+
     // Fare Tab
     fareCard: {
         backgroundColor: COLORS.surface,
@@ -1301,7 +1322,7 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         fontWeight: 'bold',
     },
-    
+
     // Bottom Button
     bottomButtonContainer: {
         position: 'absolute',
@@ -1339,7 +1360,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginRight: 8,
     },
-    
+
     // No Data State
     noDataContainer: {
         alignItems: 'center',
@@ -1375,7 +1396,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    
+
     // Modal Styles
     modalOverlay: {
         flex: 1,
@@ -1412,7 +1433,7 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
         lineHeight: 22,
     },
-    
+
     // Cancel Modal
     reasonsList: {
         maxHeight: height * 0.4,
@@ -1497,7 +1518,7 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: '600',
     },
-    
+
     // OTP Modal
     otpModal: {
         backgroundColor: COLORS.surface,
@@ -1567,7 +1588,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    
+
     // Payment Modal
     paymentModal: {
         backgroundColor: COLORS.surface,

@@ -23,11 +23,11 @@ import * as Notifications from 'expo-notifications';
 
 const screenHeight = Dimensions.get("window").height
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
 });
 export default function RideSearching({ refreshing, id }) {
     const { userData, loading, error, fetchUserDetails, isOnline } = useFetchUserDetails()
@@ -282,7 +282,7 @@ export default function RideSearching({ refreshing, id }) {
         try {
             const timestamp = new Date().toLocaleTimeString()
             let sendRider = userData?._id || id
-           
+
             if (sendRider === undefined || sendRider === null) {
                 console.log("❌ User data is not available, cannot fetch rides")
                 await fetchUserDetails()
@@ -304,7 +304,7 @@ export default function RideSearching({ refreshing, id }) {
                     content: {
                         title: "🚖 Ride Found!",
                         body: `You have a new ride request from ${firstRide?.pickupLocation?.address || 'a nearby location'}.`,
-                     
+
                         priority: Notifications.AndroidNotificationPriority.HIGH,
                     },
                     trigger: null, // Immediate notification
@@ -572,7 +572,7 @@ export default function RideSearching({ refreshing, id }) {
                             {/* Pricing Details */}
                             <View style={styles.section}>
                                 <Text style={styles.sectionTitle}>💰 Pricing Breakdown</Text>
-                                <View style={styles.detailRow}>
+                                {/* <View style={styles.detailRow}>
                                     <Text style={styles.label}>Base Fare:</Text>
                                     <Text style={styles.value}>{formatCurrency(ride?.pricing?.base_fare)}</Text>
                                 </View>
@@ -593,10 +593,14 @@ export default function RideSearching({ refreshing, id }) {
                                 <View style={styles.detailRow}>
                                     <Text style={styles.label}>Extra Earning:</Text>
                                     <Text style={styles.value}>{formatCurrency(ride?.pricing?.platform_fee)}</Text>
+                                </View> */}
+                                <View style={[styles.detailRow, styles.totalRow]}>
+                                    <Text style={styles.totalLabel}>Total Earning To This Ride:</Text>
+                                    <Text style={styles.totalValue}>{formatCurrency(ride?.pricing?.total_fare)}</Text>
                                 </View>
                                 <View style={[styles.detailRow, styles.totalRow]}>
-                                    <Text style={styles.totalLabel}>Total Fare:</Text>
-                                    <Text style={styles.totalValue}>{formatCurrency(ride?.pricing?.total_fare)}</Text>
+                                    <Text style={styles.totalLabel}>MCD and toll taxes are excluded in this fare.</Text>
+
                                 </View>
                             </View>
                         </ScrollView>
@@ -830,8 +834,8 @@ const styles = StyleSheet.create({
         color: colors.textPrimary,
     },
     totalValue: {
-        fontSize: 18,
-        fontWeight: "700",
+        fontSize: 32,
+        fontWeight: "800",
         color: colors.success,
     },
     otp: {

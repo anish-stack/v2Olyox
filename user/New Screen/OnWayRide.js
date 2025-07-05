@@ -21,7 +21,7 @@ import axios from "axios"
 import NewUserAndDriverMap from "./NewMap"
 import { useLocation } from "../context/LocationContext"
 import { useRide } from "../context/RideContext"
-import useNotificationPermission from "../hooks/notification"
+import useSettings from "../hooks/Settings"
 
 const { width, height } = Dimensions.get("window")
 const API_BASE_URL = "https://www.appv2.olyox.com"
@@ -39,7 +39,8 @@ export default function OnWayRide() {
     const { location } = useLocation()
     const { clearCurrentRide } = useRide()
     const navigation = useNavigation()
-    const { lastNotification } = useNotificationPermission()
+
+    const { settings } = useSettings()
     // State management
     const [activeRideData, setActiveRideData] = useState(null)
     const [loading, setLoading] = useState(false)
@@ -93,7 +94,7 @@ export default function OnWayRide() {
     // Fetch cancel reasons
     const fetchCancelReasons = useCallback(async () => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/api/v1/admin/cancel-reasons?active=active`)
+            const response = await axios.get(`${API_BASE_URL}/api/v1/admin/cancel-reasons?active=active&type=user`)
             if (response.data?.data) {
                 setCancelReasons(response.data.data)
             }
@@ -461,7 +462,36 @@ export default function OnWayRide() {
             </ScrollView>
 
             {renderHelpButton()}
-            {renderCancelModal()}
+
+            {['in_progress', 'completed', 'cancelled'].includes(activeRideData?.ride_status) ? (
+                <View style={{ padding: 16, backgroundColor: '#fff', borderRadius: 8, marginVertical: 12 }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
+                        Ride cannot be cancelled at this stage.
+                    </Text>
+                    <Text style={{ fontSize: 14, marginBottom: 12 }}>
+                        For further assistance, please contact our support team.
+                    </Text>
+                    <Text style={{ fontSize: 16, color: '#0d6efd', marginBottom: 12 }}>
+                        Support: {settings?.support_number || '01141236789'}
+                    </Text>
+                    <TouchableOpacity
+                        style={{
+                            backgroundColor: '#0d6efd',
+                            paddingVertical: 10,
+                            paddingHorizontal: 16,
+                            borderRadius: 6,
+                            alignItems: 'center',
+                        }}
+                        onPress={() => {
+                            Linking.openURL(`tel:${settings?.support_number || '01141236789'}`);
+                        }}
+                    >
+                        <Text style={{ color: '#fff', fontSize: 16 }}>Call Support</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                renderCancelModal()
+            )}
 
             {error && (
                 <View style={styles.errorContainer}>

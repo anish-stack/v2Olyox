@@ -44,7 +44,8 @@ exports.updateCancelReason = async (req, res) => {
 exports.getAllCancelReasons = async (req, res) => {
     try {
         const query = req.query.active || 'active'
-        const cancelReasons = await CancelReason.find({status:query});
+        const type = req.query.type || 'driver'
+        const cancelReasons = await CancelReason.find({ status: query, cancelReasonType: type });
         res.status(200).json({ message: "Cancel reasons fetched successfully", data: cancelReasons });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
@@ -52,13 +53,13 @@ exports.getAllCancelReasons = async (req, res) => {
 };
 
 exports.getAllCancelReasonsAdmin = async (req, res) => {
-    try{
-const allReason = await CancelReason.find({});
-if(!allReason){
-    return res.status(400).json({ message: "No cancel reason found" });
-}
-res.status(200).json({ success: true, message: "Cancel reasons fetched successfully", data: allReason });
-    }catch(error){
+    try {
+        const allReason = await CancelReason.find({});
+        if (!allReason) {
+            return res.status(400).json({ message: "No cancel reason found" });
+        }
+        res.status(200).json({ success: true, message: "Cancel reasons fetched successfully", data: allReason });
+    } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 }
@@ -100,7 +101,7 @@ exports.toggleCancelReason = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-        console.log('data',id)
+        console.log('data', id)
         const cancelReason = await CancelReason.findById(id);
 
         if (!cancelReason) {

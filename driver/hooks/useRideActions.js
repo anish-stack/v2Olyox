@@ -10,12 +10,12 @@ import { fetchUserData } from "../context/socketService"
 const API_BASE_URL = "https://www.appv2.olyox.com/api/v1"
 
 export function useRideActions({ state, setState, rideDetails, socket, mapRef, soundRef }) {
-  console.log("setState",setState)
+  console.log("setState", setState)
   const navigation = useNavigation()
   const { onRide, updateRideStatus } = useRideStatus();
 
   const updateState = (newState) => {
-    console.log("updateState",newState)
+    console.log("updateState", newState)
     setState((prevState) => ({ ...prevState, ...newState }))
   }
 
@@ -172,7 +172,7 @@ export function useRideActions({ state, setState, rideDetails, socket, mapRef, s
       updateState({ sound })
 
       // Wait a little and show alert
-     
+
 
       logDebug("Sound started successfully")
     } catch (error) {
@@ -210,10 +210,10 @@ export function useRideActions({ state, setState, rideDetails, socket, mapRef, s
   const fetchCancelReasons = useCallback(async () => {
     logDebug("Fetching cancel reasons")
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active`)
+      const { data } = await axios.get(`${API_BASE_URL}/admin/cancel-reasons?active=active&type=driver`)
 
       if (data.data) {
-        logDebug("Cancel reasons fetched successfully",data.data)
+        logDebug("Cancel reasons fetched successfully", data.data)
         updateState({ cancelReasons: data.data })
       } else {
         logDebug("No cancel reasons found")
@@ -243,7 +243,7 @@ export function useRideActions({ state, setState, rideDetails, socket, mapRef, s
       Alert.alert("Error", "OTP information not available. Please contact support.");
       return;
     }
-        logDebug("Submitting OTP", { state })
+    logDebug("Submitting OTP", { state })
 
 
     if (!state.otp) {
@@ -355,7 +355,7 @@ export function useRideActions({ state, setState, rideDetails, socket, mapRef, s
         { text: "OK", onPress: () => resetToHome() },
       ])
       updateRideStatus(false)
-   navigation.dispatch(
+      navigation.dispatch(
         CommonActions.reset({
           index: 0,
           routes: [{ name: 'Home' }],
@@ -371,53 +371,78 @@ export function useRideActions({ state, setState, rideDetails, socket, mapRef, s
   }, [state.selectedReason, getCurrentRideDetails, socket, resetToHome])
 
   // Complete ride
-const handleCompleteRide = useCallback(async () => {
-  try {
-    // Get current ride details
-    const currentRideDetails = await getCurrentRideDetails();
-    if (!currentRideDetails) {
-      Alert.alert("Error", "Could not find ride details to complete.");
-      return;
-    }
-
-    // Get user data
-    const user = await fetchUserData();
-    if (!user || !user._id) {
-      throw new Error("❌ Invalid user");
-    }
-
-    // Socket reconnection logic
-    let activeSocket = socket;
-
-    if (!activeSocket || !activeSocket.connected) {
-      try {
-        console.log("Socket not connected, attempting to reconnect...");
-        activeSocket = await initializeSocket({
-          userType: "driver",
-          userId: user._id,
-        });
-      } catch (socketError) {
-        console.error("Failed to initialize socket:", socketError);
+  const handleCompleteRide = useCallback(async () => {
+    try {
+      // Get current ride details
+      const currentRideDetails = await getCurrentRideDetails();
+      if (!currentRideDetails) {
+        Alert.alert("Error", "Could not find ride details to complete.");
+        return;
       }
-    }
 
-    Alert.alert(
-      "Complete Ride",
-      "Are you sure you want to complete this ride?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Complete",
-          onPress: async () => {
-            if (activeSocket && activeSocket.connected) {
-              activeSocket.emit(
-                "ride_end_by_rider",
-                { rideDetails: currentRideDetails },
-                (response) => {
-                  if (response && response.error) {
-                    Alert.alert("Error", response.error || "Failed to complete ride. Please try again.");
-                    return;
+      // Get user data
+      const user = await fetchUserData();
+      if (!user || !user._id) {
+        throw new Error("❌ Invalid user");
+      }
+
+      // Socket reconnection logic
+      let activeSocket = socket;
+
+      if (!activeSocket || !activeSocket.connected) {
+        try {
+          console.log("Socket not connected, attempting to reconnect...");
+          activeSocket = await initializeSocket({
+            userType: "driver",
+            userId: user._id,
+          });
+        } catch (socketError) {
+          console.error("Failed to initialize socket:", socketError);
+        }
+      }
+
+      Alert.alert(
+        "Complete Ride",
+        "Are you sure you want to complete this ride?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Complete",
+            onPress: async () => {
+              if (activeSocket && activeSocket.connected) {
+                activeSocket.emit(
+                  "ride_end_by_rider",
+                  { rideDetails: currentRideDetails },
+                  (response) => {
+                    if (response && response.error) {
+                      Alert.alert("Error", response.error || "Failed to complete ride. Please try again.");
+                      return;
+                    }
+
+                    Alert.alert("Success", "Ride completed successfully.", [
+                      {
+                        text: "OK",
+                        onPress: () => {
+                          updateRideStatus(false);
+                          resetToHome();
+                        },
+                      },
+                    ]);
                   }
+                );
+              } else {
+                // Fallback to API using axios
+                try {
+                  const rideId = currentRideDetails.id || currentRideDetails._id;
+                  const response = await axios.post(
+                    `${API_BASE_URL}/rider/rider-end-fallback/${rideId}`,
+                    {
+                      rideId,
+                      userId: user._id,
+                    }
+                  );
+
+                  const result = response.data;
 
                   Alert.alert("Success", "Ride completed successfully.", [
                     {
@@ -428,47 +453,22 @@ const handleCompleteRide = useCallback(async () => {
                       },
                     },
                   ]);
+                } catch (apiError) {
+                  console.error("API fallback failed:", apiError);
+                  const errorMsg =
+                    apiError.response?.data?.message || "Could not complete ride. Please try again.";
+                  Alert.alert("Connection Error", errorMsg);
                 }
-              );
-            } else {
-              // Fallback to API using axios
-              try {
-                const rideId = currentRideDetails.id || currentRideDetails._id;
-                const response = await axios.post(
-                  `${API_BASE_URL}/rider/rider-end-fallback/${rideId}`,
-                  {
-                    rideId,
-                    userId: user._id,
-                  }
-                );
-
-                const result = response.data;
-
-                Alert.alert("Success", "Ride completed successfully.", [
-                  {
-                    text: "OK",
-                    onPress: () => {
-                      updateRideStatus(false);
-                      resetToHome();
-                    },
-                  },
-                ]);
-              } catch (apiError) {
-                console.error("API fallback failed:", apiError);
-                const errorMsg =
-                  apiError.response?.data?.message || "Could not complete ride. Please try again.";
-                Alert.alert("Connection Error", errorMsg);
               }
-            }
+            },
           },
-        },
-      ]
-    );
-  } catch (error) {
-    console.error("Error in handleCompleteRide:", error);
-    Alert.alert("Error", "An unexpected error occurred. Please try again.");
-  }
-}, [getCurrentRideDetails, socket, navigation, updateRideStatus, resetToHome]);
+        ]
+      );
+    } catch (error) {
+      console.error("Error in handleCompleteRide:", error);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+    }
+  }, [getCurrentRideDetails, socket, navigation, updateRideStatus, resetToHome]);
 
 
   // Socket event listeners
