@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
+"use client"
+
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react"
 import {
   StyleSheet,
   View,
@@ -20,26 +22,206 @@ import Map from "../Map/Map"
 import axios from "axios"
 import { AntDesign, MaterialIcons, Ionicons, Feather } from "@expo/vector-icons"
 import useSettings from "../../hooks/Settings"
+import { useRideSearching } from "../../context/ride_searching"
 
 const { width, height } = Dimensions.get("window")
 const API_BASE_URL = "https://www.appv2.olyox.com/api/v1/new/new-price-calculations"
 
 // Haptic feedback utility
 const hapticFeedback = () => {
-  if (Platform.OS === 'android') {
+  if (Platform.OS === "android") {
     Vibration.vibrate(50)
   }
 }
 
 // Toast utility for Android
 const showToast = (message) => {
-  if (Platform.OS === 'android') {
+  if (Platform.OS === "android") {
     ToastAndroid.show(message, ToastAndroid.SHORT)
   }
 }
 
+// Memoized Header Component
+const Header = memo(({ onBack }) => (
+  <View style={styles.header}>
+    <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
+      <AntDesign name="arrowleft" size={24} color="#000" />
+    </TouchableOpacity>
+    <Text style={styles.headerTitle}>Choose Your Ride</Text>
+    <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
+      <Ionicons name="notifications-outline" size={22} color="#000" />
+    </TouchableOpacity>
+  </View>
+))
+
+// Memoized Map Controls Component
+const MapControls = memo(({ mapExpanded, onToggle }) => (
+  <View style={styles.mapControls}>
+    <TouchableOpacity style={styles.mapControlButton} onPress={onToggle} activeOpacity={0.7}>
+      <MaterialIcons name={mapExpanded ? "fullscreen-exit" : "fullscreen"} size={22} color="#000" />
+    </TouchableOpacity>
+  </View>
+))
+
+// Memoized Location Section Component
+const LocationSection = memo(({ pickup, dropoff, routeInfo }) => (
+  <View style={styles.locationContainer}>
+    <View style={styles.locationItem}>
+      <View style={styles.greenDot} />
+      <Text style={styles.locationText} numberOfLines={1}>
+        {pickup?.description || "Current Location"}
+      </Text>
+      <View style={styles.timeBox}>
+        <MaterialIcons name="access-time" size={12} color="#666" />
+        <Text style={styles.timeText}>Now</Text>
+      </View>
+    </View>
+    <View style={styles.locationDivider} />
+    <View style={styles.locationItem}>
+      <View style={styles.redDot} />
+      <Text style={styles.locationText} numberOfLines={1}>
+        {dropoff?.description || "Destination"}
+      </Text>
+      <View style={styles.distanceBox}>
+        <MaterialIcons name="directions" size={12} color="#666" />
+        <Text style={styles.timeText}>{routeInfo ? `${routeInfo.distanceInKm.toFixed(1)} km` : "Calculating..."}</Text>
+      </View>
+    </View>
+    {routeInfo && (
+      <View style={styles.routeInfoContainer}>
+        <View style={styles.routeInfoItem}>
+          <Feather name="clock" size={14} color="#666" />
+          <Text style={styles.routeInfoText}>{Math.round(routeInfo.durationInMinutes)} min</Text>
+        </View>
+        {routeInfo.conditions?.isNightTime && (
+          <View style={styles.conditionBadge}>
+            <Ionicons name="moon" size={12} color="#4A90E2" />
+            <Text style={styles.conditionText}>Night</Text>
+          </View>
+        )}
+        {routeInfo.conditions?.rain && (
+          <View style={styles.conditionBadge}>
+            <Ionicons name="rainy" size={12} color="#2196F3" />
+            <Text style={styles.conditionText}>Rain</Text>
+          </View>
+        )}
+      </View>
+    )}
+  </View>
+))
+
+// Memoized Ride Option Component
+const RideOption = memo(({ ride, isSelected, onSelect, formatPrice, getVehicleIcon, settings }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current
+
+  useEffect(() => {
+    if (isSelected) {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.02,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start()
+    }
+  }, [isSelected, scaleAnim])
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={[styles.rideOption, isSelected && styles.selectedRide]}
+        onPress={() => onSelect(ride)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.rideLeft}>
+          {ride.vehicleImage && ride.vehicleImage.startsWith("https") ? (
+            <Image
+              source={{ uri: ride.vehicleImage }}
+              style={[styles.rideIconContainer, isSelected && styles.selectedRideIcon]}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={[styles.rideIconContainer, isSelected && styles.selectedRideIcon]}>
+              <Text style={styles.rideIcon}>{getVehicleIcon(ride.vehicleType)}</Text>
+            </View>
+          )}
+          <View style={styles.rideInfo}>
+            <Text style={styles.rideName}>{ride.vehicleName}</Text>
+            <Text style={styles.rideDescription}>
+              {ride.vehicleType} • {Math.round(ride.durationInMinutes)} min
+            </Text>
+            {ride.conditions?.rain && (
+              <View style={styles.pricingDetails}>
+                <View style={styles.surchargeItem}>
+                  <Ionicons name="rainy" size={12} color="#2196F3" />
+                  <Text style={styles.surchargeText}>Rain surcharge</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+        <View style={styles.rideRight}>
+          {ride?.totalPrice && settings?.ride_percentage_off && (
+            <Text style={styles.originalPrice}>
+              {formatPrice(ride.totalPrice * (1 + Number(settings.ride_percentage_off) / 100))}
+            </Text>
+          )}
+          <Text style={styles.ridePrice}>{formatPrice(ride.totalPrice)}</Text>
+          <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
+            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  )
+})
+
+// Memoized Searching Status Component
+const SearchingStatus = memo(({ currentRide, onViewRide }) => (
+  <View style={styles.searchingContainer}>
+    <View style={styles.searchingCard}>
+      <View style={styles.searchingHeader}>
+        <ActivityIndicator size="small" color="#1976d2" />
+        <Text style={styles.searchingTitle}>Finding your ride...</Text>
+      </View>
+      <Text style={styles.searchingSubtitle}>We're connecting you with a {currentRide?.vehicleName || "driver"}</Text>
+      <TouchableOpacity style={styles.viewRideButton} onPress={onViewRide} activeOpacity={0.8}>
+        <Text style={styles.viewRideButtonText}>View Ride</Text>
+        <AntDesign name="arrowright" size={16} color="#1976d2" />
+      </TouchableOpacity>
+    </View>
+  </View>
+))
+
+// Memoized Loading Screen Component
+const LoadingScreen = memo(() => (
+  <View style={styles.loadingContainer}>
+    <View style={styles.loaderCard}>
+      <ActivityIndicator size="large" color="#000" />
+      <Text style={styles.loadingText}>Finding the best rides for you...</Text>
+      <Text style={styles.loadingSubText}>This may take a few seconds</Text>
+    </View>
+  </View>
+))
+
+// Memoized Error Screen Component
+const ErrorScreen = memo(({ error, onRetry }) => (
+  <View style={styles.errorContainer}>
+    <Ionicons name="alert-circle-outline" size={48} color="#F44336" />
+    <Text style={styles.errorText}>{error}</Text>
+    <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.8}>
+      <Text style={styles.retryButtonText}>Try Again</Text>
+    </TouchableOpacity>
+  </View>
+))
+
 export default function ShowMap() {
-  // Navigation and route
+  const { currentRide, rideStatus } = useRideSearching()
   const route = useRoute()
   const navigation = useNavigation()
 
@@ -59,31 +241,61 @@ export default function ShowMap() {
   // Settings
   const { settings } = useSettings()
 
-  // Extract data from route params
-  const data = route?.params?.data || {}
-  const { dropoff, pickup } = data || {}
+  // Extract data from route params - memoized
+  const routeData = useMemo(() => {
+    const data = route?.params?.data || {}
+    return {
+      dropoff: data.dropoff,
+      pickup: data.pickup,
+    }
+  }, [route?.params?.data])
 
-  const origin = useMemo(() => {
-    return pickup?.latitude && pickup?.longitude
-      ? { latitude: pickup.latitude, longitude: pickup.longitude }
-      : { latitude: 28.7161663, longitude: 77.1240672 }
-  }, [pickup])
+  const { dropoff, pickup } = routeData
 
-  const destination = useMemo(() => {
-    return dropoff?.latitude && dropoff?.longitude
-      ? { latitude: dropoff.latitude, longitude: dropoff.longitude }
-      : { latitude: 28.70406, longitude: 77.102493 }
-  }, [dropoff])
+  // Memoized coordinates
+  const coordinates = useMemo(() => {
+    const origin =
+      pickup?.latitude && pickup?.longitude
+        ? { latitude: pickup.latitude, longitude: pickup.longitude }
+        : { latitude: 28.7161663, longitude: 77.1240672 }
 
-  // Cleanup function to prevent memory leaks
-  const cleanup = useCallback(() => {
-    setVehiclePrices([])
-    setRouteInfo(null)
-    setSelectedRide(null)
-    setError(null)
+    const destination =
+      dropoff?.latitude && dropoff?.longitude
+        ? { latitude: dropoff.latitude, longitude: dropoff.longitude }
+        : { latitude: 28.70406, longitude: 77.102493 }
+
+    return { origin, destination }
+  }, [pickup, dropoff])
+
+  const { origin, destination } = coordinates
+
+  // Check if ride is being searched
+  const isRideSearching = useMemo(() => {
+    return currentRide && (rideStatus === "searching" || rideStatus === "pending")
+  }, [currentRide, rideStatus])
+
+  // Memoized utility functions
+  const formatPrice = useCallback((price) => {
+    return `₹${Math.round(price)}`
   }, [])
 
-  // Toggle map size with haptic feedback
+  const getVehicleIcon = useCallback((vehicleType) => {
+    const icons = {
+      SUV: "🚙",
+      Sedan: "🚗",
+      "XL/Prime": "🚘",
+      Auto: "🛺",
+      Bike: "🏍️",
+    }
+    return icons[vehicleType] || "🚗"
+  }, [])
+
+  // Memoized handlers
+  const handleBack = useCallback(() => {
+    hapticFeedback()
+    navigation.goBack()
+  }, [navigation])
+
   const toggleMapSize = useCallback(() => {
     hapticFeedback()
     Animated.timing(mapHeightAnimation, {
@@ -92,9 +304,21 @@ export default function ShowMap() {
       useNativeDriver: false,
     }).start()
     setMapExpanded(!mapExpanded)
-  }, [mapExpanded])
+  }, [mapExpanded, mapHeightAnimation])
 
-  // Calculate fare using the new API
+  const handleRideSelection = useCallback((ride) => {
+    hapticFeedback()
+    setSelectedRide(ride)
+    showToast(`${ride.vehicleName} selected`)
+  }, [])
+
+  const handleViewRide = useCallback(() => {
+    hapticFeedback()
+    // Navigate to current ride view
+    navigation.navigate("current_ride_screen")
+  }, [navigation])
+
+  // Calculate fare using the new API - memoized
   const calculateFareTwo = useCallback(async () => {
     if (!origin || !destination) {
       setError("Missing location information")
@@ -116,9 +340,9 @@ export default function ShowMap() {
         {
           timeout: 15000,
           headers: {
-            'Content-Type': 'application/json',
-          }
-        }
+            "Content-Type": "application/json",
+          },
+        },
       )
 
       if (response.data && response.data.success) {
@@ -148,35 +372,27 @@ export default function ShowMap() {
     } finally {
       setLoading(false)
     }
-  }, [origin, destination])
+  }, [origin, destination, fadeAnim])
 
-  // Initial load
-  useEffect(() => {
-    calculateFareTwo()
-
-    // Cleanup on unmount
-    return cleanup
-  }, [calculateFareTwo, cleanup])
-
-  // Handle ride selection with haptic feedback
-  const handleRideSelection = useCallback((ride) => {
+  const handleRetry = useCallback(() => {
     hapticFeedback()
-    setSelectedRide(ride)
-    showToast(`${ride.vehicleName} selected`)
-  }, [])
+    calculateFareTwo()
+  }, [calculateFareTwo])
 
-  // Handle booking
+  // Handle booking - memoized
   const handleBookNow = useCallback(() => {
     if (!selectedRide) {
-      showToast("Please select a ride option");
-      console.log("❌ Book Now blocked: No ride selected");
-      return;
+      showToast("Please select a ride option")
+      console.log("❌ Book Now blocked: No ride selected")
+      return
     }
 
-    hapticFeedback();
+    if (isRideSearching) {
+      showToast("Please wait, your current ride is being processed")
+      return
+    }
 
-
-
+    hapticFeedback()
     navigation.navigate("confirm_screen", {
       origin,
       destination,
@@ -184,244 +400,29 @@ export default function ShowMap() {
       routeInfo,
       dropoff,
       pickup,
-    });
-  }, [selectedRide, navigation, origin, destination, routeInfo, dropoff, pickup]);
+    })
+  }, [selectedRide, navigation, origin, destination, routeInfo, dropoff, pickup, isRideSearching])
 
-  // Format price
-  const formatPrice = useCallback((price) => {
-    return `₹${Math.round(price)}`
-  }, [])
+  // Initial load effect
+  useEffect(() => {
+    calculateFareTwo()
+  }, [calculateFareTwo])
 
-  // Get vehicle icon
-  const getVehicleIcon = useCallback((vehicleType) => {
-    const icons = {
-      'SUV': '🚙',
-      'Sedan': '🚗',
-      'XL/Prime': '🚘',
-      'Auto': '🛺',
-      'Bike': '🏍️',
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      setVehiclePrices([])
+      setRouteInfo(null)
+      setSelectedRide(null)
+      setError(null)
     }
-    return icons[vehicleType] || '🚗'
   }, [])
-
-  // Header component
-  const Header = useCallback(() => (
-    <View style={styles.header}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => {
-          hapticFeedback()
-          navigation.goBack()
-        }}
-        activeOpacity={0.7}
-      >
-        <AntDesign name="arrowleft" size={24} color="#000" />
-      </TouchableOpacity>
-      <Text style={styles.headerTitle}>Choose Your Ride</Text>
-      <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
-        <Ionicons name="notifications-outline" size={22} color="#000" />
-      </TouchableOpacity>
-    </View>
-  ), [navigation])
-
-  // Map controls component
-  const MapControls = useCallback(() => (
-    <View style={styles.mapControls}>
-      <TouchableOpacity
-        style={styles.mapControlButton}
-        onPress={toggleMapSize}
-        activeOpacity={0.7}
-      >
-        <MaterialIcons
-          name={mapExpanded ? "fullscreen-exit" : "fullscreen"}
-          size={22}
-          color="#000"
-        />
-      </TouchableOpacity>
-    </View>
-  ), [mapExpanded, toggleMapSize])
-
-  // Location section component
-  const LocationSection = useCallback(() => (
-    <View style={styles.locationContainer}>
-      <View style={styles.locationItem}>
-        <View style={styles.greenDot} />
-        <Text style={styles.locationText} numberOfLines={1}>
-          {pickup?.description || "Current Location"}
-        </Text>
-        <View style={styles.timeBox}>
-          <MaterialIcons name="access-time" size={12} color="#666" />
-          <Text style={styles.timeText}>Now</Text>
-        </View>
-      </View>
-
-      <View style={styles.locationDivider} />
-
-      <View style={styles.locationItem}>
-        <View style={styles.redDot} />
-        <Text style={styles.locationText} numberOfLines={1}>
-          {dropoff?.description || "Destination"}
-        </Text>
-        <View style={styles.distanceBox}>
-          <MaterialIcons name="directions" size={12} color="#666" />
-          <Text style={styles.timeText}>
-            {routeInfo ? `${routeInfo.distanceInKm.toFixed(1)} km` : "Calculating..."}
-          </Text>
-        </View>
-      </View>
-
-      {/* Route info */}
-      {routeInfo && (
-        <View style={styles.routeInfoContainer}>
-          <View style={styles.routeInfoItem}>
-            <Feather name="clock" size={14} color="#666" />
-            <Text style={styles.routeInfoText}>
-              {Math.round(routeInfo.durationInMinutes)} min
-            </Text>
-          </View>
-
-          {routeInfo.conditions?.isNightTime && (
-            <View style={styles.conditionBadge}>
-              <Ionicons name="moon" size={12} color="#4A90E2" />
-              <Text style={styles.conditionText}>Night</Text>
-            </View>
-          )}
-
-          {routeInfo.conditions?.rain && (
-            <View style={styles.conditionBadge}>
-              <Ionicons name="rainy" size={12} color="#2196F3" />
-              <Text style={styles.conditionText}>Rain</Text>
-            </View>
-          )}
-        </View>
-      )}
-    </View>
-  ), [pickup, dropoff, routeInfo])
-
-  // Ride option component
-  const RideOption = useCallback(({ ride }) => {
-    const isSelected = selectedRide?.vehicleId === ride.vehicleId
-    const scaleAnim = useRef(new Animated.Value(1)).current
-
-    useEffect(() => {
-      if (isSelected) {
-        Animated.sequence([
-          Animated.timing(scaleAnim, {
-            toValue: 1.02,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 1,
-            duration: 150,
-            useNativeDriver: true,
-          })
-        ]).start()
-      }
-    }, [isSelected, scaleAnim])
-
-    return (
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <TouchableOpacity
-          style={[styles.rideOption, isSelected && styles.selectedRide]}
-          onPress={() => handleRideSelection(ride)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.rideLeft}>
-            {ride.vehicleImage && ride.vehicleImage.startsWith('https') ? (
-              <Image
-                source={{ uri: ride.vehicleImage }}
-                style={[styles.rideIconContainer, isSelected && styles.selectedRideIcon]}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={[styles.rideIconContainer, isSelected && styles.selectedRideIcon]}>
-                <Text style={styles.rideIcon}>{getVehicleIcon(ride.vehicleType)}</Text>
-              </View>
-            )}
-
-
-
-            <View style={styles.rideInfo}>
-              <Text style={styles.rideName}>{ride.vehicleName}</Text>
-              <Text style={styles.rideDescription}>
-                {ride.vehicleType} • {Math.round(ride.durationInMinutes)} min
-              </Text>
-
-              {/* Pricing breakdown */}
-              <View style={styles.pricingDetails}>
-
-
-
-
-                {ride.conditions?.rain && (
-                  <View style={styles.surchargeItem}>
-                    <Ionicons name="rainy" size={12} color="#2196F3" />
-                    <Text style={styles.surchargeText}>Rain surcharge</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.rideRight}>
-            {/* Original price with 15% markup, shown cut */}
-            {ride?.totalPrice && settings?.ride_percentage_off ? (
-              <Text style={styles.originalPrice}>
-                {formatPrice(
-                  ride.totalPrice * (1 + Number(settings.ride_percentage_off) / 100)
-                )}
-              </Text>
-            ) : null}
-
-            {/* Actual price */}
-            <Text style={styles.ridePrice}>
-              {formatPrice(ride.totalPrice)}
-            </Text>
-
-            <View style={[styles.selectIndicator, isSelected && styles.selectedIndicator]}>
-              {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-    )
-  }, [selectedRide, handleRideSelection, getVehicleIcon, formatPrice])
-
-  // Loading screen component
-  const LoadingScreen = useCallback(() => (
-    <View style={styles.loadingContainer}>
-      <View style={styles.loaderCard}>
-        <ActivityIndicator size="large" color="#000" />
-        <Text style={styles.loadingText}>Finding the best rides for you...</Text>
-        <Text style={styles.loadingSubText}>This may take a few seconds</Text>
-      </View>
-    </View>
-  ), [])
-
-  // Error screen component
-  const ErrorScreen = useCallback(() => (
-    <View style={styles.errorContainer}>
-      <Ionicons name="alert-circle-outline" size={48} color="#F44336" />
-      <Text style={styles.errorText}>{error}</Text>
-      <TouchableOpacity
-        style={styles.retryButton}
-        onPress={() => {
-          hapticFeedback()
-          calculateFareTwo()
-        }}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.retryButtonText}>Try Again</Text>
-      </TouchableOpacity>
-    </View>
-  ), [error, calculateFareTwo])
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <Header />
+        <Header onBack={handleBack} />
         <LoadingScreen />
       </SafeAreaView>
     )
@@ -431,8 +432,8 @@ export default function ShowMap() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <Header />
-        <ErrorScreen />
+        <Header onBack={handleBack} />
+        <ErrorScreen error={error} onRetry={handleRetry} />
       </SafeAreaView>
     )
   }
@@ -440,16 +441,11 @@ export default function ShowMap() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <Header />
+      <Header onBack={handleBack} />
 
       <Animated.View style={[styles.mapWrapper, { height: mapHeightAnimation }]}>
-        <Map
-          isFakeRiderShow={true}
-          origin={origin}
-          destination={destination}
-          useRealDriverIcons={true}
-        />
-        <MapControls />
+        <Map isFakeRiderShow={true} origin={origin} destination={destination} useRealDriverIcons={true} />
+        <MapControls mapExpanded={mapExpanded} onToggle={toggleMapSize} />
       </Animated.View>
 
       <Animated.View
@@ -462,34 +458,37 @@ export default function ShowMap() {
                 translateY: scrollY.interpolate({
                   inputRange: [0, 50],
                   outputRange: [0, -20],
-                  extrapolate: 'clamp',
+                  extrapolate: "clamp",
                 }),
               },
             ],
           },
         ]}
       >
-        <ScrollView
-          style={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
+        <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false} scrollEventThrottle={16}>
+          <LocationSection pickup={pickup} dropoff={dropoff} routeInfo={routeInfo} />
 
-        >
-          <LocationSection />
+          {isRideSearching && <SearchingStatus currentRide={currentRide} onViewRide={handleViewRide} />}
 
           <View style={styles.ridesSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Available Rides</Text>
               <Text style={styles.sectionSubtitle}>
-                {vehiclePrices.length} option{vehiclePrices.length !== 1 ? 's' : ''} found
+                {vehiclePrices.length} option{vehiclePrices.length !== 1 ? "s" : ""} found
               </Text>
             </View>
-
             {vehiclePrices.map((ride) => (
-              <RideOption key={ride.vehicleId} ride={ride} />
+              <RideOption
+                key={ride.vehicleId}
+                ride={ride}
+                isSelected={selectedRide?.vehicleId === ride.vehicleId}
+                onSelect={handleRideSelection}
+                formatPrice={formatPrice}
+                getVehicleIcon={getVehicleIcon}
+                settings={settings}
+              />
             ))}
           </View>
-
           <View style={{ height: 120 }} />
         </ScrollView>
       </Animated.View>
@@ -498,17 +497,18 @@ export default function ShowMap() {
       <View style={styles.bookButtonContainer}>
         <TouchableOpacity
           onPress={handleBookNow}
-          style={[styles.bookButton, !selectedRide && styles.disabledButton]}
+          style={[styles.bookButton, (!selectedRide || isRideSearching) && styles.disabledButton]}
           activeOpacity={0.9}
-          disabled={!selectedRide}
+          disabled={!selectedRide || isRideSearching}
         >
           <Text style={styles.bookButtonText}>
-            {selectedRide
-              ? `Book ${selectedRide.vehicleName} • ${formatPrice(selectedRide.totalPrice)}`
-              : "Select a Ride"
-            }
+            {isRideSearching
+              ? "Ride in Progress..."
+              : selectedRide
+                ? `Book ${selectedRide.vehicleName} • ${formatPrice(selectedRide.totalPrice)}`
+                : "Select a Ride"}
           </Text>
-          <AntDesign name="arrowright" size={20} color="#fff" />
+          {!isRideSearching && <AntDesign name="arrowright" size={20} color="#fff" />}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -528,18 +528,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    borderBottomColor: "#f5f5f5",
   },
   headerTitle: {
     fontSize: 18,
@@ -559,32 +548,21 @@ const styles = StyleSheet.create({
   mapWrapper: {
     height: height * 0.35,
     backgroundColor: "#f0f0f0",
-    position: 'relative',
+    position: "relative",
   },
   mapControls: {
-    position: 'absolute',
+    position: "absolute",
     right: 16,
     bottom: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     borderRadius: 12,
     padding: 4,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
   },
   mapControlButton: {
     width: 44,
     height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: 20,
   },
   contentWrapper: {
@@ -593,17 +571,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     marginTop: -20,
     backgroundColor: "#fff",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
   },
   contentContainer: {
     flex: 1,
@@ -613,17 +580,6 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#f9f9f9",
     borderRadius: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
   },
   locationItem: {
     flexDirection: "row",
@@ -715,6 +671,49 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: "500",
   },
+  searchingContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  searchingCard: {
+    backgroundColor: "#f0f8ff",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e3f2fd",
+  },
+  searchingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  searchingTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1976d2",
+    marginLeft: 12,
+  },
+  searchingSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 12,
+  },
+  viewRideButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1976d2",
+  },
+  viewRideButtonText: {
+    color: "#1976d2",
+    fontWeight: "600",
+    marginRight: 8,
+  },
   sectionHeader: {
     paddingHorizontal: 16,
     paddingVertical: 16,
@@ -743,17 +742,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fbfbfb",
     borderWidth: 1,
     borderColor: "#f0f0f0",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
   },
   selectedRide: {
     backgroundColor: "#f0f8ff",
@@ -842,17 +830,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
   },
   bookButton: {
     backgroundColor: "#000",
@@ -882,17 +859,6 @@ const styles = StyleSheet.create({
     padding: 32,
     borderRadius: 20,
     alignItems: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
     width: width * 0.8,
   },
   loadingText: {
@@ -935,7 +901,7 @@ const styles = StyleSheet.create({
   },
   originalPrice: {
     fontSize: 14,
-    color: '#888',
-    textDecorationLine: 'line-through',
+    color: "#888",
+    textDecorationLine: "line-through",
   },
 })

@@ -38,13 +38,10 @@ const BottomNav = () => {
     };
 
     useEffect(() => {
-        // Call once immediately
         fetchRideData();
-
-        // Set up interval
         const interval = setInterval(() => {
             fetchRideData();
-        }, 5000); // every 5 seconds
+        }, 5000);
 
         // Cleanup on unmount
         return () => clearInterval(interval);

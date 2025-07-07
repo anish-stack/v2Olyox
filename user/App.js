@@ -67,6 +67,7 @@ import OlyoxAppUpdate from './context/CheckAppUpdate';
 import OnWayRide from './New Screen/OnWayRide';
 import RateRiderOrRide from './New Screen/RateRiderOrRide';
 import ManualCheck from './context/ManualCheck';
+import { RideSearchingProvider } from './context/ride_searching';
 
 const Stack = createNativeStackNavigator();
 
@@ -562,11 +563,13 @@ const MemoizedApp = React.memo(App);
 const WrappedApp = Sentry.wrap(MemoizedApp);
 
 const RootApp = () => (
-  <FoodProvider>
-    <OlyoxAppUpdate>
-      <WrappedApp />
-    </OlyoxAppUpdate>
-  </FoodProvider>
+  <RideSearchingProvider>
+    <FoodProvider>
+      <OlyoxAppUpdate>
+        <WrappedApp />
+      </OlyoxAppUpdate>
+    </FoodProvider>
+  </RideSearchingProvider>
 );
 
 AppRegistry.registerComponent(appName, () => RootApp);

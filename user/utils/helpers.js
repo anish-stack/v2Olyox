@@ -51,7 +51,7 @@ export const find_me = async () => {
         'Authorization': `Bearer ${token}`
       }
     })
-    console.log(data.data)
+    
     return data.data
 
   } catch (error) {

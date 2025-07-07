@@ -25,6 +25,7 @@ import { useRide } from '../../context/RideContext';
 import useNotificationPermission from '../../hooks/notification';
 import MapViewDirections from "react-native-maps-directions"
 import useSettings from '../../hooks/Settings';
+import { useRideSearching } from '../../context/ride_searching';
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = 'AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8';
 const POLLING_INTERVAL = 8000;
@@ -120,6 +121,7 @@ export default function BookingConfirmation() {
   const navigation = useNavigation();
   const { location: contextLocation } = useLocation();
   const { saveRide, updateRideStatus } = useRide();
+  const { saveRideSearching, updateRideStatusSearching, clearCurrentRideSearching } = useRideSearching();
   const { fcmToken } = useNotificationPermission();
   const { settings } = useSettings()
   const { origin, destination, selectedRide, dropoff, pickup } = route.params || {};
@@ -179,23 +181,23 @@ export default function BookingConfirmation() {
   }, [cleanup]);
 
   // Handle app state changes
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState) => {
-      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-        isActiveRef.current = true;
-      } else if (nextAppState.match(/inactive|background/)) {
-        isActiveRef.current = false;
-        // Auto-cancel ride if user minimizes app during booking
-        if (isBookingInProgress && createdRideId && !rideCompleted) {
-          handleCancelBooking(true);
-        }
-      }
-      appStateRef.current = nextAppState;
-    };
+  // useEffect(() => {
+  //   const handleAppStateChange = (nextAppState) => {
+  //     if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+  //       isActiveRef.current = true;
+  //     } else if (nextAppState.match(/inactive|background/)) {
+  //       isActiveRef.current = false;
+  //       // Auto-cancel ride if user minimizes app during booking
+  //       if (isBookingInProgress && createdRideId && !rideCompleted) {
+  //         handleCancelBooking(true);
+  //       }
+  //     }
+  //     appStateRef.current = nextAppState;
+  //   };
 
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription?.remove();
-  }, [isBookingInProgress, createdRideId, rideCompleted]);
+  //   const subscription = AppState.addEventListener('change', handleAppStateChange);
+  //   return () => subscription?.remove();
+  // }, [isBookingInProgress, createdRideId, rideCompleted]);
 
   // Focus effect for cleanup
   useFocusEffect(
@@ -266,9 +268,8 @@ export default function BookingConfirmation() {
 
   // Poll ride status
   const pollRideStatus = useCallback(async () => {
-    console.log("i am status pool")
+   
     if (!createdRideId || !isBookingInProgress || rideCompleted || !isActiveRef.current) return;
-    console.log("i am createdRideId", createdRideId, isBookingInProgress, rideCompleted, isActiveRef?.current)
 
     try {
       const token = await tokenCache.getToken('auth_token_db');
@@ -285,10 +286,10 @@ export default function BookingConfirmation() {
           timeout: POLLING_INTERVAL - 1000
         }
       );
-      console.log(" response.data", response.data?.status)
+   
       const { status: newStatus, rideDetails, message } = response.data;
 
-      if (rideCompleted) return; // Prevent state updates after completion
+      if (rideCompleted) return; 
 
       setCurrentRideStatus(newStatus);
       setBookingStatusMessage(message || `Ride status: ${newStatus}`);
@@ -297,15 +298,18 @@ export default function BookingConfirmation() {
         case 'driver_assigned':
           showNotification('Driver Assigned!', message || 'Your ride is on the way.', 'success');
           saveRide({ ...rideDetails, ride_otp: rideOtp });
+          clearCurrentRideSearching()
           updateRideStatus('confirmed');
           stopBookingProcess('DRIVER_ASSIGNED');
           navigation.replace('RideStarted', { driver: rideDetails?._id, origin, destination });
           break;
         case 'cancelled':
+          clearCurrentRideSearching()
           showNotification('Ride Cancelled', message || 'Ride cancelled.', 'info');
           stopBookingProcess('CANCELLED_BY_SYSTEM');
           break;
         case 'completed':
+          clearCurrentRideSearching()
           showNotification('Ride Completed!', message || 'Thank you for riding.', 'success');
           stopBookingProcess('COMPLETED');
           break;
@@ -395,6 +399,8 @@ export default function BookingConfirmation() {
 
       if (response.data?.success && response.data.data?.rideId) {
         const rideDetails = response.data.data;
+        saveRideSearching({ rideDetails })
+        updateRideStatusSearching('searching')
         setCreatedRideId(rideDetails.rideId);
         if (rideDetails.ride_otp) setRideOtp(rideDetails.ride_otp);
         showNotification('Ride Requested!', response.data.message || 'Searching for drivers...', 'success');
@@ -407,6 +413,7 @@ export default function BookingConfirmation() {
             stopBookingProcess('TIMEOUT');
           }
         }, BOOKING_TIMEOUT);
+
       } else {
         throw new Error(response.data?.message || 'Invalid server response.');
       }
@@ -440,6 +447,9 @@ export default function BookingConfirmation() {
             }
           }
         }
+        updateRideStatusSearching('cancel')
+        clearCurrentRideSearching()
+
         setCreatedRideId(null);
         setRideOtp(null);
       } catch (error) {
@@ -513,7 +523,7 @@ export default function BookingConfirmation() {
     <View style={styles.headerContainer}>
       <TouchableOpacity
         style={styles.headerButton}
-        onPress={() => (isBookingInProgress ? handleCancelBooking() : navigation.goBack())}
+        onPress={() => navigation.goBack()}
         activeOpacity={0.7}
       >
         <Icon name="arrow-left" size={24} color={COLORS.text.primary} />
