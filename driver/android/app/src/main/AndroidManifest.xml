@@ -11,18 +11,13 @@
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WAKE_LOCK"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-  
-  <!-- Add these foreground service permissions -->
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-  
-  <!-- Notifee permissions -->
-  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-  
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -30,7 +25,6 @@
       <data android:scheme="https"/>
     </intent>
   </queries>
-  
   <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:theme="@style/AppTheme" android:supportsRtl="true" android:fullBackupContent="@xml/secure_store_backup_rules" android:dataExtractionRules="@xml/secure_store_data_extraction_rules">
     <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"/>
     <meta-data android:name="expo.modules.updates.ENABLED" android:value="true"/>
@@ -38,7 +32,6 @@
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="https://u.expo.dev/519fe708-11dc-4f94-bc36-be7f66471700"/>
-    
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
@@ -52,20 +45,8 @@
         <data android:scheme="exp+olyox-driver-app"/>
       </intent-filter>
     </activity>
-    
-    <!-- Add the background service declaration -->
-    <service
-        android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask"
-        android:exported="false"
-        android:foregroundServiceType="location|dataSync" />
-    
-    <!-- Notifee services - override the foreground service type -->
-    <service
-        android:name="app.notifee.core.ForegroundService"
-        android:exported="false"
-        android:foregroundServiceType="shortService|dataSync"
-        tools:replace="android:foregroundServiceType" />
-    
+    <service android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask" android:exported="false" android:foregroundServiceType="location|dataSync"/>
+    <service android:name="app.notifee.core.ForegroundService" android:exported="false" android:foregroundServiceType="shortService|dataSync" tools:replace="android:foregroundServiceType"/>
     <uses-library android:name="org.apache.http.legacy" android:required="false"/>
   </application>
 </manifest>

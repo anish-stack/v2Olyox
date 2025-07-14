@@ -132,13 +132,7 @@ const MenuModal = React.memo(({
       color: '#4285F4',
       onPress: () => onNavigate('Profile'),
     },
-    {
-      id: 'notifications',
-      icon: 'bell-outline',
-      title: 'Notification Settings',
-      color: '#FF9800',
-      onPress: async () => await Linking.openURL(NOTIFICATION_SOUND_URL),
-    },
+
     {
       id: 'recharge',
       icon: 'wallet-outline',

@@ -8,6 +8,7 @@ const NewRoutes = express.Router()
 NewRoutes.post('/new-ride', Protect, NewcreateRequest)
 NewRoutes.post('/new-price-calculations', calculateRidePriceForUser)
 NewRoutes.get('/status/:rideId', Protect, ride_status_after_booking)
+// NewRoutes.get('/new/status/:rideId', ride_status_after_booking)
 
 
 

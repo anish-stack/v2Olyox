@@ -164,6 +164,7 @@ const useNotificationPermission = (navigation) => {
 
   const requestPermission = useCallback(async () => {
     try {
+      console.log("I am hit")
       // Request permissions for Firebase Messaging
       const status = await Platform.select({
         ios: async () => {
@@ -173,6 +174,8 @@ const useNotificationPermission = (navigation) => {
         android: async () => {
           if (Platform.Version >= 33) {
             const granted = await requestAndroidPermission('android.permission.POST_NOTIFICATIONS');
+                  console.log("I am granted",granted)
+
             return granted ? 'granted' : 'denied';
           }
           return 'granted';
@@ -190,8 +193,8 @@ const useNotificationPermission = (navigation) => {
       if (granted) {
         // Get FCM token
         const token = await messaging().getToken();
-        console.log('🔥 FCM Token:', token);
-        setFcmToken(token);
+        console.log('🔥 FCM Token New:', token);
+      setFcmToken(token);
         await storeFcmToken(token);
       }
 

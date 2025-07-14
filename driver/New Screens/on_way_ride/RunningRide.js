@@ -595,7 +595,7 @@ export default function RunningRide() {
 
                             <View style={styles.fare_dNoteContainer}>
                                 <Text style={styles.fare_dNote}>
-                                    This fare includes MCD and toll taxes. Please do not collect any additional charges from the user.
+                                    This fare Not includes MCD and toll taxes. Please  collect any additional charges from the user if Toll and Any Other.
                                 </Text>
                             </View>
 
@@ -1514,7 +1514,7 @@ const styles = StyleSheet.create({
     otpModal: {
         backgroundColor: COLORS.surface,
         borderRadius: 20,
-        padding: 32,
+        padding: 15,
         width: width * 0.9,
         maxWidth: 400,
         alignItems: 'center',
@@ -1540,7 +1540,7 @@ const styles = StyleSheet.create({
         padding: 20,
         fontSize: 32,
         fontWeight: 'bold',
-        width: 140,
+        width: '100%',
         marginBottom: 32,
         letterSpacing: 12,
         textAlign: 'center',

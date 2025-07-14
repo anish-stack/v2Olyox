@@ -20,6 +20,7 @@
         "foregroundImage": "./assets/ic_launcher-web.png",
         "backgroundColor": "#ffffff"
       },
+      "useNextNotificationsApi": true,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS",

@@ -10,7 +10,9 @@ import { tokenCache } from '../Auth/cache';
 const RideContextSearching = createContext(null);
 
 const RIDE_KEY = 'CURRENT_RIDE_SEARCHING';
-const POLLING_INTERVAL = 60000; // 1 minute
+const POLLING_INTERVAL = 5000; // 5 seconds
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY = 2000; // 2 seconds
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -46,29 +48,40 @@ const sendPushNotification = async (title, body, data = {}) => {
     }
 };
 
+// Utility function to wait/delay
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const RideSearchingProvider = ({ children }) => {
     const [currentRideSearching, setCurrentRideSearching] = useState(null);
     const [rideStatus, setRideStatus] = useState('idle');
     const [rideHistory, setRideHistory] = useState([]);
     const [isPolling, setIsPolling] = useState(false);
+    const [retryCount, setRetryCount] = useState(0);
 
     const navigation = useNavigation();
     const { saveRide, updateRideStatus } = useRide();
     const pollingIntervalRef = useRef(null);
     const lastStatusRef = useRef('idle');
+    const isMountedRef = useRef(true);
 
     // Load saved ride data on mount
     useEffect(() => {
         const loadRideData = async () => {
             try {
                 const savedRide = await SecureStore.getItemAsync(RIDE_KEY);
-                if (savedRide) {
+                if (savedRide && isMountedRef.current) {
                     const parsedRide = JSON.parse(savedRide);
+                    console.log('Loaded saved ride:', parsedRide);
                     setCurrentRideSearching(parsedRide);
                     // Start polling if we have a ride that's not completed or cancelled
-                    if (parsedRide && !['completed', 'cancelled'].includes(parsedRide.status)) {
+                    if (parsedRide && parsedRide._id && !['completed', 'cancelled'].includes(parsedRide.status)) {
                         setRideStatus(parsedRide.status || 'searching');
-                        startPolling();
+                        // Small delay to ensure state is set before starting polling
+                        setTimeout(() => {
+                            if (isMountedRef.current) {
+                                startPolling();
+                            }
+                        }, 100);
                     }
                 }
             } catch (err) {
@@ -80,13 +93,14 @@ export const RideSearchingProvider = ({ children }) => {
 
         // Cleanup on unmount
         return () => {
+            isMountedRef.current = false;
             stopPolling();
         };
     }, []);
 
     // Start polling when ride status changes to searching
     useEffect(() => {
-        if (rideStatus === 'searching' && currentRideSearching && !isPolling) {
+        if (rideStatus === 'searching' && currentRideSearching && currentRideSearching._id && !isPolling) {
             startPolling();
         } else if (['completed', 'cancelled', 'idle'].includes(rideStatus)) {
             stopPolling();
@@ -94,6 +108,9 @@ export const RideSearchingProvider = ({ children }) => {
     }, [rideStatus, currentRideSearching]);
 
     const saveRideSearching = async (ride) => {
+        if (!isMountedRef.current) return;
+
+        console.log('Saving ride:', ride);
         setCurrentRideSearching(ride);
         try {
             await SecureStore.setItemAsync(RIDE_KEY, JSON.stringify(ride));
@@ -103,8 +120,12 @@ export const RideSearchingProvider = ({ children }) => {
     };
 
     const clearCurrentRideSearching = async () => {
+        if (!isMountedRef.current) return;
+
+        console.log('Clearing current ride searching');
         setCurrentRideSearching(null);
         setRideStatus('idle');
+        setRetryCount(0);
         stopPolling();
         try {
             await SecureStore.deleteItemAsync(RIDE_KEY);
@@ -114,14 +135,19 @@ export const RideSearchingProvider = ({ children }) => {
     };
 
     const startPolling = useCallback(() => {
-        if (isPolling) return;
+        if (isPolling || !isMountedRef.current) return;
 
         console.log('Starting ride status polling...');
         setIsPolling(true);
+        setRetryCount(0);
 
-        // Poll immediately, then every minute
+        // Poll immediately, then every interval
         pollRideStatus();
-        pollingIntervalRef.current = setInterval(pollRideStatus, POLLING_INTERVAL);
+        pollingIntervalRef.current = setInterval(() => {
+            if (isMountedRef.current) {
+                pollRideStatus();
+            }
+        }, POLLING_INTERVAL);
     }, []);
 
     const stopPolling = useCallback(() => {
@@ -131,10 +157,19 @@ export const RideSearchingProvider = ({ children }) => {
             pollingIntervalRef.current = null;
         }
         setIsPolling(false);
+        setRetryCount(0);
     }, []);
 
     const pollRideStatus = useCallback(async () => {
-        if (!currentRideSearching?._id) {
+        if (!isMountedRef.current) return;
+
+        // Get the current ride from state at the time of polling
+        const rideToCheck = currentRideSearching;
+                        const savedRide = await SecureStore.getItemAsync(RIDE_KEY);
+
+        const parsedRide = JSON.parse(savedRide);
+        console.log('Loaded saved ride:', parsedRide);
+        if (!parsedRide || !parsedRide._id) {
             console.log('No ride ID available for polling');
             return;
         }
@@ -146,17 +181,28 @@ export const RideSearchingProvider = ({ children }) => {
                 return;
             }
 
-            console.log(`Polling ride status for ID: ${currentRideSearching._id}`);
+            console.log(`Polling ride status for ID: ${parsedRide._id}`);
 
-            const response = await axios.get(
-                `https://www.appv2.olyox.com/api/v1/new/status/${currentRideSearching._id}`,
+            const response = await axios.post(
+                `https://www.appv2.olyox.com/api/v1/rider/ride-status/${parsedRide._id}`,
                 {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: POLLING_INTERVAL - 1000
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10000, // Increased timeout to 10 seconds
+                    // Add retry configuration
+                    retry: 3,
+                    retryDelay: 1000
                 }
             );
 
+            if (!isMountedRef.current) return;
+
             const { status: newStatus, rideDetails, message, driver } = response.data;
+
+            // Reset retry count on successful response
+            setRetryCount(0);
 
             // Don't process if status hasn't changed
             if (newStatus === lastStatusRef.current) {
@@ -168,7 +214,7 @@ export const RideSearchingProvider = ({ children }) => {
             setRideStatus(newStatus);
 
             // Update the ride with latest details
-            const updatedRide = { ...currentRideSearching, ...rideDetails, status: newStatus };
+            const updatedRide = { ...rideToCheck, ...rideDetails, status: newStatus };
             await saveRideSearching(updatedRide);
 
             // Handle different statuses
@@ -197,11 +243,13 @@ export const RideSearchingProvider = ({ children }) => {
                     await clearCurrentRideSearching();
 
                     // Navigate to ride started screen
-                    navigation.replace('RideStarted', {
-                        driver: driver || rideDetails?.driver,
-                        rideId: currentRideSearching._id,
-                        ride: rideDetails
-                    });
+                    if (navigation && isMountedRef.current) {
+                        navigation.replace('RideStarted', {
+                            driver: driver || rideDetails?.driver,
+                            rideId: rideToCheck._id,
+                            ride: rideDetails
+                        });
+                    }
                     break;
 
                 case 'in_progress':
@@ -220,7 +268,9 @@ export const RideSearchingProvider = ({ children }) => {
                     await clearCurrentRideSearching();
 
                     // Navigate to ride completion screen or home
-                    navigation.replace('RideCompleted', { rideId: currentRideSearching._id });
+                    if (navigation && isMountedRef.current) {
+                        navigation.replace('RideCompleted', { rideId: rideToCheck._id });
+                    }
                     break;
 
                 case 'cancelled':
@@ -231,7 +281,9 @@ export const RideSearchingProvider = ({ children }) => {
                     await clearCurrentRideSearching();
 
                     // Navigate back to home or booking screen
-                    navigation.replace('Home');
+                    if (navigation && isMountedRef.current) {
+                        navigation.replace('Home');
+                    }
                     break;
 
                 default:
@@ -241,33 +293,70 @@ export const RideSearchingProvider = ({ children }) => {
         } catch (err) {
             console.error('Error polling ride status:', err);
 
+            if (!isMountedRef.current) return;
+
+            // Increment retry count
+            const currentRetryCount = retryCount + 1;
+            setRetryCount(currentRetryCount);
+
             if (err.response?.status === 401) {
                 showNotification('Authentication Error', 'Please log in again.', 'error');
                 await clearCurrentRideSearching();
             } else if (err.response?.status === 404) {
                 showNotification('Ride Not Found', 'This ride may have been cancelled.', 'error');
                 await clearCurrentRideSearching();
+            } else if (err.response?.status >= 500) {
+                // Server error - retry with exponential backoff
+                console.log(`Server error, retrying in ${RETRY_DELAY * currentRetryCount}ms...`);
+                if (currentRetryCount < MAX_RETRY_ATTEMPTS) {
+                    setTimeout(() => {
+                        if (isMountedRef.current) {
+                            pollRideStatus();
+                        }
+                    }, RETRY_DELAY * currentRetryCount);
+                }
             } else {
-                // Don't show error for network issues, just log and continue polling
-                console.log('Network error during polling, will retry...');
+                // Network error or other issues
+                console.log('Network error during polling, will retry on next interval...');
+
+                // If we've failed too many times, show a notification
+                if (currentRetryCount >= MAX_RETRY_ATTEMPTS) {
+                    showNotification('Connection Issue', 'Having trouble connecting. Please check your internet connection.', 'error');
+                    setRetryCount(0); // Reset for next cycle
+                }
             }
         }
-    }, [currentRideSearching, navigation, saveRide, updateRideStatus]);
+    }, [currentRideSearching, retryCount, navigation, saveRide, updateRideStatus]);
 
     const updateRideStatusSearching = useCallback((status) => {
+        if (!isMountedRef.current) return;
+
+        console.log('Updating ride status to:', status);
         setRideStatus(status);
         lastStatusRef.current = status;
     }, []);
 
     // Manual method to start a ride search
     const startRideSearch = useCallback(async (rideData) => {
-        await saveRideSearching({ ...rideData, status: 'searching' });
+        if (!isMountedRef.current) return;
+
+        console.log('Starting ride search with data:', rideData);
+        const rideWithStatus = { ...rideData, status: 'searching' };
+        await saveRideSearching(rideWithStatus);
         setRideStatus('searching');
-        startPolling();
+
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+            if (isMountedRef.current) {
+                startPolling();
+            }
+        }, 100);
     }, [startPolling]);
 
     // Manual method to cancel ride search
     const cancelRideSearch = useCallback(async () => {
+        if (!isMountedRef.current) return;
+
         try {
             if (currentRideSearching?._id) {
                 const token = await tokenCache.getToken('auth_token_db');
@@ -276,7 +365,13 @@ export const RideSearchingProvider = ({ children }) => {
                     await axios.post(
                         `https://www.appv2.olyox.com/api/v1/new/cancel/${currentRideSearching._id}`,
                         {},
-                        { headers: { Authorization: `Bearer ${token}` } }
+                        {
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            timeout: 5000
+                        }
                     );
                 }
             }
@@ -293,6 +388,7 @@ export const RideSearchingProvider = ({ children }) => {
         rideStatus,
         rideHistory,
         isPolling,
+        retryCount,
         updateRideStatusSearching,
         saveRideSearching,
         clearCurrentRideSearching,

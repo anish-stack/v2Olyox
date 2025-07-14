@@ -6,16 +6,14 @@ import {
   RefreshControl,
   Alert,
   Platform,
-  Linking,
   View,
   Text,
-  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useKeepAwake } from 'expo-keep-awake';
-import BackgroundService from 'react-native-background-actions';
+
 import RiderDataAndRechargeInfo from './components/HomeScreen/RiderDataAndRechargeInfo';
 import RideSearching from './components/HomeScreen/RideSearching';
 import Report from '../screens/Report/Report';
@@ -26,220 +24,17 @@ import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { useFetchUserDetails } from '../hooks/New Hookes/RiderDetailsHooks';
 import HeaderNew from './components/Header/HeaderNew';
+import NotificationPermissionModal from '../NotificationPermissionModal';
 
 const urlForUpdateFcmToken = `https://www.appv2.olyox.com/api/v1/rider/update-fcm`;
-const NOTIFICATION_SOUND_URL = 'http://olyox.in/sound/'; // Replace with your sound URL
-
-// AsyncStorage keys
-const ASYNC_KEYS = {
-  FCM_TOKEN: 'fcm_token',
-  NOTIFICATION_SETUP_DONE: 'notification_setup_done',
-  NOTIFICATION_SOUND_DOWNLOADED: 'notification_sound_downloaded',
-};
-
-
-// Task options
-const options = {
-  taskName: 'LiveLocationTracking',
-  taskTitle: 'Live Tracking Enabled',
-  taskDesc: 'We are tracking your ride...',
-  taskIcon: {
-    name: 'ic_launcher',
-    type: 'mipmap',
-  },
-  color: '#00aaa9',
-  linkingURI: 'yourSchemeHere://home',
-  parameters: {
-    delay: 1000,
-  },
-};
 
 export default function NewHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
-  const [locationStarted, setLocationStarted] = useState(false);
-  const [fcmToken, setFcmToken] = useState(null);
-  const [notificationSetupDone, setNotificationSetupDone] = useState(false);
-  const [showNotificationSetup, setShowNotificationSetup] = useState(false);
-  const { fcmToken: currentToken } = useNotificationPermission()
-    const { fetchUserDetails: reCallMe } = useFetchUserDetails();
-  
+  const [isInitialized, setIsInitialized] = useState(false);
+  const { fcmToken: currentToken, isGranted, requestPermission } = useNotificationPermission();
+  const { fetchUserDetails: reCallMe } = useFetchUserDetails();
+
   useKeepAwake();
-
-  // Check if notification setup is done
-  const checkNotificationSetup = async () => {
-    try {
-      const setupDone = await AsyncStorage.getItem(ASYNC_KEYS.NOTIFICATION_SETUP_DONE);
-      if (setupDone === 'true') {
-        setNotificationSetupDone(true);
-      } else {
-        setShowNotificationSetup(true);
-      }
-
-    } catch (error) {
-      console.error('Error checking notification setup:', error);
-      setShowNotificationSetup(true);
-    }
-  };
-
-
-
-  // Get FCM token and send to server
-  const setupFCMToken = async () => {
-    try {
-    const token = await SecureStore.getItemAsync("auth_token_cab");
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
-    console.log('Auth Token:', token);
-    console.log('FCM Token:', currentToken);
-
-    const response = await axios.post(
-      urlForUpdateFcmToken,
-      {
-        fcmToken: currentToken,
-        platform: Platform.OS,
-        timestamp: new Date().toISOString(),
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (response.status === 200 || response.status === 201) {
-      
- 
-      console.log('✅ FCM token updated successfully on server');
-    } else {
-      console.error('❌ Unexpected response:', response.status, response.data);
-      throw new Error('Failed to update FCM token on server');
-    }
-
-  } catch (error) {
-    console.error('❌ Error setting up FCM token for user:', error?.response?.data || error.message);
-    // Optionally alert the user here
-  }
-  };
-
-  // Download notification sound
-  const downloadNotificationSound = async () => {
-    try {
-      // Check if sound is already downloaded
-      const soundDownloaded = await AsyncStorage.getItem(ASYNC_KEYS.NOTIFICATION_SOUND_DOWNLOADED);
-
-      if (soundDownloaded !== 'true') {
-        // Open download link
-        await Linking.openURL(NOTIFICATION_SOUND_URL);
-
-        // Mark as downloaded (user will need to manually set it)
-        await AsyncStorage.setItem(ASYNC_KEYS.NOTIFICATION_SOUND_DOWNLOADED, 'true');
-
-        Alert.alert(
-          'Sound Downloaded',
-          'Please set this sound as your notification sound in the system settings, then return to the app.',
-          [
-            {
-              text: 'Open Settings',
-              onPress: () => Linking.openSettings(),
-            },
-            {
-              text: 'Done',
-              onPress: () => completeNotificationSetup(),
-            },
-          ]
-        );
-      } else {
-        completeNotificationSetup();
-      }
-    } catch (error) {
-      console.error('Error downloading notification sound:', error);
-      Alert.alert(
-        'Download Error',
-        'Failed to download notification sound. You can set it up later in settings.',
-        [
-          {
-            text: 'Skip',
-            onPress: () => completeNotificationSetup(),
-          },
-          {
-            text: 'Retry',
-            onPress: () => downloadNotificationSound(),
-          },
-        ]
-      );
-    }
-  };
-
-  // Complete notification setup
-  const completeNotificationSetup = async () => {
-    try {
-      await AsyncStorage.setItem(ASYNC_KEYS.NOTIFICATION_SETUP_DONE, 'true');
-      setNotificationSetupDone(true);
-      setShowNotificationSetup(false);
-
-      Alert.alert(
-        'Setup Complete',
-        'Notification setup completed successfully!',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      console.error('Error completing notification setup:', error);
-    }
-  };
-
-  // Setup notification channel (Android)
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
-        name: 'Default Channel',
-        importance: Notifications.AndroidImportance.HIGH,
-        sound: 'sound.mp3',
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
-  }, []);
-
-  // Initialize on component mount
-  useEffect(() => {
-    const initializeApp = async () => {
-      await checkNotificationSetup();
-      await setupFCMToken();
-
-    };
-
-    initializeApp();
-  }, []);
-
-  // Manage background task based on app state
-  useEffect(() => {
-    const handleAppStateChange = async (nextAppState) => {
-      try {
-        if (nextAppState === 'background' && !BackgroundService.isRunning()) {
-          console.log('App went to background, starting background task');
-       
-        } else if (nextAppState === 'active' && BackgroundService.isRunning()) {
-          console.log('App returned to active, stopping background task');
-          await BackgroundService.stop();
-        }
-      } catch (e) {
-        console.warn('Background service error:', e);
-      }
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    // Cleanup on unmount
-    return () => {
-      subscription.remove();
-      if (BackgroundService.isRunning()) {
-        BackgroundService.stop().catch((e) => console.warn('Failed to stop background task:', e));
-      }
-    };
-  }, []);
 
   // Location tracking hook
   const {
@@ -254,121 +49,195 @@ export default function NewHomeScreen() {
     checkBackgroundTaskStatus,
   } = useLocationTracking();
 
-  // Start location tracking on mount
+  // Setup FCM token
+  const setupFCMToken = async () => {
+    try {
+      const token = await SecureStore.getItemAsync("auth_token_cab");
+      if (!token || !currentToken) {
+        console.log('Missing tokens - Auth:', !!token, 'FCM:', !!currentToken);
+        return;
+      }
+
+      const response = await axios.post(
+        urlForUpdateFcmToken,
+        {
+          fcmToken: currentToken,
+          platform: Platform.OS,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.status === 200 || response.status === 201) {
+        console.log('✅ FCM token updated successfully');
+      } else {
+        console.error('❌ Unexpected FCM response:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ FCM token setup error:', error?.response?.data || error.message);
+    }
+  };
+
+  // Setup notification channels
+  const setupNotificationChannels = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        // Default channel
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Default Channel',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+
+        // Ride channel with custom sound
+        await Notifications.setNotificationChannelAsync('ride_channel', {
+          name: 'Ride Notifications',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 500, 200, 500],
+          lightColor: '#00FF00',
+          sound: 'sound.mp3', // Custom sound file
+          showBadge: true,
+          enableLights: true,
+          enableVibrate: true,
+          description: 'Notifications for new ride requests',
+        });
+
+        console.log('✅ Notification channels created successfully');
+      } catch (error) {
+        console.error('❌ Error creating notification channels:', error);
+      }
+    }
+  };
+
+  // Initialize location tracking safely
+  const initializeLocationTracking = useCallback(async () => {
+    if (isTracking) {
+      console.log('Location tracking already active');
+      return;
+    }
+
+    try {
+      console.log('Starting location tracking...');
+      await startLocationTracking();
+      console.log('✅ Location tracking started');
+    } catch (error) {
+      console.error('❌ Location tracking error:', error);
+      // Only show alert if it's a critical error, not permission issues
+      if (error.message && !error.message.includes('permission')) {
+        Alert.alert(
+          'Location Error',
+          'Could not start location tracking. Please check your settings.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
+  }, [isTracking, startLocationTracking]);
+
+  // Setup notification channels
+  useEffect(() => {
+    setupNotificationChannels();
+  }, []);
+
+  // Initialize app once on mount
   useEffect(() => {
     let mounted = true;
-    const init = async () => {
-      if (!locationStarted && mounted) {
-        try {
-       
-          setLocationStarted(true);
-        } catch (err) {
-          if (mounted) {
-            Alert.alert(
-              'Location Error',
-              'Could not start tracking. Please check permissions.',
-              [{ text: 'OK' }]
-            );
-          }
+
+    const initializeApp = async () => {
+      if (isInitialized || !mounted) return;
+
+      try {
+        console.log('Initializing app...');
+
+        // Setup notification channels
+        await setupNotificationChannels();
+
+        // Setup FCM token
+        await setupFCMToken();
+
+        // Initialize location tracking
+        await initializeLocationTracking();
+
+        if (mounted) {
+          setIsInitialized(true);
+          console.log('✅ App initialized successfully');
+        }
+      } catch (error) {
+        console.error('❌ App initialization error:', error);
+        if (mounted) {
+          setIsInitialized(true); // Mark as initialized even on error to prevent loops
         }
       }
     };
-    init();
+
+    initializeApp();
+
     return () => {
       mounted = false;
-      stopLocationTracking();
     };
-  }, []);
+  }, [isInitialized, initializeLocationTracking]);
 
-
-
-  // Debug logs
+  // Handle app state changes for location tracking
   useEffect(() => {
-    console.log('Tracking status:', isTracking ? 'ACTIVE' : 'INACTIVE');
-    if (currentLocation) {
-      console.log('Location:', currentLocation);
-    }
-  }, [isTracking, currentLocation]);
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'background') {
+        console.log('App backgrounded - location tracking continues');
+      } else if (nextAppState === 'active') {
+        console.log('App active - checking location tracking status');
+        if (!isTracking) {
+          initializeLocationTracking();
+        }
+      }
+    };
 
-  // Pull-to-refresh handler
-const onRefresh = useCallback(async () => {
-  setRefreshing(true);
-  try {
-    console.log('Starting complete app restart...');
-    
-    // Stop all services
-    await stopLocationTracking();
-    if (BackgroundService.isRunning()) {
-      await BackgroundService.stop();
-    }
-    
-    // Reset states
-    setLocationStarted(false);
-    setFcmToken(null);
-    setNotificationSetupDone(false);
-    setShowNotificationSetup(false);
-    
-    // Wait for cleanup
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Reinitialize everything
-    await checkNotificationSetup();
-    await setupFCMToken();
-    await startLocationTracking();
-    setLocationStarted(true);
-    // reCallMe()
-    console.log('✅ Complete restart successful');
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isTracking, initializeLocationTracking]);
+
+  // Pull-to-refresh handler - simplified to prevent infinite loops
+  const onRefresh = useCallback(async () => {
+    if (refreshing) return; // Prevent multiple simultaneous refreshes
+
+    setRefreshing(true);
+
+    try {
+      console.log('Refreshing app data...');
+
+      // Refresh user details
+      await reCallMe();
+
+      // Refresh FCM token
+      await setupFCMToken();
+
+      // Restart location tracking if not active
+      if (!isTracking) {
+        await initializeLocationTracking();
+      }
+
+      console.log('✅ Refresh completed');
+    } catch (error) {
+      console.error('❌ Refresh error:', error);
+      Alert.alert(
+        'Refresh Failed',
+        'Could not refresh data. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
       setRefreshing(false);
+    }
+  }, [refreshing, isTracking, reCallMe, initializeLocationTracking]);
 
-  } catch (e) {
-    console.error('❌ Restart failed:', e);
-    Alert.alert(
-      'Restart Failed',
-      'Could not restart completely. Please try again or restart the app manually.',
-      [{ text: 'OK' }]
-    );
-      setRefreshing(false);
-
-  } finally {
-    setRefreshing(false);
+  if (!isGranted) {
+    return <NotificationPermissionModal visible={true} autoClose={isGranted} onRetry={requestPermission} permissionGranted={isGranted} refreshNavigation={isGranted} />
   }
-}, [stopLocationTracking, startLocationTracking, checkNotificationSetup, setupFCMToken]);
-
-  // Render notification setup section
-  const renderNotificationSetup = () => {
-    if (!showNotificationSetup || notificationSetupDone) return null;
-
-    return (
-      <View style={styles.notificationSetupContainer}>
-        <Text style={styles.setupTitle}>🔔 Notification Setup Required</Text>
-        <Text style={styles.setupDescription}>
-          To receive important ride notifications with custom sound, please complete the setup below:
-        </Text>
-
-        <View style={styles.setupSteps}>
-          <Text style={styles.stepText}>1. Download notification sound</Text>
-          <Text style={styles.stepText}>2. Set it in your device settings</Text>
-          <Text style={styles.stepText}>3. Return to complete setup</Text>
-        </View>
-
-        <View style={styles.setupButtons}>
-          <TouchableOpacity
-            style={[styles.setupButton, styles.primaryButton]}
-            onPress={downloadNotificationSound}
-          >
-            <Text style={styles.primaryButtonText}>Start Setup</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.setupButton, styles.secondaryButton]}
-            onPress={completeNotificationSetup}
-          >
-            <Text style={styles.secondaryButtonText}>Skip for Now</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -388,8 +257,6 @@ const onRefresh = useCallback(async () => {
           />
         }
       >
-        {renderNotificationSetup()}
-
         <RideSearching
           refreshing={refreshing}
           isLocationTracking={isTracking}
@@ -412,10 +279,8 @@ const styles = StyleSheet.create({
     padding: 8,
     paddingBottom: 32,
   },
-  notificationSetupContainer: {
-    backgroundColor: '#fff3cd',
-    borderColor: '#ffeeba',
-    borderWidth: 1,
+  locationContainer: {
+    backgroundColor: '#fff',
     borderRadius: 8,
     padding: 16,
     marginBottom: 16,
@@ -427,95 +292,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007bff',
   },
-  setupTitle: {
+  locationTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#856404',
-    marginBottom: 8,
+    color: '#495057',
+    marginBottom: 12,
     textAlign: 'center',
   },
-  setupDescription: {
+  locationDetails: {
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 6,
+  },
+  locationText: {
     fontSize: 14,
-    color: '#856404',
-    textAlign: 'center',
-    marginBottom: 16,
+    color: '#495057',
+    marginBottom: 6,
     lineHeight: 20,
   },
-  setupSteps: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 16,
-  },
-  stepText: {
-    fontSize: 14,
-    color: '#495057',
-    marginBottom: 4,
-    paddingLeft: 8,
-  },
-  setupButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  setupButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  primaryButton: {
-    backgroundColor: '#007bff',
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#6c757d',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  locationLabel: {
     fontWeight: '600',
-  },
-  secondaryButtonText: {
-    color: '#6c757d',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  debugContainer: {
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: '#e9ecef',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#dee2e6',
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#495057',
-    marginBottom: 4,
-    fontFamily: 'monospace',
+    color: '#343a40',
   },
   errorText: {
+    fontSize: 14,
     color: '#dc3545',
-    fontWeight: 'bold',
-  },
-  debugButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    fontWeight: '500',
     marginTop: 8,
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  debugButton: {
-    backgroundColor: '#007bff',
-    color: 'white',
-    padding: 8,
-    borderRadius: 4,
-    fontSize: 12,
     textAlign: 'center',
-    minWidth: 80,
   },
 });

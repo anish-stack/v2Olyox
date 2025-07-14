@@ -8,6 +8,7 @@ const multer = require('multer');
 const Protect = require('../middleware/Auth');
 const { findAllOrders, logout, addFcm } = require('../user_controller/user.register.controller');
 const { make_recharge, verify_recharge } = require('../PaymentWithWebDb/razarpay');
+const { ride_status_after_booking } = require('../src/New-Rides-Controller/CreateNewRides');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -53,6 +54,7 @@ router.post('/rider-uploadPaymentQr', Protect, upload.single('image'), uploadPay
 router.get('/user-details', Protect, details);
 router.put('/updateRiderBlock/:id', updateBlockStatus)
 router.post('/update-fcm',Protect, saveFcmTokenToken)
+router.get('/ride-status/:rideId', ride_status_after_booking)
 
 router.get('/getMyAllDetails', Protect, getMyAllDetails);
 router.get('/getMyAllRides', Protect, getMyAllRides);

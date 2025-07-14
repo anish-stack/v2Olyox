@@ -1001,39 +1001,32 @@ exports.cancelRideRequest = async (req, res) => {
 
 exports.ride_status_after_booking = async (req, res) => {
     try {
-        const user = Array.isArray(req.user.user)
-            ? req.user.user[0]
-            : req.user.user;
-
-        if (!user) {
-            return res.status(401).json({ message: "Authentication error: User not found." });
-        }
-
-        const userId = user?._id;
         const { rideId } = req.params;
 
-        console.log("rideId from params stauts :", rideId);
-        console.log("Authenticated stauts userId:", userId);
+        console.log("🔎 Received request for ride status.");
+        console.log("📦 rideId from params:", rideId);
 
         if (!rideId) {
+            console.warn("⚠️ Ride ID not provided in request.");
             return res.status(400).json({ message: "Ride ID is required." });
         }
 
+        console.log("⏳ Simulating delay before fetching ride status (5 seconds)...");
         await new Promise(resolve => setTimeout(resolve, 5000));
 
+        console.log("📡 Fetching ride details from database...");
         const ride = await RideBooking.findOne({ _id: rideId }).populate("driver");
 
-        // console.log("Fetched Ride:", ride);
-
         if (!ride) {
+            console.warn("❌ Ride not found for ID:", rideId);
             return res.status(404).json({ message: "Ride not found." });
         }
 
-        if (!ride.user || ride.user.toString() !== userId.toString()) {
-            return res.status(403).json({
-                message: "Forbidden: You are not authorized to view this ride.",
-            });
-        }
+        console.log("✅ Ride found:", {
+            rideId: ride._id,
+            status: ride.ride_status,
+            driver: ride.driver ? ride.driver._id : null,
+        });
 
         let responsePayload = {
             status: ride.ride_status,
@@ -1044,46 +1037,53 @@ exports.ride_status_after_booking = async (req, res) => {
         switch (ride.ride_status) {
             case "pending":
                 responsePayload.message = "Your ride request is pending confirmation.";
+                console.log("🕒 Status: pending");
                 break;
             case "searching":
                 responsePayload.message = "Searching for a driver near you...";
-                responsePayload.rideDetails = ride
+                responsePayload.rideDetails = ride;
+                console.log("🔍 Status: searching, ride details included");
                 break;
             case "driver_assigned":
                 responsePayload.message = "Driver assigned! Your ride is on the way.";
                 responsePayload.rideDetails = ride;
+                console.log("🚗 Status: driver_assigned");
                 break;
             case "driver_arrived":
                 responsePayload.message = "Your driver has arrived at the pickup location!";
                 responsePayload.rideDetails = ride;
+                console.log("📍 Status: driver_arrived");
                 break;
             case "in_progress":
                 responsePayload.message = "Your ride is currently in progress.";
-                responsePayload.rideDetails = ride
-                    ? {
-                        rideId: ride._id,
-                        driverId: ride.driver._id,
-                    }
-                    : null;
+                responsePayload.rideDetails = ride ? {
+                    rideId: ride._id,
+                    driverId: ride.driver._id,
+                } : null;
+                console.log("🚕 Status: in_progress");
                 break;
             case "completed":
                 responsePayload.message = "Your ride has been completed. Thank you!";
                 responsePayload.rideDetails = ride;
+                console.log("✅ Status: completed");
                 break;
             case "cancelled":
                 responsePayload.message = `This ride has been cancelled${ride.cancelledBy ? ` by ${ride.cancelledBy}` : ""}.`;
                 responsePayload.rideDetails = ride;
+                console.log("❌ Status: cancelled");
                 break;
             default:
                 responsePayload.message = "Ride status is unknown or invalid.";
-                console.warn(`Ride ${ride._id} has an unhandled status: ${ride.ride_status}`);
+                console.warn(`⚠️ Unhandled ride status: ${ride.ride_status} for rideId: ${ride._id}`);
                 break;
         }
 
+        console.log("📤 Sending response:", responsePayload.status);
         return res.status(200).json(responsePayload);
     } catch (error) {
-        console.error("Error fetching ride status:", error);
+        console.error("💥 Error fetching ride status:", error);
         if (error.name === "CastError") {
+            console.warn("❗ Invalid Ride ID format received.");
             return res.status(400).json({ message: "Invalid Ride ID format." });
         }
         return res.status(500).json({ message: "Server error while fetching ride status." });

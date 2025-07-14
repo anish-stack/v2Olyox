@@ -502,9 +502,13 @@ const App = () => {
                   <StatusBar style="auto" />
                   <ErrorBoundaryWrapper>
                     <NavigationContainer>
+                    <RideSearchingProvider>
+
+
                       <Stack.Navigator initialRouteName={'spalsh'}>
                         {routes}
                       </Stack.Navigator>
+                    </RideSearchingProvider>
                       <ErrorBanner locationError={locationError} />
                     </NavigationContainer>
                   </ErrorBoundaryWrapper>
@@ -563,13 +567,12 @@ const MemoizedApp = React.memo(App);
 const WrappedApp = Sentry.wrap(MemoizedApp);
 
 const RootApp = () => (
-  <RideSearchingProvider>
+
     <FoodProvider>
       <OlyoxAppUpdate>
         <WrappedApp />
       </OlyoxAppUpdate>
     </FoodProvider>
-  </RideSearchingProvider>
 );
 
 AppRegistry.registerComponent(appName, () => RootApp);
