@@ -859,6 +859,7 @@ exports.details = async (req, res) => {
   }
 };
 
+
 exports.getMyAllDetails = async (req, res) => {
   try {
     const user_id = req.user?.userId;
@@ -866,36 +867,71 @@ exports.getMyAllDetails = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const findRideDetails = await NewRideModelModel.find({
+    // 1. Fetch driver
+    const driver = await Rider.findById(user_id);
+    if (!driver) {
+      return res.status(404).json({ message: "Driver not found" });
+    }
+
+    // 2. Fetch completed rides
+    const completedRides = await NewRideModelModel.find({
       driver: user_id,
       ride_status: "completed",
     });
 
+    // 3. Fetch current ride
+    const currentRide = driver?.on_ride_id
+      ? await NewRideModelModel.findById(driver.on_ride_id)
+      : null;
 
+    // 4. Get today's date in IST
+    const todayIST = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
-    const totalRides = findRideDetails.length;
-    const totalEarnings = findRideDetails.reduce(
-      (acc, cur) => acc + Number(cur.pricing?.total_fare),
-      0
-    );
+    // 5. Fetch today's session data from CabRider
+    const todaySessionDoc = await CabRiderTimes.findOne({
+      riderId: user_id,
+      date: todayIST,
+    });
 
-    const totalRatings = findRideDetails.reduce(
-      (acc, cur) => acc + (cur.driver_rating?.rating || 0),
-      0
-    );
-    const averageRating = totalRides > 0 ? totalRatings / totalRides : 0;
+    let totalSeconds = 0;
 
-    // Send response with all computed data
+    if (todaySessionDoc?.sessions?.length > 0) {
+      totalSeconds = todaySessionDoc.sessions.reduce((acc, session) => {
+        return acc + (session.duration || 0);
+      }, 0);
+    }
+
+    const totalHours = parseFloat((totalSeconds / 3600).toFixed(2)); // convert seconds to hours
+
+    // 6. Calculate earnings and ratings
+    const totalRides = completedRides.length;
+    const totalEarnings = completedRides.reduce((sum, ride) => {
+      return sum + Number(ride?.pricing?.total_fare || 0);
+    }, 0);
+
+    const totalRatings = completedRides.reduce((sum, ride) => {
+      return sum + Number(ride?.driver_rating?.rating || 0);
+    }, 0);
+
+    const averageRating =
+      totalRides > 0 ? parseFloat((totalRatings / totalRides).toFixed(2)) : 0;
+
     return res.status(200).json({
+      isOnRide: !!driver.on_ride_id,
+      isAvailable: driver.isAvailable,
+      currentRide: currentRide || null,
       totalRides,
       totalEarnings,
       averageRating,
+      loggedInHours: totalHours,
+      currentDate: todayIST,
     });
   } catch (error) {
-    console.error("Error fetching ride details:", error);
+    console.error("Error fetching driver ride details:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 exports.getMyAllRides = async (req, res) => {
   try {

@@ -56,7 +56,10 @@ import RunningRide from './New Screens/on_way_ride/RunningRide';
 // Custom Hook
 import useNotificationPermission from './hooks/notification';
 
-const Stack = createNativeStackNavigator();
+// Constants
+const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1';
+const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
+const PENDING_NOTIFICATION_KEY = '@app:pendingNotification';
 
 // Sentry Configuration
 Sentry.init({
@@ -67,11 +70,9 @@ Sentry.init({
   tracesSampleRate: 1.0,
 });
 
-// Constants
-const API_BASE_URL = 'https://www.appv2.olyox.com/api/v1';
-const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
+const Stack = createNativeStackNavigator();
 
-// Global navigation reference for notifications
+// Global navigation reference
 let globalNavigationRef = null;
 
 // Configure Expo Notifications
@@ -83,276 +84,343 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Navigation helper function
-const handleNotificationNavigation = (data) => {
-  if (!globalNavigationRef || !data) return;
-
-  console.log('🧭 Navigating with data:', data);
-
-  try {
-    if (data.event === "NEW_RIDE_REQUEST" || data.action === "RIDE_REQUEST") {
-      console.log('🚖 Navigating to Home with rideId:', data.rideId);
-      globalNavigationRef.navigate("Home", {
-        rideId: data.rideId,
-        pickup: data.pickup !== "undefined" ? data.pickup : null,
-        drop: data.drop !== "undefined" ? data.drop : null,
-        price: data.price !== "undefined" ? data.price : null,
-        fromNotification: true,
-        timestamp: Date.now(),
-      });
-    } else if (data.type === 'Home') {
-      console.log('🔄 Navigating to start screen with rideId:', data.ride_id);
-      globalNavigationRef.navigate('start', {
-        rideId: data.ride_id,
-        fromNotification: true
-      });
-    } else {
-      console.log('🏠 Navigating to Home screen');
-      globalNavigationRef.navigate("Home");
+// Notification Service Class
+class NotificationService {
+  static instance = null;
+  
+  static getInstance() {
+    if (!NotificationService.instance) {
+      NotificationService.instance = new NotificationService();
     }
-  } catch (error) {
-    console.error('❌ Navigation error:', error);
+    return NotificationService.instance;
+  }
+
+  // Initialize notification configuration
+  async initialize() {
     try {
-      globalNavigationRef.navigate("Home");
-    } catch (fallbackError) {
-      console.error('❌ Fallback navigation failed:', fallbackError);
+      await this.requestPermissions();
+      await this.setupNotificationCategories();
+      await this.configureNotificationChannel();
+    } catch (error) {
+      console.error('❌ Notification initialization error:', error);
     }
   }
-};
 
-// Show local notification using Expo Notifications
-const showLocalNotification = async (title, body, data = {}) => {
-  try {
-    const rideId = data?.rideId;
-
-    if (!rideId) {
-      console.warn("⚠️ rideId not found in notification data.");
-    } else {
-      console.log("🔍 rideId for local check:", rideId);
+  // Request notification permissions
+  async requestPermissions() {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.log('❌ Notification permission denied');
+      return false;
     }
 
-    // Check for duplicates
-    const existingNotifications = await Notifications.getPresentedNotificationsAsync();
+    const authStatus = await messaging().requestPermission();
+    const enabled = authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+                   authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-    if (rideId) {
-      const isDuplicate = existingNotifications.some(notification => {
-        const existingRideId = notification.request?.content?.data?.rideId;
-        return existingRideId === rideId;
-      });
-
-      if (isDuplicate) {
-        console.log(`🔄 Duplicate local notification prevented for ride: ${rideId}`);
-        return;
-      }
+    if (enabled) {
+      const token = await messaging().getToken();
+      console.log('FCM Token:', token);
     }
 
-    // Schedule new notification
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: title || '🚕 New Ride Request',
-        body: body || 'You have a new ride request',
-        data,
-        sound: 'sound.mp3',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        vibrate: [0, 250, 250, 250],
-        categoryIdentifier: 'RIDE_REQUEST',
-        badge: 1,
-        sticky: true,
-        autoDismiss: false,
-      },
-      trigger: null, // Show immediately
-    });
-
-    console.log(`✅ Local notification scheduled for ride: ${rideId || 'unknown'}`);
-  } catch (error) {
-    console.error('❌ Error showing local notification:', error.message || error);
+    return enabled;
   }
-};
 
-// Set up notification categories with actions
-const setupNotificationCategories = async () => {
-  try {
+  // Setup notification categories
+  async setupNotificationCategories() {
     await Notifications.setNotificationCategoryAsync('RIDE_REQUEST', [
       {
         identifier: 'ACCEPT',
         buttonTitle: 'Accept',
-        options: {
-          opensAppToForeground: true,
-        },
+        options: { opensAppToForeground: true },
       },
       {
         identifier: 'DECLINE',
         buttonTitle: 'Decline',
-        options: {
-          opensAppToForeground: false,
-        },
+        options: { opensAppToForeground: false },
       },
     ]);
-
-    console.log('✅ Notification categories set up');
-  } catch (error) {
-    console.error('❌ Error setting up notification categories:', error);
   }
-};
 
-// Background Message Handler
-let backgroundHandlerInitialized = false;
-if (!backgroundHandlerInitialized) {
-  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-    console.log('📩 Background message received:', remoteMessage);
-    const messageId = remoteMessage.messageId || `local-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-    const rideId = remoteMessage.data?.rideId || remoteMessage.data?.ride_id;
+  // Configure Android notification channel
+  async configureNotificationChannel() {
+    if (Platform.OS === 'android') {
+      // Main ride notifications channel
+      await Notifications.setNotificationChannelAsync('ride_channel', {
+        name: 'Ride Notifications',
+        description: 'Notifications for ride requests',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+        sound: 'sound.mp3',
+        enableLights: true,
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        bypassDnd: true,
+      });
 
-    if (!messageId) return;
+      // Default channel for other notifications
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default Notifications',
+        description: 'General app notifications',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+        sound: 'sound.mp3',
+        enableLights: true,
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+    }
+  }
+
+  // Check for duplicate notifications
+  async isDuplicateNotification(rideId, messageId) {
+    if (!rideId && !messageId) return false;
 
     try {
-      // Prevent duplicate processing using both messageId and rideId
       const processedMessages = await AsyncStorage.getItem(PROCESSED_MESSAGES_KEY);
       const processed = processedMessages ? JSON.parse(processedMessages) : [];
 
-      // Check for duplicate message ID or ride ID
       const isDuplicate = processed.some(item =>
         item.messageId === messageId ||
-        (rideId && item.rideId === rideId && (Date.now() - item.timestamp) < 30000) // 30 seconds window
+        (rideId && item.rideId === rideId && (Date.now() - item.timestamp) < 30000)
       );
 
+      if (!isDuplicate) {
+        // Add to processed list
+        processed.push({
+          messageId: messageId || `local-${Date.now()}`,
+          rideId,
+          timestamp: Date.now()
+        });
+
+        // Keep only recent entries
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const filteredProcessed = processed
+          .filter(item => item.timestamp > fiveMinutesAgo)
+          .slice(-50);
+
+        await AsyncStorage.setItem(PROCESSED_MESSAGES_KEY, JSON.stringify(filteredProcessed));
+      }
+
+      return isDuplicate;
+    } catch (error) {
+      console.error('Error checking duplicate notification:', error);
+      return false;
+    }
+  }
+
+  // Show local notification
+  async showLocalNotification(title, body, data = {}) {
+    try {
+      const rideId = data?.rideId || data?.ride_id;
+      const messageId = data?.messageId || `local-${Date.now()}`;
+
+      // Check for duplicates
+      const isDuplicate = await this.isDuplicateNotification(rideId, messageId);
       if (isDuplicate) {
-        console.log('📩 Duplicate message detected, skipping:', messageId, rideId);
+        console.log(`🔄 Duplicate notification prevented for ride: ${rideId}`);
         return;
       }
 
-      // Add to processed list with timestamp
-      processed.push({
-        messageId,
-        rideId,
-        timestamp: Date.now()
+      // For background messages, store the data for later navigation
+      if (data?.fromBackground) {
+        await this.storePendingNotification(data);
+      }
+
+      // Determine if this is a ride request notification (has actions)
+      const isRideRequest = data?.event === 'RIDE_REQUEST' || 
+                           data?.event === 'DEFAULT_EVENT' ||
+                           rideId !== 'undefined';
+
+      // Choose category and channel based on notification type
+      const categoryIdentifier = isRideRequest ? 'RIDE_REQUEST' : null;
+      const channelId = isRideRequest ? 'ride_channel' : 'default';
+
+      const notificationContent = {
+        title: title || '🚕 New Ride Request',
+        body: body || 'You have a new ride request from test',
+        data: {
+          ...data,
+          screen: 'Home',
+          messageId,
+          timestamp: Date.now(),
+          // Add a unique identifier to track this notification
+          notificationId: `${messageId}-${Date.now()}`,
+          // Ensure clickable data is present
+          clickAction: 'OPEN_APP'
+        },
+        sound: 'sound.mp3',
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        vibrate: [0, 250, 250, 250],
+        badge: 1,
+      };
+
+      // Only add category if it's a ride request with actions
+      if (categoryIdentifier) {
+        notificationContent.categoryIdentifier = categoryIdentifier;
+      }
+
+      // Add channel for Android
+      if (Platform.OS === 'android') {
+        notificationContent.channelId = channelId;
+      }
+
+      await Notifications.scheduleNotificationAsync({
+        content: notificationContent,
+        trigger: null,
       });
 
-      // Keep only last 50 and remove old entries (older than 5 minutes)
-      const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-      const filteredProcessed = processed
-        .filter(item => item.timestamp > fiveMinutesAgo)
-        .slice(-50);
-
-      await AsyncStorage.setItem(PROCESSED_MESSAGES_KEY, JSON.stringify(filteredProcessed));
-
-      // Store the notification data for when app opens
-      await AsyncStorage.setItem('@app:pendingNotification', JSON.stringify({
-        data: remoteMessage.data,
-        timestamp: Date.now(),
-        messageId: messageId
-      }));
-
-      // Show notification using Expo Notifications (this handles sound better than custom audio)
-      await showLocalNotification(
-        remoteMessage.notification?.title,
-        remoteMessage.notification?.body,
-        {
-          ...remoteMessage.data,
-          fromBackground: true,
-          messageId: messageId
-        }
-      );
-
-      console.log('✅ Background notification sent for ride:', rideId);
-
+      console.log(`✅ Local notification scheduled for ride: ${rideId || 'unknown'}, category: ${categoryIdentifier || 'none'}`);
     } catch (error) {
-      console.error('❌ Background handler error:', error);
+      console.error('❌ Error showing local notification:', error);
     }
-  });
-  backgroundHandlerInitialized = true;
+  }
+
+  // Handle notification tap - always navigate to Home
+  handleNotificationTap(data) {
+    console.log('🔔 Notification tapped with data:', data);
+    
+    if (!globalNavigationRef) {
+      console.error('❌ Navigation ref not available, storing for later');
+      // Store the notification tap for when navigation becomes available
+      this.storePendingNotification(data);
+      return;
+    }
+
+    try {
+      console.log('🔔 Notification tapped, navigating to Home');
+      
+      // Always navigate to Home screen with notification data
+      globalNavigationRef.navigate('Home', {
+        fromNotification: true,
+        notificationData: data,
+        timestamp: Date.now(),
+        ...(data || {})
+      });
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+      // Store for retry when navigation is available
+      this.storePendingNotification(data);
+    }
+  }
+
+  // Store pending notification for when app opens
+  async storePendingNotification(data) {
+    try {
+      await AsyncStorage.setItem(PENDING_NOTIFICATION_KEY, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+      console.log('📦 Pending notification stored');
+    } catch (error) {
+      console.error('Error storing pending notification:', error);
+    }
+  }
+
+  // Get and clear pending notification
+  async getPendingNotification() {
+    try {
+      const pendingNotification = await AsyncStorage.getItem(PENDING_NOTIFICATION_KEY);
+      if (pendingNotification) {
+        await AsyncStorage.removeItem(PENDING_NOTIFICATION_KEY);
+        const parsed = JSON.parse(pendingNotification);
+        console.log('📦 Retrieved pending notification:', parsed);
+        return parsed;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting pending notification:', error);
+      return null;
+    }
+  }
+
+  // Set navigation reference
+  setNavigationRef(ref) {
+    globalNavigationRef = ref;
+    console.log('🧭 Navigation ref set');
+  }
 }
 
+// Background Message Handler
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+  console.log('📩 Background message received:', remoteMessage);
+  
+  const notificationService = NotificationService.getInstance();
+  const data = remoteMessage.data || {};
+  
+  // Don't show local notification if the system already showed one
+  // This prevents duplicate notifications for FCM messages with notification payload
+  if (remoteMessage.notification) {
+    console.log('📱 FCM notification with payload, storing for tap handling');
+    // Just store the data for tap handling, don't show duplicate notification
+    await notificationService.storePendingNotification({
+      ...data,
+      fromBackground: true,
+      messageId: remoteMessage.messageId || `bg-${Date.now()}`,
+      originalMessage: remoteMessage,
+      hasSystemNotification: true
+    });
+  } else {
+    // Show local notification only if no system notification
+    await notificationService.showLocalNotification(
+      remoteMessage.notification?.title || 'New Notification',
+      remoteMessage.notification?.body || 'You have a new notification',
+      {
+        ...data,
+        fromBackground: true,
+        messageId: remoteMessage.messageId || `bg-${Date.now()}`,
+        originalMessage: remoteMessage
+      }
+    );
+  }
+});
+
+// Main App Component
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [initialRoute, setInitialRoute] = useState('Onboarding');
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Use refs to track initialization state
+  // Refs to prevent re-renders
   const initializationRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
-  const notificationListener = useRef();
-  const responseListener = useRef();
+  const notificationService = useRef(NotificationService.getInstance());
 
   const navigationRef = useNavigationContainerRef();
   const {
     isGranted,
     fcmToken,
-    lastNotification,
-    lastFcmMessage,
-    requestPermission,
-    showNotification
+    requestPermission
   } = useNotificationPermission(navigationRef);
 
-  // Set global navigation reference
-  useEffect(() => {
-    globalNavigationRef = navigationRef.current;
-  }, [navigationRef]);
-
-  // Memoize API base URL to prevent recreating axios calls
+  // Memoized values
+  const screenOptions = useMemo(() => ({ headerShown: false }), []);
   const apiConfig = useMemo(() => ({
     baseURL: API_BASE_URL,
     timeout: 10000,
   }), []);
 
-  // Configure Firebase and Notifications
-  const configureNotifications = useCallback(async () => {
-    try {
-      // Request Expo notification permissions
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('❌ Notification permission denied');
-        return;
-      }
-
-      // Set up notification categories
-      await setupNotificationCategories();
-
-      // Configure notification channel for Android with better sound handling
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('ride_channel', {
-          name: 'Ride Notifications',
-          description: 'Notifications for ride requests',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
-          sound: 'sound.mp3', // Custom sound file
-          enableLights: true,
-          enableVibrate: true,
-          showBadge: true,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          bypassDnd: true, // Bypass Do Not Disturb
-        });
-      }
-
-      // Request Firebase messaging permission
-      const authStatus = await messaging().requestPermission();
-      const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-      if (enabled) {
-        console.log('✅ Firebase messaging permission granted');
-
-        // Get FCM token
-        const token = await messaging().getToken();
-        console.log('FCM Token:', token);
-      }
-    } catch (error) {
-      console.error('❌ Notification configuration error:', error);
+  // Set global navigation reference
+  useEffect(() => {
+    if (navigationRef.current) {
+      globalNavigationRef = navigationRef.current;
+      notificationService.current.setNavigationRef(navigationRef.current);
+      console.log('🧭 Global navigation ref updated');
     }
-  }, []);
+  }, [navigationRef]);
 
-  // Check authentication and user status
+  // Authentication check
   const checkAuthToken = useCallback(async () => {
-    if (initializationRef.current) {
-      console.log('🔒 Auth check already in progress, skipping...');
-      return;
-    }
+    if (initializationRef.current) return;
 
     try {
       initializationRef.current = true;
       const token = await SecureStore.getItemAsync('auth_token_cab');
+      
       if (!token) {
         setInitialRoute('Onboarding');
         return;
@@ -381,48 +449,46 @@ const App = () => {
     }
   }, []);
 
-  // Handle notification navigation
-  const handleNotificationNavigationCallback = useCallback((data) => {
-    handleNotificationNavigation(data);
-  }, []);
-
   // Handle app state changes
   const handleAppStateChange = useCallback((nextAppState) => {
     const previousAppState = appStateRef.current;
     appStateRef.current = nextAppState;
 
     if (previousAppState !== nextAppState) {
-      console.log(`AppState changed from ${previousAppState} to ${nextAppState}`);
-
+      console.log(`AppState changed: ${previousAppState} → ${nextAppState}`);
+      
       if (nextAppState === 'active' && previousAppState === 'background') {
         console.log('App returned to foreground');
-        if (isInitialized) {
-          requestPermission();
-        }
+        // Check for pending notifications with delay to ensure navigation is ready
+        setTimeout(() => {
+          checkPendingNotifications();
+        }, 1000);
       }
     }
-  }, [requestPermission, isInitialized]);
+  }, []);
 
-  // Check for pending notifications when app starts
+  // Check for pending notifications when app becomes active
   const checkPendingNotifications = useCallback(async () => {
     try {
-      const pendingNotification = await AsyncStorage.getItem('@app:pendingNotification');
+      const pendingNotification = await notificationService.current.getPendingNotification();
       if (pendingNotification) {
-        const notification = JSON.parse(pendingNotification);
-        console.log('📱 Found pending notification:', notification);
-
-        // Clear the pending notification
-        await AsyncStorage.removeItem('@app:pendingNotification');
-
-        // Handle navigation after a small delay to ensure app is ready
-        setTimeout(() => {
-          handleNotificationNavigationCallback(notification.data);
-        }, 1000);
+        console.log('📱 Processing pending notification');
+        // Ensure navigation ref is available before processing
+        if (globalNavigationRef) {
+          notificationService.current.handleNotificationTap(pendingNotification.data);
+        } else {
+          console.log('⏳ Navigation not ready, retrying in 500ms');
+          setTimeout(() => {
+            if (globalNavigationRef) {
+              notificationService.current.handleNotificationTap(pendingNotification.data);
+            }
+          }, 500);
+        }
       }
     } catch (error) {
       console.error('❌ Error checking pending notifications:', error);
     }
-  }, [handleNotificationNavigationCallback]);
+  }, []);
 
   // Initialize app
   useEffect(() => {
@@ -430,11 +496,17 @@ const App = () => {
 
     const initializeApp = async () => {
       try {
-        console.log('🚀 Starting app initialization...');
-        await configureNotifications();
+        console.log('🚀 Initializing app...');
+        
+        // Initialize notification service
+        await notificationService.current.initialize();
+        
+        // Check authentication
         await checkAuthToken();
+        
+        // Request permissions
         await requestPermission();
-        await checkPendingNotifications();
+        
         setIsInitialized(true);
         console.log('✅ App initialization complete');
       } catch (error) {
@@ -444,84 +516,115 @@ const App = () => {
     };
 
     initializeApp();
-  }, [isInitialized, configureNotifications, checkAuthToken, requestPermission, checkPendingNotifications]);
+  }, [isInitialized, checkAuthToken, requestPermission]);
 
-  // Handle FCM message navigation
+  // Check for pending notifications after navigation is ready
   useEffect(() => {
-    if (isInitialized && lastFcmMessage?.data) {
-      console.log('Handling FCM message navigation:', lastFcmMessage.data);
-      handleNotificationNavigationCallback(lastFcmMessage.data);
+    if (isInitialized && globalNavigationRef) {
+      // Small delay to ensure navigation is fully ready
+      setTimeout(() => {
+        checkPendingNotifications();
+      }, 500);
     }
-  }, [lastFcmMessage, handleNotificationNavigationCallback, isInitialized]);
+  }, [isInitialized, globalNavigationRef, checkPendingNotifications]);
 
-  // Handle foreground notifications and notification interactions
+  // Setup notification listeners
   useEffect(() => {
     if (!isInitialized) return;
 
-    // Handle foreground FCM messages
-    const unsubscribeFCM = messaging().onMessage(async (remoteMessage) => {
-      console.log('📱 Foreground FCM message received:', remoteMessage);
+    let fcmUnsubscribe;
+    let notificationListener;
+    let responseListener;
 
-      // Show notification even in foreground
-      await showLocalNotification(
-        remoteMessage.notification?.title,
-        remoteMessage.notification?.body,
-        {
-          ...remoteMessage.data,
-          fromForeground: true,
+    const setupListeners = async () => {
+      // FCM foreground message handler
+      fcmUnsubscribe = messaging().onMessage(async (remoteMessage) => {
+        console.log('📱 Foreground FCM message received');
+        await notificationService.current.showLocalNotification(
+          remoteMessage.notification?.title,
+          remoteMessage.notification?.body,
+          {
+            ...remoteMessage.data,
+            fromForeground: true,
+            messageId: remoteMessage.messageId,
+            originalMessage: remoteMessage
+          }
+        );
+      });
+
+      // Handle notification opening app (FCM notification tap)
+      messaging().onNotificationOpenedApp(remoteMessage => {
+        console.log('📱 FCM Notification opened app:', remoteMessage);
+        
+        if (remoteMessage && remoteMessage.data) {
+          console.log('👆 FCM notification tapped, navigating to Home');
+          notificationService.current.handleNotificationTap(remoteMessage.data);
         }
-      );
-    });
+      });
 
-    // Handle notification received while app is running
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('📱 Notification received:', notification);
-    });
+      // Check if app was opened from a notification (when app was completely closed)
+      messaging().getInitialNotification().then(remoteMessage => {
+        if (remoteMessage) {
+          console.log('📱 App opened from FCM notification:', remoteMessage);
+          
+          // Small delay to ensure navigation is ready
+          setTimeout(() => {
+            if (remoteMessage.data) {
+              console.log('👆 Initial FCM notification, navigating to Home');
+              notificationService.current.handleNotificationTap(remoteMessage.data);
+            }
+          }, 2000);
+        }
+      });
 
-    // Handle notification tapped
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('👆 Notification response received:', response);
+      // Notification received listener
+      notificationListener = Notifications.addNotificationReceivedListener(notification => {
+        console.log('📱 Notification received:', notification.request.content.title);
+      });
 
-      const { notification, actionIdentifier } = response;
-      const data = notification.request.content.data;
+      // Notification response listener (when user taps)
+      responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+        console.log('👆 Notification tapped');
+        console.log('Response:', response);
+        
+        const { notification, actionIdentifier } = response;
+        const data = notification.request.content.data;
 
-      if (actionIdentifier === 'ACCEPT') {
-        console.log('✅ User accepted ride');
-        handleNotificationNavigationCallback(data);
-      } else if (actionIdentifier === 'DECLINE') {
-        console.log('❌ User declined ride');
-        // Handle decline action
-      } else if (actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
-        console.log('👆 User tapped notification');
-        handleNotificationNavigationCallback(data);
-      }
-    });
+        console.log('Action identifier:', actionIdentifier);
+        console.log('Notification data:', data);
+
+        if (actionIdentifier === 'ACCEPT') {
+          console.log('✅ User accepted ride');
+          notificationService.current.handleNotificationTap(data);
+        } else if (actionIdentifier === 'DECLINE') {
+          console.log('❌ User declined ride');
+          // Handle decline logic here
+        } else if (actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
+          console.log('👆 User tapped notification body - navigating to Home');
+          notificationService.current.handleNotificationTap(data);
+        } else {
+          // Handle any other tap scenarios
+          console.log('👆 Unknown action, navigating to Home');
+          notificationService.current.handleNotificationTap(data);
+        }
+      });
+    };
+
+    setupListeners();
 
     return () => {
-      unsubscribeFCM();
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
+      fcmUnsubscribe?.();
+      notificationListener && Notifications.removeNotificationSubscription(notificationListener);
+      responseListener && Notifications.removeNotificationSubscription(responseListener);
     };
-  }, [isInitialized, handleNotificationNavigationCallback]);
+  }, [isInitialized]);
 
   // App state listener
   useEffect(() => {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      subscription?.remove();
-    };
+    return () => subscription?.remove();
   }, [handleAppStateChange]);
 
-  // Memoize screen options to prevent recreation
-  const screenOptions = useMemo(() => ({
-    headerShown: false
-  }), []);
-
-  // Show loading screen
   if (isLoading) {
     return <Loading />;
   }
@@ -540,118 +643,46 @@ const App = () => {
                       initialRouteName={initialRoute}
                       screenOptions={screenOptions}
                     >
-                      <Stack.Screen
-                        name="Onboarding"
-                        component={OnboardingScreen}
-                      />
-                      <Stack.Screen
-                        name="register"
+                      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                      <Stack.Screen 
+                        name="register" 
                         component={RegistrationForm}
-                        options={{
-                          headerShown: true,
-                          title: 'Complete Profile'
-                        }}
+                        options={{ headerShown: true, title: 'Complete Profile' }}
                       />
-                      <Stack.Screen
-                        name="UploadDocuments"
-                        component={Document}
-                      />
-                      <Stack.Screen
-                        name="Wait_Screen"
-                        component={Wait_Screen}
-                      />
-                      <Stack.Screen
-                        name="Home"
-                        component={HomeScreen}
-                      />
-                      <Stack.Screen
-                        name="start"
-                        component={RunningRide}
-                      />
-                      <Stack.Screen
-                        name="support"
-                        component={SupportScreen}
-                      />
-                      <Stack.Screen
-                        name="collect_money"
-                        component={MoneyPage}
-                      />
-                      <Stack.Screen
-                        name="AllRides"
-                        component={AllRides}
-                      />
-                      <Stack.Screen
-                        name="NewRideScreen"
-                        component={RideRequestScreen}
-                      />
-                      <Stack.Screen
-                        name="UnlockCoupons"
-                        component={UnlockCoupons}
-                      />
-                      <Stack.Screen
-                        name="Profile"
-                        component={Profile}
-                      />
-                      <Stack.Screen
-                        name="upload-qr"
-                        component={UploadQr}
-                      />
-                      <Stack.Screen
-                        name="enter_bh"
-                        component={BhVerification}
-                      />
-                      <Stack.Screen
-                        name="Register"
-                        component={RegisterWithBh}
-                      />
-                      <Stack.Screen
-                        name="OtpVerify"
-                        component={BhOtpVerification}
-                      />
-                      <Stack.Screen
-                        name="Recharge"
-                        component={RechargeViaOnline}
-                      />
-                      <Stack.Screen
-                        name="recharge-history"
-                        component={RechargeHistory}
-                      />
-                      <Stack.Screen
-                        name="WorkingData"
-                        component={WorkingData}
-                      />
-                      <Stack.Screen
-                        name="referral-history"
-                        component={ReferalHistory}
-                      />
-                      <Stack.Screen
-                        name="withdraw"
-                        component={Withdraw}
-                      />
-                      <Stack.Screen
-                        name="ParcelDetails"
-                        component={NewParcelLive}
-                      />
-                      <Stack.Screen
-                        name="DeliveryTracking"
+                      <Stack.Screen name="UploadDocuments" component={Document} />
+                      <Stack.Screen name="Wait_Screen" component={Wait_Screen} />
+                      <Stack.Screen name="Home" component={HomeScreen} />
+                      <Stack.Screen name="start" component={RunningRide} />
+                      <Stack.Screen name="support" component={SupportScreen} />
+                      <Stack.Screen name="collect_money" component={MoneyPage} />
+                      <Stack.Screen name="AllRides" component={AllRides} />
+                      <Stack.Screen name="NewRideScreen" component={RideRequestScreen} />
+                      <Stack.Screen name="UnlockCoupons" component={UnlockCoupons} />
+                      <Stack.Screen name="Profile" component={Profile} />
+                      <Stack.Screen name="upload-qr" component={UploadQr} />
+                      <Stack.Screen name="enter_bh" component={BhVerification} />
+                      <Stack.Screen name="Register" component={RegisterWithBh} />
+                      <Stack.Screen name="OtpVerify" component={BhOtpVerification} />
+                      <Stack.Screen name="Recharge" component={RechargeViaOnline} />
+                      <Stack.Screen name="recharge-history" component={RechargeHistory} />
+                      <Stack.Screen name="WorkingData" component={WorkingData} />
+                      <Stack.Screen name="referral-history" component={ReferalHistory} />
+                      <Stack.Screen name="withdraw" component={Withdraw} />
+                      <Stack.Screen name="ParcelDetails" component={NewParcelLive} />
+                      <Stack.Screen 
+                        name="DeliveryTracking" 
                         component={DeliveryTracking}
                         options={{ headerShown: false }}
                       />
-                      <Stack.Screen
-                        name="available-orders"
+                      <Stack.Screen 
+                        name="available-orders" 
                         component={AvailableOrder}
-                        options={{
-                          headerShown: false,
-                          title: "Available Orders"
-                        }}
+                        options={{ headerShown: false, title: "Available Orders" }}
                       />
-                      <Stack.Screen
-                        name="progress-order"
+                      <Stack.Screen 
+                        name="progress-order" 
                         component={ProgressOrder}
-                        options={{
-                          headerShown: true,
-                          title: "Progress Orders"
-                        }}
+                        options={{ headerShown: true, title: "Progress Orders" }}
                       />
                     </Stack.Navigator>
                   </NavigationContainer>
@@ -665,10 +696,8 @@ const App = () => {
   );
 };
 
-// Wrap with Sentry
+// Memoized wrapped components
 const WrappedApp = React.memo(Sentry.wrap(App));
-
-// Root App Component
 const RootApp = React.memo(() => (
   <ErrorBoundaryWrapper>
     <CheckAppUpdate>
@@ -677,7 +706,5 @@ const RootApp = React.memo(() => (
   </ErrorBoundaryWrapper>
 ));
 
-// Register the app
 AppRegistry.registerComponent(appName, () => RootApp);
-
 export default RootApp;

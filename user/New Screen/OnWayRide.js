@@ -14,6 +14,7 @@ import {
     StatusBar,
     Dimensions,
     ScrollView,
+    Linking,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRoute, useNavigation, CommonActions } from "@react-navigation/native"
@@ -52,7 +53,7 @@ export default function OnWayRide() {
     const [error, setError] = useState(null)
 
 
-    // console.log("lastNotification",lastNotification)
+
 
     // Memoized values
     const currentStatus = useMemo(
@@ -379,12 +380,10 @@ export default function OnWayRide() {
                     </View>
                 </View>
                 <View style={styles.actionButtons}>
-                    <TouchableOpacity style={styles.actionButton}>
+                    <TouchableOpacity onPress={() => Linking.openURL(`tel:'01141236767'}`)} style={styles.actionButton}>
                         <Ionicons name="call" size={20} color="#007AFF" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionButton}>
-                        <Ionicons name="chatbubble" size={20} color="#007AFF" />
-                    </TouchableOpacity>
+
                 </View>
             </View>
 

@@ -1,18 +1,29 @@
+// config/bullBoard.js
 const { ExpressAdapter } = require('@bull-board/express');
 const { createBullBoard } = require('@bull-board/api');
 const { BullAdapter } = require('@bull-board/api/bullAdapter');
-const rideCancellationQueue = require('./queues/ProcessRiderQue');
+
+
+const { queue: notificationQueue } = require('./queues/sendNotificationQuee');
 
 const setupBullBoard = (app) => {
   const serverAdapter = new ExpressAdapter();
-  serverAdapter.setBasePath('/admin/queues'); // Set the base path for Bull Board
+  serverAdapter.setBasePath('/admin/queues');
 
   createBullBoard({
-    queues: [new BullAdapter(rideCancellationQueue)], // Add your queues here
+    queues: [
+      new BullAdapter(notificationQueue),
+    ],
     serverAdapter,
   });
 
-  app.use('/admin/queues', serverAdapter.getRouter()); // Mount the Bull Board route
+
+
+  app.use('/admin/queues', serverAdapter.getRouter());
+  
+  console.log('🔧 Bull Board dashboard available at: /admin/queues');
+  
+  return serverAdapter;
 };
 
 module.exports = setupBullBoard;

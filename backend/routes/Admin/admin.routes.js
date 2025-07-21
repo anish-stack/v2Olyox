@@ -64,6 +64,7 @@ const { createAppHomeBanner, getAllAppHomeBanners, getSingleAppHomeBanner, updat
 const { getActiveCoupons, createPCoupon, getActivePCoupons, getCouponPById, updatePCoupon, deletePCoupon, getCouponpAById, getAllPartnersNameAndBHAndId, getAllPCoupons } = require('../../Admin Controllers/PersonalCoupons');
 const { createAppVersion, deleteAppVersion, getLatestAppVersionByType, getAllAppVersions } = require('../../Admin Controllers/AppVersion');
 const { webhookExotelApi } = require('../../controllers/ExotelApi');
+const { DriverSendNotification } = require('../../Admin Controllers/notification/notificationController');
 
 const admin = express.Router();
 
@@ -190,6 +191,7 @@ admin.get('/personal-coupon/:id', getCouponpAById);
 admin.put('/personal-coupons/:id', updatePCoupon);
 admin.delete('/personal-coupons/:id', deletePCoupon);
 
+admin.post('/send-notification-driver',DriverSendNotification)
 
 admin.post('/app-version/create', createAppVersion);
 admin.delete('/app-version/delete/:id', deleteAppVersion);

@@ -120,7 +120,7 @@ export default function NewMap({ pickup, drop, ride_status, isReached }) {
         if (!mapRef.current) return;
 
         const coordinates = [];
-        
+
         if (currentLocation) coordinates.push(currentLocation);
         if (pickupLocation) coordinates.push(pickupLocation);
         if (dropLocation && (ride_status === 'driver_arrived' || ride_status === 'in_progress' || localIsReached)) {
@@ -360,15 +360,20 @@ export default function NewMap({ pickup, drop, ride_status, isReached }) {
 
                 {/* Google Maps Navigation Buttons */}
                 <View style={styles.googleMapsRow}>
-                    <TouchableOpacity
-                        style={[styles.googleMapsButton, styles.pickupGoogleButton]}
-                        onPress={() => openGoogleMaps(pickupLocation, 'Pickup Location')}
-                        activeOpacity={0.8}
-                    >
-                        <AntDesign name="google" size={18} color={colors.textLight} />
-                        <MaterialIcons name="navigation" size={18} color={colors.textLight} />
-                        <Text style={styles.googleButtonText}>Navigate to Pickup</Text>
-                    </TouchableOpacity>
+                  
+
+                    {ride_status === 'in_progress' ? null :          
+                        <TouchableOpacity
+                            style={[styles.googleMapsButton, styles.pickupGoogleButton]}
+                            onPress={() => openGoogleMaps(pickupLocation, 'Pickup Location')}
+                            activeOpacity={0.8}
+                        >
+                            <AntDesign name="google" size={18} color={colors.textLight} />
+                            <MaterialIcons name="navigation" size={18} color={colors.textLight} />
+                            <Text style={styles.googleButtonText}>Navigate to Pickup</Text>
+                        </TouchableOpacity>
+                    }
+
 
                     {(ride_status === 'driver_arrived' || ride_status === 'in_progress' || localIsReached) && (
                         <TouchableOpacity
@@ -381,11 +386,14 @@ export default function NewMap({ pickup, drop, ride_status, isReached }) {
                             <Text style={styles.googleButtonText}>Navigate to Drop</Text>
                         </TouchableOpacity>
                     )}
+
+
+
                 </View>
             </View>
 
             {/* Debug Info (remove in production) */}
-           
+
         </View>
     );
 }

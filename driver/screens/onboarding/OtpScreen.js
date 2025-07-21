@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Alert, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  TouchableOpacity,
   ActivityIndicator,
   Animated,
   Keyboard,
@@ -28,11 +28,11 @@ const OtpScreen = ({ onVerify, number, type }) => {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const navigation = useNavigation();
-  
+
   // Animation references
   const shakeAnimation = useRef(new Animated.Value(0)).current;
   const successOpacity = useRef(new Animated.Value(0)).current;
-  
+
   useEffect(() => {
     let interval;
     if (isResendDisabled && timer > 0) {
@@ -77,7 +77,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
   const handleOtpChange = (text) => {
     // Clear error messages when user types
     if (errorMessage) setErrorMessage("");
-    
+
     // Only accept numbers and limit to 6 digits
     const numericValue = text.replace(/[^0-9]/g, '');
     if (numericValue.length <= 6) {
@@ -91,37 +91,37 @@ const OtpScreen = ({ onVerify, number, type }) => {
       startShakeAnimation();
       return false;
     }
-    
+
     if (otp.length !== 6) {
       setErrorMessage("OTP must be 6 digits");
       startShakeAnimation();
       return false;
     }
-    
+
     return true;
   };
 
   const startShakeAnimation = () => {
     Animated.sequence([
-      Animated.timing(shakeAnimation, { 
-        toValue: 10, 
-        duration: 50, 
-        useNativeDriver: true 
+      Animated.timing(shakeAnimation, {
+        toValue: 10,
+        duration: 50,
+        useNativeDriver: true
       }),
-      Animated.timing(shakeAnimation, { 
-        toValue: -10, 
-        duration: 50, 
-        useNativeDriver: true 
+      Animated.timing(shakeAnimation, {
+        toValue: -10,
+        duration: 50,
+        useNativeDriver: true
       }),
-      Animated.timing(shakeAnimation, { 
-        toValue: 10, 
-        duration: 50, 
-        useNativeDriver: true 
+      Animated.timing(shakeAnimation, {
+        toValue: 10,
+        duration: 50,
+        useNativeDriver: true
       }),
-      Animated.timing(shakeAnimation, { 
-        toValue: 0, 
-        duration: 50, 
-        useNativeDriver: true 
+      Animated.timing(shakeAnimation, {
+        toValue: 0,
+        duration: 50,
+        useNativeDriver: true
       })
     ]).start();
   };
@@ -145,23 +145,23 @@ const OtpScreen = ({ onVerify, number, type }) => {
 
   const handleOtpVerify = async () => {
     Keyboard.dismiss();
-    
+
     // Validate OTP
     if (!validateOtp()) return;
 
     setIsVerifying(true);
     setErrorMessage("");
-    
+
     try {
       const response = await axios.post(
         'https://www.appv2.olyox.com/api/v1/rider/rider-verify',
-        { 
-          otp, 
+        {
+          otp,
           number,
           otpType: type // Send OTP type in the request body
         }
       );
-      
+
       if (response.data.success) {
         const token = response.data.token;
         const accountStatus = response.data.accountStatus;
@@ -174,7 +174,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
         // Navigation Logic with delays for better UX
         setTimeout(async () => {
           setIsVerifying(false);
-          
+
           if (!accountStatus) {
             navigation.navigate('UploadDocuments');
           } else if (!isDocumentUpload) {
@@ -182,8 +182,10 @@ const OtpScreen = ({ onVerify, number, type }) => {
           } else if (!DocumentVerify) {
             navigation.navigate('Wait_Screen');
           } else {
-         
-            navigation.navigate('Home');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Home' }],
+            });
           }
 
           onVerify();
@@ -192,9 +194,9 @@ const OtpScreen = ({ onVerify, number, type }) => {
         setIsVerifying(false);
         setErrorMessage(response.data.message || "Verification failed");
         console.log("OTP verification failed:", response.data.message);
-        
+
         Alert.alert(
-          "Verification Failed", 
+          "Verification Failed",
           response.data.message || "Please check the OTP and try again",
           [{ text: "OK" }]
         );
@@ -203,9 +205,9 @@ const OtpScreen = ({ onVerify, number, type }) => {
       setIsVerifying(false);
       const errorMsg = error?.response?.data?.message || "Something went wrong";
       setErrorMessage(errorMsg);
-      
+
       Alert.alert(
-        'Verification Error', 
+        'Verification Error',
         errorMsg,
         [{ text: "OK" }]
       );
@@ -215,31 +217,31 @@ const OtpScreen = ({ onVerify, number, type }) => {
 
   const handleResendOtp = async () => {
     if (isResendDisabled) return;
-    
+
     Keyboard.dismiss();
     setErrorMessage("");
     setIsResendDisabled(true);
-    
+
     try {
       const response = await axios.post(
         'https://www.appv2.olyox.com/api/v1/rider/rider-login',
-        { 
+        {
           number,
           otpType: type // Send OTP type in request body
         }
       );
-      
+
       if (response.data.success) {
-        setTimer(30); 
+        setTimer(30);
         showSuccessMessage("OTP resent successfully!");
         console.log("OTP resent:", response.data);
       } else {
         setIsResendDisabled(false);
         setErrorMessage(response.data.message || "Failed to resend OTP");
         console.log("Failed to resend OTP:", response.data.message);
-        
+
         Alert.alert(
-          "Resend Failed", 
+          "Resend Failed",
           response.data.message || "Failed to resend OTP. Please try again.",
           [{ text: "OK" }]
         );
@@ -248,9 +250,9 @@ const OtpScreen = ({ onVerify, number, type }) => {
       setIsResendDisabled(false);
       const errorMsg = error?.response?.data?.message || "Something went wrong";
       setErrorMessage(errorMsg);
-      
+
       Alert.alert(
-        'Resend Error', 
+        'Resend Error',
         errorMsg,
         [{ text: "OK" }]
       );
@@ -277,7 +279,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
           </Text>
         </View>
 
-        <Animated.View 
+        <Animated.View
           style={[
             styles.inputContainer,
             { transform: [{ translateX: shakeAnimation }] }
@@ -292,14 +294,14 @@ const OtpScreen = ({ onVerify, number, type }) => {
             style={[styles.input, errorMessage ? styles.inputError : null]}
             maxLength={6}
           />
-          
+
           {errorMessage ? (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle-outline" size={16} color="#e51e25" />
               <Text style={styles.errorText}>{errorMessage}</Text>
             </View>
           ) : null}
-          
+
           <Animated.View style={[styles.successContainer, { opacity: successOpacity }]}>
             <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
             <Text style={styles.successText}>{successMessage}</Text>
@@ -312,18 +314,18 @@ const OtpScreen = ({ onVerify, number, type }) => {
             <Text style={styles.loadingText}>Verifying OTP...</Text>
           </View>
         ) : (
-          <Button 
-            title="Verify & Proceed" 
-            onPress={handleOtpVerify} 
-            style={styles.verifyButton} 
+          <Button
+            title="Verify & Proceed"
+            onPress={handleOtpVerify}
+            style={styles.verifyButton}
             textStyle={styles.buttonText}
           />
         )}
 
         <View style={styles.resendContainer}>
           <Text style={styles.timerText}>
-            {isResendDisabled 
-              ? `Resend available in ${timer}s` 
+            {isResendDisabled
+              ? `Resend available in ${timer}s`
               : "Didn't receive the OTP?"
             }
           </Text>
@@ -331,7 +333,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
             onPress={handleResendOtp}
             disabled={isResendDisabled || isVerifying}
             style={[
-              styles.resendButton, 
+              styles.resendButton,
               (isResendDisabled || isVerifying) && styles.disabledButton
             ]}
           >
@@ -343,7 +345,7 @@ const OtpScreen = ({ onVerify, number, type }) => {
             </Text>
           </TouchableOpacity>
         </View>
-        
+
         <Text style={styles.otpMethod}>
           OTP sent via: {type === 'whatsapp' ? 'WhatsApp' : 'SMS Text'}
         </Text>

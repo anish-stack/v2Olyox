@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Alert, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
   TouchableOpacity,
   Image
 } from "react-native";
@@ -21,23 +21,23 @@ const LoginForm = ({ onLogin }) => {
   const [error, setError] = useState("");
   const [otpType, setOtpType] = useState("text"); // "text" or "whatsapp"
   const navigation = useNavigation();
-    const { isGranted, fcmToken } = useNotificationPermission();
+  const { isGranted, fcmToken } = useNotificationPermission();
 
   const validateAndFormatPhone = (number) => {
     // Remove all non-numeric characters including +91
     const cleanNumber = number.replace(/\D/g, '');
-    
+
     // If number starts with 91, remove it
-    const formattedNumber = cleanNumber.startsWith('91') 
-      ? cleanNumber.substring(2) 
+    const formattedNumber = cleanNumber.startsWith('91')
+      ? cleanNumber.substring(2)
       : cleanNumber;
-    
+
     // Check if it's exactly 10 digits
     if (formattedNumber.length !== 10) {
       setError("Please enter a valid 10-digit phone number");
       return null;
     }
-    
+
     setError("");
     return formattedNumber;
   };
@@ -50,22 +50,22 @@ const LoginForm = ({ onLogin }) => {
   const handleLogin = async () => {
     const formattedPhone = validateAndFormatPhone(phone);
     if (!formattedPhone) return;
-    
+
     setLoading(true);
-    
+
     try {
       const response = await axios.post(
-        'https://www.appv2.olyox.com/api/v1/rider/rider-login', 
-        { 
-          fcmToken:isGranted ? fcmToken:null,
+        'https://www.appv2.olyox.com/api/v1/rider/rider-login',
+        {
+          fcmToken: isGranted ? fcmToken : null,
           number: formattedPhone,
           otpType: otpType // Add otpType to the request body
         }
       );
-      
+
       if (response.data.success) {
         console.log("Login successful", response.data);
-        onLogin(formattedPhone ,otpType);
+        onLogin(formattedPhone, otpType);
       } else {
         setError(response.data.message || "Login failed");
         console.log("Login failed", response.data.message);
@@ -73,8 +73,8 @@ const LoginForm = ({ onLogin }) => {
     } catch (error) {
       if (error?.response?.status === 403) {
         Alert.alert(
-          'Complete Profile', 
-          error?.response?.data?.message, 
+          'Complete Profile',
+          error?.response?.data?.message,
           [{
             text: 'OK',
             onPress: () => navigation.navigate('register')
@@ -82,8 +82,8 @@ const LoginForm = ({ onLogin }) => {
         );
       } else if (error?.response?.status === 402) {
         Alert.alert(
-          'Profile Not Found', 
-          error?.response?.data?.message, 
+          'Profile Not Found',
+          error?.response?.data?.message,
           [{
             text: 'OK',
             onPress: () => navigation.navigate('enter_bh')
@@ -92,7 +92,7 @@ const LoginForm = ({ onLogin }) => {
       } else {
         setError(error?.response?.data?.message || "Something went wrong");
         Alert.alert(
-          'Error', 
+          'Error',
           error?.response?.data?.message || "Something went wrong"
         );
       }
@@ -104,16 +104,16 @@ const LoginForm = ({ onLogin }) => {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Image 
-          source={require('./icon_.png')} 
+        <Image
+          source={require('./icon_.png')}
           style={styles.logo}
           resizeMode="contain"
         />
       </View>
-      
+
       <Text style={styles.title}>Welcome Back</Text>
       <Text style={styles.subtitle}>Login with your phone number</Text>
-      
+
       <View style={styles.formContainer}>
         <Input
           placeholder="Enter 10-digit Phone Number"
@@ -124,11 +124,11 @@ const LoginForm = ({ onLogin }) => {
           style={styles.input}
           maxLength={15} // Allow for country code entry that will be trimmed
         />
-        
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        
+
         <Text style={styles.otpSectionTitle}>Select OTP Method</Text>
-        
+
         <View style={styles.optTypeContainer}>
           <TouchableOpacity
             style={[
@@ -137,10 +137,10 @@ const LoginForm = ({ onLogin }) => {
             ]}
             onPress={() => setOtpType("text")}
           >
-            <Ionicons 
-              name="chatbubble-outline" 
-              size={22} 
-              color={otpType === "text" ? "#ffffff" : "#666666"} 
+            <Ionicons
+              name="chatbubble-outline"
+              size={22}
+              color={otpType === "text" ? "#ffffff" : "#666666"}
             />
             <Text
               style={[
@@ -151,7 +151,7 @@ const LoginForm = ({ onLogin }) => {
               SMS Text
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               styles.otpTypeButton,
@@ -159,10 +159,10 @@ const LoginForm = ({ onLogin }) => {
             ]}
             onPress={() => setOtpType("whatsapp")}
           >
-            <Ionicons 
-              name="logo-whatsapp" 
-              size={22} 
-              color={otpType === "whatsapp" ? "#ffffff" : "#666666"} 
+            <Ionicons
+              name="logo-whatsapp"
+              size={22}
+              color={otpType === "whatsapp" ? "#ffffff" : "#666666"}
             />
             <Text
               style={[
@@ -174,7 +174,7 @@ const LoginForm = ({ onLogin }) => {
             </Text>
           </TouchableOpacity>
         </View>
-        
+
         {loading ? (
           <View style={styles.loaderContainer}>
             <ActivityIndicator size="large" color="#e51e25" style={styles.loader} />
@@ -183,15 +183,15 @@ const LoginForm = ({ onLogin }) => {
             </Text>
           </View>
         ) : (
-          <Button 
+          <Button
             title={`Send OTP via ${otpType === "text" ? "SMS" : "WhatsApp"}`}
-            onPress={handleLogin} 
+            onPress={handleLogin}
             style={styles.button}
-            textStyle={styles.buttonText} 
+            textStyle={styles.buttonText}
           />
         )}
       </View>
-      
+
       <View style={styles.footer}>
         <Text style={styles.footerText}>Don't have an account? </Text>
         <TouchableOpacity onPress={() => navigation.navigate('register')}>

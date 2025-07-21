@@ -437,8 +437,8 @@ export default function RunningRide() {
     }, [selectedReason, activeRideData?._id, navigation]);
 
     // Utility functions
-    const makePhoneCall = useCallback((phoneNumber) => {
-        Linking.openURL(`tel:${phoneNumber}`);
+    const makePhoneCall = useCallback(() => {
+        Linking.openURL(`tel:01141236767`);
     }, []);
 
     const onRefresh = useCallback(async () => {
@@ -507,7 +507,7 @@ export default function RunningRide() {
                                 </View>
                                 <TouchableOpacity
                                     style={styles.callButton}
-                                    onPress={() => makePhoneCall(settings?.support_number_driver)}
+                                    onPress={() => makePhoneCall()}
                                     activeOpacity={0.8}
                                 >
                                     <MaterialIcons name="phone" size={20} color="#fff" />

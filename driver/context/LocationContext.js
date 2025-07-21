@@ -66,6 +66,7 @@ export const LocationProvider = ({ children }) => {
     requestLocationPermissions();
   }, []);
 
+  
   useEffect(() => {
     if (hasPermission) {
       startLocationUpdates();
