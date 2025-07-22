@@ -1,6 +1,6 @@
 // queues/ProcessRiderQueue.js
 const Bull = require('bull');
-const Rider = require('../models/Rider.model');
+const Rider = require('../models/normal_user/User.model');
 const sendNotification = require('../utils/sendNotification');
 
 // Configuration
@@ -28,7 +28,7 @@ const JOB_OPTIONS = {
 };
 
 // Create queue
-const notificationQueue = new Bull('ride-notification-work', {
+const notificationQueueUser = new Bull('user-notification-work', {
     redis: REDIS_CONFIG,
     settings: QUEUE_SETTINGS,
     defaultJobOptions: JOB_OPTIONS,
@@ -94,37 +94,34 @@ const processNotificationBatch = async (riders, title, body, data) => {
 };
 
 // Main queue processor
-notificationQueue.process(async (job) => {
-  const { title, body, data = {}, targetType = 'rider', targetIds = [] } = job.data;
+notificationQueueUser.process(async (job) => {
+  const { title, body, data = {}, targetType = 'all', targetIds = [] } = job.data;
 
-  console.log('📨 Rider Notification Job Received:', job.data);
+  console.log('📥 Job received:', job.data);
 
   try {
-    // Step 1: Validate job data
+    // Validate job data
     validateJobData(job.data);
     job.progress(10);
 
-    // Step 2: Ensure we're targeting specific rider IDs only
-    if (targetType !== 'rider') {
-      throw new Error('Unsupported targetType for this queue. Only "rider" is allowed.');
-    }
+    // Build query: Only for specific users with valid FCM tokens
+    let query = { fcmToken: { $exists: true, $ne: null, $ne: '' } };
 
-    if (!Array.isArray(targetIds) || targetIds.length === 0) {
-      throw new Error('targetIds must be provided for rider notifications');
+    if (targetType === 'user') {
+      if (!targetIds || targetIds.length === 0) {
+        throw new Error('targetIds must be provided for user notifications');
+      }
+      query._id = { $in: targetIds };
+    } else {
+      throw new Error('Unsupported targetType. Only "user" is allowed in this queue.');
     }
-
-    // Step 3: Build query to fetch riders with valid FCM tokens
-    const query = {
-      _id: { $in: targetIds },
-      fcmToken: { $exists: true, $ne: null, $ne: '' },
-    };
 
     const totalCount = await Rider.countDocuments(query);
 
     if (totalCount === 0) {
-      console.warn('🚫 No riders with valid FCM tokens found');
+      console.warn('❌ No target users with valid FCM tokens found');
       return {
-        message: 'No riders found with valid FCM tokens',
+        message: 'No users found with valid FCM tokens',
         total: 0,
         successes: 0,
         failures: 0,
@@ -132,7 +129,7 @@ notificationQueue.process(async (job) => {
       };
     }
 
-    console.log(`🔔 Sending notifications to ${totalCount} riders`);
+    console.log(`🔄 Sending notifications to ${totalCount} targeted users`);
     job.progress(20);
 
     const BATCH_SIZE = 100;
@@ -144,8 +141,8 @@ notificationQueue.process(async (job) => {
 
     const cursor = Rider.find(query).select('fcmToken').lean().cursor();
 
-    for (let rider = await cursor.next(); rider != null; rider = await cursor.next()) {
-      batch.push(rider);
+    for (let user = await cursor.next(); user != null; user = await cursor.next()) {
+      batch.push(user);
 
       if (batch.length >= BATCH_SIZE) {
         const batchResult = await processNotificationBatch(batch, title, body, data);
@@ -157,12 +154,11 @@ notificationQueue.process(async (job) => {
         const progress = Math.min(90, 20 + (processedCount / totalCount) * 70);
         job.progress(progress);
 
-        console.log(`📦 Processed batch: ${processedCount}/${totalCount} riders`);
+        console.log(`📦 Batch processed: ${processedCount}/${totalCount}`);
         batch = [];
       }
     }
 
-    // Step 4: Process any remaining riders
     if (batch.length > 0) {
       const batchResult = await processNotificationBatch(batch, title, body, data);
       allResults.push(...batchResult.results);
@@ -174,7 +170,7 @@ notificationQueue.process(async (job) => {
     job.progress(100);
 
     const result = {
-      message: 'Rider notification processing completed',
+      message: 'Notification job completed',
       total: totalCount,
       processed: processedCount,
       successes: totalSuccesses,
@@ -183,19 +179,18 @@ notificationQueue.process(async (job) => {
       results: allResults,
     };
 
-    console.log(`✅ Rider Notification Job Completed — Success: ${totalSuccesses}, Failed: ${totalFailures}`);
+    console.log(`✅ Notification completed - Success: ${totalSuccesses}, Failed: ${totalFailures}`);
     return result;
 
   } catch (error) {
-    console.error('❌ Error processing rider notification job:', error);
+    console.error('🚨 Error processing user notification job:', error.message);
     throw error;
   }
 });
 
 
-
 // Event listeners
-notificationQueue.on('completed', (job, result) => {
+notificationQueueUser.on('completed', (job, result) => {
     console.log(`✅ Notification job ${job.id} completed:`, {
         rideId: job.data.rideId,
         total: result.total,
@@ -205,7 +200,7 @@ notificationQueue.on('completed', (job, result) => {
     });
 });
 
-notificationQueue.on('failed', (job, err) => {
+notificationQueueUser.on('failed', (job, err) => {
     console.error(`❌ Notification job ${job.id} failed:`, {
         rideId: job.data.rideId,
         error: err.message,
@@ -214,7 +209,7 @@ notificationQueue.on('failed', (job, err) => {
     });
 });
 
-notificationQueue.on('stalled', (job) => {
+notificationQueueUser.on('stalled', (job) => {
     console.warn(`⚠️ Notification job ${job.id} stalled:`, {
         rideId: job.data.rideId,
     });
@@ -223,7 +218,7 @@ notificationQueue.on('stalled', (job) => {
 // Helper function to add jobs
 const addNotificationJob = async (jobData, options = {}) => {
     try {
-        const job = await notificationQueue.add(jobData, {
+        const job = await notificationQueueUser.add(jobData, {
             ...JOB_OPTIONS,
             ...options,
         });
@@ -239,7 +234,7 @@ const addNotificationJob = async (jobData, options = {}) => {
 // Graceful shutdown
 const gracefulShutdown = async () => {
     console.log('Shutting down notification queue...');
-    await notificationQueue.close();
+    await notificationQueueUser.close();
     console.log('Notification queue closed');
 };
 
@@ -247,7 +242,7 @@ process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
 module.exports = {
-    queue: notificationQueue,
-    addJob: addNotificationJob,
+    queue: notificationQueueUser,
+    addJobUser: addNotificationJob,
     shutdown: gracefulShutdown,
 };

@@ -5,6 +5,7 @@ const { BullAdapter } = require('@bull-board/api/bullAdapter');
 
 
 const { queue: notificationQueue } = require('./queues/sendNotificationQuee');
+const { queue: notificationQueueUser } = require('./queues/sendUserNotifications');
 
 const setupBullBoard = (app) => {
   const serverAdapter = new ExpressAdapter();
@@ -13,6 +14,7 @@ const setupBullBoard = (app) => {
   createBullBoard({
     queues: [
       new BullAdapter(notificationQueue),
+      new BullAdapter(notificationQueueUser),
     ],
     serverAdapter,
   });

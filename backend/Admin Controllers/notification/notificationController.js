@@ -1,7 +1,8 @@
 const PushToken = require("../../models/PushNotification/PushTokenForCabAndParcel");
 const Rider = require('../../models/Rider.model');
-const { addJob ,queue  } = require("../../queues/sendNotificationQuee");
-const sendNotification  = require("../../utils/sendNotification");
+const { addJob, queue } = require("../../queues/sendNotificationQuee");
+const { addJobUser, queue: userQueue } = require("../../queues/sendUserNotifications");
+const sendNotification = require("../../utils/sendNotification");
 
 
 exports.registerToken = async (req, res) => {
@@ -75,19 +76,35 @@ exports.sendNotification = async (req, res) => {
 // Send notification using queue (async processing)
 exports.DriverSendNotification = async (req, res) => {
   try {
-    const { title, body, data, targetType = 'all', targetIds = [], priority = 'normal' } = req.body;
+    const {
+      title,
+      body,
+      data = {},
+      targetType = 'all',
+      targetIds = [],
+      priority = 'normal'
+    } = req.body;
+
+    console.log('Received notification request:', {
+      title,
+      body,
+      data,
+      targetType,
+      targetIds,
+      priority,
+    });
 
     // Validate required fields
     if (!title || !body) {
       return res.status(400).json({
-        error: 'Title and body are required fields'
+        error: 'Title and body are required fields',
       });
     }
 
-    // Validate targetIds if targetType is specific
+    // Validate targetIds if targetType is 'specific'
     if (targetType === 'specific' && (!targetIds || targetIds.length === 0)) {
       return res.status(400).json({
-        error: 'targetIds are required when targetType is specific'
+        error: 'targetIds are required when targetType is specific',
       });
     }
 
@@ -95,21 +112,29 @@ exports.DriverSendNotification = async (req, res) => {
     const jobData = {
       title,
       body,
-      data: data || {},
+      data,
       targetType,
       targetIds,
-      rideId: data?.rideId || null, // For logging purposes
+      rideId: data?.rideId || null,
       timestamp: new Date().toISOString(),
     };
 
     // Set job options based on priority
     const jobOptions = {
       priority: priority === 'high' ? 1 : priority === 'low' ? 10 : 5,
-      delay: priority === 'low' ? 5000 : 0, // Delay low priority jobs by 5 seconds
+      delay: priority === 'low' ? 5000 : 0,
     };
 
-    // Add job to queue
-    const job = await addJob(jobData, jobOptions);
+    let job;
+
+    // Add job to the appropriate queue
+    if (targetType === 'user') {
+      job = await addJobUser(jobData, jobOptions);
+      console.log(`Notification job added to user queue with ID: ${job.id}`);
+    } else {
+      job = await addJob(jobData, jobOptions);
+      console.log(`Notification job added to queue with ID: ${job.id}`);
+    }
 
     // Return immediate response
     res.status(202).json({
@@ -122,20 +147,21 @@ exports.DriverSendNotification = async (req, res) => {
 
   } catch (error) {
     console.error('Error queuing notification job:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Server error while queuing notifications',
-      details: error.message 
+      details: error.message,
     });
   }
 };
+
 
 // Get notification job status
 exports.getNotificationStatus = async (req, res) => {
   try {
     const { jobId } = req.params;
-    
+
     const job = await queue.getJob(jobId);
-    
+
     if (!job) {
       return res.status(404).json({
         error: 'Job not found'
@@ -144,7 +170,7 @@ exports.getNotificationStatus = async (req, res) => {
 
     const state = await job.getState();
     const progress = job.progress();
-    
+
     let response = {
       jobId: job.id,
       status: state,
@@ -175,9 +201,9 @@ exports.getNotificationStatus = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching job status:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Server error while fetching job status',
-      details: error.message 
+      details: error.message
     });
   }
 };
@@ -200,7 +226,7 @@ exports.DriverSendNotificationSync = async (req, res) => {
 
     // Build query
     let query = { fcmToken: { $exists: true, $ne: null, $ne: '' } };
-    
+
     if (targetType === 'specific' && targetIds.length > 0) {
       query._id = { $in: targetIds };
     }
@@ -222,9 +248,9 @@ exports.DriverSendNotificationSync = async (req, res) => {
     const promises = riders.map(async (rider) => {
       try {
         const response = await sendNotification.sendNotification(
-          rider.fcmToken, 
-          title, 
-          body, 
+          rider.fcmToken,
+          title,
+          body,
           data || {}
         );
         return { token: rider.fcmToken, status: 'success', response };
@@ -235,7 +261,7 @@ exports.DriverSendNotificationSync = async (req, res) => {
     });
 
     const notificationResults = await Promise.all(promises);
-    
+
     const successes = notificationResults.filter(r => r.status === 'success').length;
     const failures = notificationResults.filter(r => r.status === 'failed').length;
 
@@ -250,9 +276,9 @@ exports.DriverSendNotificationSync = async (req, res) => {
 
   } catch (error) {
     console.error('Error sending sync notifications:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Server error while sending notifications',
-      details: error.message 
+      details: error.message
     });
   }
 };
@@ -285,9 +311,9 @@ exports.getQueueStats = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching queue stats:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Server error while fetching queue statistics',
-      details: error.message 
+      details: error.message
     });
   }
 };
@@ -296,9 +322,9 @@ exports.getQueueStats = async (req, res) => {
 exports.cancelNotificationJob = async (req, res) => {
   try {
     const { jobId } = req.params;
-    
+
     const job = await queue.getJob(jobId);
-    
+
     if (!job) {
       return res.status(404).json({
         error: 'Job not found'
@@ -306,7 +332,7 @@ exports.cancelNotificationJob = async (req, res) => {
     }
 
     const state = await job.getState();
-    
+
     if (state === 'completed') {
       return res.status(400).json({
         error: 'Cannot cancel completed job'
@@ -328,9 +354,9 @@ exports.cancelNotificationJob = async (req, res) => {
 
   } catch (error) {
     console.error('Error cancelling job:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Server error while cancelling job',
-      details: error.message 
+      details: error.message
     });
   }
 };
