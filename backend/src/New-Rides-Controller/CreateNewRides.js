@@ -2750,7 +2750,7 @@ exports.FindRiderNearByUser = async (req, res) => {
         return res.status(200).json({
             success: true,
             count: validRiders.length,
-            riders: validRiders,
+            data: validRiders,
         });
 
     } catch (error) {
