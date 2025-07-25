@@ -3,10 +3,11 @@ const User = require('../models/normal_user/User.model');
 const RiderModel = require("../models/Rider.model");
 const Parcel_Request = require("../models/Parcel_Models/Parcel_Request");
 
+
+
 exports.webhookExotelApi = async (req, res) => {
     try {
         console.log('Webhook triggered: Incoming request', req.query);
-        
         const { CallFrom } = req.query;
         if (!CallFrom) {
             console.log('Error: Missing CallFrom parameter in request');
@@ -131,4 +132,8 @@ exports.webhookExotelApi = async (req, res) => {
         console.error('Error stack:', error.stack);
         return res.status(500).type('text/plain').send('Internal Server Error');
     }
-};
+}
+
+
+
+
