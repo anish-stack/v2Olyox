@@ -2673,6 +2673,98 @@ exports.RateYourRider = async (req, res) => {
 };
 
 
+exports.FindRiderNearByUser = async (req, res) => {
+    try {
+        const { lat, lng, vehicleType } = req.body;
+
+        if (!lat || !lng || !vehicleType) {
+            return res.status(400).json({ success: false, message: 'lat, lng, and vehicleType are required.' });
+        }
+
+        const riders = await RiderModel.aggregate([
+            {
+                $geoNear: {
+                    near: {
+                        type: "Point",
+                        coordinates: [lng, lat], // ⚠️ Correct order: [longitude, latitude]
+                    },
+                    distanceField: "distance",
+                    maxDistance: 5000,
+                    spherical: true,
+                },
+            },
+            {
+                $match: {
+                    isAvailable: true,
+                    "rideVehicleInfo.vehicleType": vehicleType,
+                    $or: [
+                        { on_ride_id: null },
+                        { on_ride_id: "" }
+                    ],
+                },
+            },
+            {
+                $project: {
+                    name: 1,
+                    phoneNumber: 1,
+                    profileImage: 1,
+                    rating: 1,
+                    fcmToken: 1,
+                    location: 1,
+                    "rideVehicleInfo.vehicleName": 1,
+                    "rideVehicleInfo.vehicleImage": 1,
+                    "rideVehicleInfo.VehicleNumber": 1,
+                    "rideVehicleInfo.PricePerKm": 1,
+                    "rideVehicleInfo.vehicleType": 1,
+                    "RechargeData.expireData": 1,
+                    on_ride_id: 1,
+                    location: 1,
+                    distance: 1,
+                    isAvailable: 1,
+                    lastActiveAt: 1
+                },
+            },
+            {
+                $sort: { distance: 1 }
+            }
+        ]);
+
+        console.info(`Found ${riders.length} riders within 5km.`);
+
+        const currentDate = new Date();
+
+        const validRiders = riders.filter((rider) => {
+            const expireDate = rider?.RechargeData?.expireData;
+            const hasValidRecharge = expireDate && new Date(expireDate) >= currentDate;
+
+            if (!hasValidRecharge) {
+                console.debug(`Rider ${rider._id} skipped due to expired recharge (${expireDate})`);
+            }
+
+            return hasValidRecharge;
+        });
+
+        console.info(`Found ${validRiders.length} validRiders riders within 5km.`);
+
+
+        return res.status(200).json({
+            success: true,
+            count: validRiders.length,
+            riders: validRiders,
+        });
+
+    } catch (error) {
+        console.error("Error finding nearby riders:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error while finding nearby riders.",
+            error: error.message
+        });
+    }
+};
+
+
+
 cron.schedule('*/10 * * * * *', async () => {
     try {
         console.log('🕒 Running scheduled ride cleanup job...');

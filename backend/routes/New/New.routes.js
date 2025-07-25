@@ -1,6 +1,6 @@
 
 const express = require('express');
-const { NewcreateRequest, BookingDetailsAdmin,ride_status_after_booking, riderFetchPoolingForNewRides, riderActionAcceptOrRejectRide, ride_status_after_booking_for_drivers, changeCurrentRiderRideStatus, verifyRideOtp, collectPayment, cancelRideByPoll, RateYourRider, cancelRideRequest, FetchAllBookedRides, AdminChangeCurrentRiderRideStatus } = require('../../src/New-Rides-Controller/CreateNewRides');
+const { NewcreateRequest, BookingDetailsAdmin,ride_status_after_booking, riderFetchPoolingForNewRides, riderActionAcceptOrRejectRide, ride_status_after_booking_for_drivers, changeCurrentRiderRideStatus, verifyRideOtp, collectPayment, cancelRideByPoll, RateYourRider, cancelRideRequest, FetchAllBookedRides, AdminChangeCurrentRiderRideStatus, FindRiderNearByUser } = require('../../src/New-Rides-Controller/CreateNewRides');
 const Protect = require('../../middleware/Auth');
 const { calculateRidePriceForUser } = require('../../src/New-Rides-Controller/FindPrice');
 const NewRoutes = express.Router()
@@ -8,7 +8,7 @@ const NewRoutes = express.Router()
 NewRoutes.post('/new-ride', Protect, NewcreateRequest)
 NewRoutes.post('/new-price-calculations', calculateRidePriceForUser)
 NewRoutes.get('/status/:rideId', Protect, ride_status_after_booking)
-// NewRoutes.get('/new/status/:rideId', ride_status_after_booking)
+NewRoutes.post('/find-rider-near-user', FindRiderNearByUser)
 
 
 

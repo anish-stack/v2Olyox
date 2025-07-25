@@ -326,9 +326,9 @@ export default function BookingConfirmation() {
   const pollRideStatus = useCallback(async () => {
     if (!createdRideId || !isBookingInProgress || rideCompleted || !isActiveRef.current) return;
 
-    setTimeout(()=>{
-        console.log("I am Start at evry call time to late 5 second")
-    },5000)
+    setTimeout(() => {
+      console.log("I am Start at evry call time to late 5 second")
+    }, 5000)
     try {
       const token = await tokenCache.getToken('auth_token_db');
       if (!token) {
@@ -336,7 +336,7 @@ export default function BookingConfirmation() {
         stopBookingProcess('AUTH_ERROR_POLL');
         return;
       }
-      console.log("Pooling Start",createdRideId)
+      console.log("Pooling Start", createdRideId)
       const response = await axios.get(
         `https://www.appv2.olyox.com/api/v1/new/status/${createdRideId}`,
         {
@@ -344,7 +344,7 @@ export default function BookingConfirmation() {
           timeout: POLLING_INTERVAL - 1000
         }
       );
-            console.log("Pooling End",response.data?.status)
+      console.log("Pooling End", response.data?.status)
 
 
       const { status: newStatus, rideDetails, message } = response.data;
@@ -560,8 +560,8 @@ export default function BookingConfirmation() {
             { latitude: origin.latitude, longitude: origin.longitude },
             { latitude: destination.latitude, longitude: destination.longitude },
             ...ridersNearYou.map(rider => ({
-              latitude: rider.latitude || rider.lat,
-              longitude: rider.longitude || rider.lng,
+              latitude: rider.location?.coordinates[1] || rider.latitude || rider.lat,
+              longitude: rider.location?.coordinates[0] || rider.longitude || rider.lng,
             })),
           ],
           {
@@ -622,21 +622,21 @@ export default function BookingConfirmation() {
 
   // Status polling effect
   useEffect(() => {
-  if (!createdRideId || !isBookingInProgress || rideCompleted) return;
+    if (!createdRideId || !isBookingInProgress || rideCompleted) return;
 
-  const timeout = setTimeout(() => {
-    pollRideStatus(); // Initial call after 5 seconds
-    pollingRef.current = setInterval(pollRideStatus, POLLING_INTERVAL);
-  }, 5000); // Delay start by 5 seconds
+    const timeout = setTimeout(() => {
+      pollRideStatus(); // Initial call after 5 seconds
+      pollingRef.current = setInterval(pollRideStatus, POLLING_INTERVAL);
+    }, 5000); // Delay start by 5 seconds
 
-  return () => {
-    clearTimeout(timeout); // Clear timeout on unmount
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  };
-}, [createdRideId, isBookingInProgress, rideCompleted, pollRideStatus]);
+    return () => {
+      clearTimeout(timeout); // Clear timeout on unmount
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [createdRideId, isBookingInProgress, rideCompleted, pollRideStatus]);
 
 
   // Cleanup on unmount
