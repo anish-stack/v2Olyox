@@ -102,17 +102,7 @@ export default function OnWayRide() {
         }
     }, [])
 
-    const getDriverLocation = useCallback(async () => {
-        try {
-            const response = await axios.get(`${API_BASE_URL}/driver/${ride_id}/location`)
-            if (response.data?.data) {
-                console.log("Driver location fetched:", response.data.data)
-            }
-        } catch (error) {
-            console.error("Error fetching driver location:", error)
 
-        }
-    }, [])
 
     // Handle cancel ride
     const handleCancel = useCallback(async () => {
@@ -152,25 +142,25 @@ export default function OnWayRide() {
                 {
                     text: "Call Police",
                     onPress: () => {
-                        // Replace with actual emergency number
+
                         Alert.alert("Calling Police", "Emergency: 100")
-                        // Linking.openURL('tel:100')
+                        Linking.openURL('tel:100')
                     },
                 },
                 {
                     text: "Call Ambulance",
                     onPress: () => {
-                        // Replace with actual emergency number
-                        Alert.alert("Calling Ambulance", "Emergency: 108")
-                        // Linking.openURL('tel:108')
+
+                        Alert.alert("Calling Ambulance", "Emergency: 112 ")
+                        Linking.openURL('tel:112')
                     },
                 },
                 {
                     text: "Call Olyox Support",
                     onPress: () => {
-                        // Replace with actual support number
-                        Alert.alert("Calling Support", "Olyox Support: +91-XXXXXXXXXX")
-                        // Linking.openURL('tel:+91XXXXXXXXXX')
+
+                        Alert.alert("Calling Support", `Olyox Support: ${settings?.support_number || '01141236789'}`)
+                        Linking.openURL(`tel:01141236789`)
                     },
                 },
                 {
@@ -181,6 +171,7 @@ export default function OnWayRide() {
             { cancelable: true },
         )
     }, [])
+
 
     // Effects
     useEffect(() => {
@@ -289,10 +280,7 @@ export default function OnWayRide() {
 
             {showMenu && (
                 <View style={styles.menuDropdown}>
-                    <TouchableOpacity style={styles.menuItem}>
-                        <Ionicons name="headset-outline" size={20} color="#333" />
-                        <Text style={styles.menuText}>Contact Support</Text>
-                    </TouchableOpacity>
+
 
                     <TouchableOpacity
                         style={styles.menuItem}
@@ -437,6 +425,11 @@ export default function OnWayRide() {
                 <Text style={styles.fareTitle}>Fare: ₹{activeRideData?.pricing?.total_fare || "0"}</Text>
                 <Text style={styles.paymentMethod}>{activeRideData?.payment_method || "Cash"}</Text>
             </View>
+
+            <Text style={styles.disclaimer}>
+                ⚠️ Toll and MCD charges are not included in the fare. Please pay the
+                driver separately if applicable.
+            </Text>
         </View>
     )
 
@@ -460,7 +453,7 @@ export default function OnWayRide() {
             <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false} bounces={false}>
                 <View style={styles.mapContainer}>
                     <NewUserAndDriverMap
-                        userLocation={location}
+                        pickupLocation={activeRideData?.pickup_location?.coordinates}
                         DriverLocation={driverInfo?.location?.coordinates}
                         driver={driverInfo}
                         DropLocation={activeRideData?.drop_location?.coordinates}
@@ -883,6 +876,13 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
         elevation: 8,
+    },
+    disclaimer: {
+        fontSize: 15,
+        color: VCOLORS.text.tertiary,
+        lineHeight: 16,
+        fontWeight: "700",
+        fontStyle: "italic",
     },
     helpButtonText: {
         marginLeft: 8,

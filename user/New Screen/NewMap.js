@@ -83,6 +83,7 @@ export default function NewUserAndDriverMap({
   driver,
   routeCoordinates = [],
 }) {
+
   const mapRef = useRef(null)
   const [notified, setNotified] = useState(false)
   const [mapReady, setMapReady] = useState(false)
@@ -154,7 +155,7 @@ export default function NewUserAndDriverMap({
     try {
       const response = await fetch(`https://appv2.olyox.com/driver/${driver._id}/location`)
       const data = await response.json()
-
+      console.log("Driver location fetched:", data)
       if (data.success && data.riders && isMounted.current) {
         const newDriverCoords = getSafeCoordinates(data.riders.location, "api")
         if (newDriverCoords) {
@@ -200,12 +201,12 @@ export default function NewUserAndDriverMap({
     }
   }, [])
 
-  // Process coordinates
+
   const pickupCoords = getSafeCoordinates(pickupLocation, "array") || DEFAULT_COORDINATES
+
   const dropCoords = getSafeCoordinates(DropLocation, "array")
   const currentDriverCoords = driverLocation || getSafeCoordinates(pickupLocation, "array") || DEFAULT_COORDINATES
 
-  // Calculate distance between pickup and driver
   const getDistance = useCallback((lat1, lon1, lat2, lon2) => {
     try {
       const toRad = (value) => (value * Math.PI) / 180

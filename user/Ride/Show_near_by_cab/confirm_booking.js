@@ -54,7 +54,6 @@ import {
 const { width, height } = Dimensions.get("window");
 const isAndroid = Platform.OS === "android";
 
-// Optimized notification function
 const showNotification = (title, message, type = "info") => {
   // Skip if title is "Ride not found"
   if (title?.toLowerCase() === "ride not found") {
@@ -73,9 +72,9 @@ const showNotification = (title, message, type = "info") => {
   } else {
     Alert.alert(
       title ||
-        (type === "success"
-          ? "Success!"
-          : type === "error"
+      (type === "success"
+        ? "Success!"
+        : type === "error"
           ? "Error!"
           : "Notification"),
       message
@@ -1028,9 +1027,9 @@ export default function BookingConfirmation() {
             ₹
             {selectedRide && settings
               ? (
-                  selectedRide.totalPrice *
-                  (1 + settings.ride_percentage_off / 100)
-                ).toFixed(0)
+                selectedRide.totalPrice *
+                (1 + settings.ride_percentage_off / 100)
+              ).toFixed(0)
               : "0"}
           </Text>
         </View>
@@ -1091,7 +1090,7 @@ export default function BookingConfirmation() {
               styles.statusDot,
               (currentRideStatus === "searching" ||
                 currentRideStatus === "pending") &&
-                styles.statusDotActive,
+              styles.statusDotActive,
             ]}
           />
           <Text
@@ -1099,7 +1098,7 @@ export default function BookingConfirmation() {
               styles.statusText,
               (currentRideStatus === "searching" ||
                 currentRideStatus === "pending") &&
-                styles.statusTextActive,
+              styles.statusTextActive,
             ]}
           >
             Searching for drivers
@@ -1117,7 +1116,7 @@ export default function BookingConfirmation() {
             style={[
               styles.statusText,
               currentRideStatus === "driver_assigned" &&
-                styles.statusTextActive,
+              styles.statusTextActive,
             ]}
           >
             Driver assigned
@@ -1196,7 +1195,7 @@ export default function BookingConfirmation() {
                   !currentLocation ||
                   isCreatingRide ||
                   !isLocationValid) &&
-                  styles.bookButtonDisabled,
+                styles.bookButtonDisabled,
               ]}
               onPress={handleCreateRide}
               disabled={
@@ -1227,7 +1226,6 @@ export default function BookingConfirmation() {
   );
 }
 
-// Optimized styles with better performance
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -1574,9 +1572,10 @@ const styles = StyleSheet.create({
     color: VCOLORS.primary,
   },
   disclaimer: {
-    fontSize: 11,
+    fontSize: 15,
     color: VCOLORS.text.tertiary,
     lineHeight: 16,
+    fontWeight: "700",
     fontStyle: "italic",
   },
   progressCard: {

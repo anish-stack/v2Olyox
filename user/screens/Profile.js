@@ -146,7 +146,7 @@ const DeleteConfirmationModal = ({ visible, onClose, onConfirm, userName, Naviga
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.stayButton}
-                            onPress={Navigator.navigate('open')}
+                            onPress={onClose}
                         >
                             <LinearGradient
                                 colors={['#DC2626', '#B91C1C']}

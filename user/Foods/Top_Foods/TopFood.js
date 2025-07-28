@@ -10,10 +10,8 @@ import TopFoodCard from './TopFoodCard';
 import { styles } from './FoodStyles';
 import { useLocation } from '../../context/LocationContext';
 
-// Define storage key for cached location
-const LOCATION_CACHE_KEY = 'cached_user_location';
 
-// Restaurant categories
+
 const CATEGORIES = ['All', 'Veg', 'Non-Veg', 'Veg-Non-Veg'];
 
 export default function TopFood({ show = false, refreshing, onRefresh }) {
