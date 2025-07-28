@@ -33,7 +33,7 @@ const BottomNav = () => {
             const data = await find_me();
             setCurrentRide(data?.user?.currentRide || null);
         } catch (error) {
-            console.error('Error fetching ride data:', error);
+            // console.error('Error fetching ride data:', error);
         }
     };
 

@@ -61,11 +61,9 @@ export default function OnWayRide() {
         [activeRideData?.ride_status],
     )
 
-    const canCancel = useMemo(() => activeRideData?.ride_status === "driver_assigned", [activeRideData?.ride_status])
 
     const driverInfo = useMemo(() => activeRideData?.driver, [activeRideData?.driver])
 
-    // Fetch ride details
     const fetchRideDetails = useCallback(async () => {
         if (!ride_id) return
 
@@ -101,6 +99,18 @@ export default function OnWayRide() {
             }
         } catch (err) {
             Alert.alert("Error", "Failed to fetch cancel reasons")
+        }
+    }, [])
+
+    const getDriverLocation = useCallback(async () => {
+        try {
+            const response = await axios.get(`${API_BASE_URL}/driver/${ride_id}/location`)
+            if (response.data?.data) {
+                console.log("Driver location fetched:", response.data.data)
+            }
+        } catch (error) {
+            console.error("Error fetching driver location:", error)
+
         }
     }, [])
 
@@ -378,6 +388,9 @@ export default function OnWayRide() {
                         <Text style={styles.rating}>4.8</Text>
                         <Text style={styles.vehicleInfo}>• {driverInfo?.rideVehicleInfo?.vehicleName || "Vehicle"}</Text>
                     </View>
+                    <Text style={[styles.vehicleInfo, { fontWeight: '700' }]}>
+                        • Vehicle No: {driverInfo?.rideVehicleInfo?.VehicleNumber || "Vehicle"}
+                    </Text>
                 </View>
                 <View style={styles.actionButtons}>
                     <TouchableOpacity onPress={() => Linking.openURL(`tel:'01141236767'}`)} style={styles.actionButton}>
@@ -520,7 +533,7 @@ const styles = StyleSheet.create({
         color: "#666",
     },
     header: {
-        marginTop: Platform.OS === 'android' ? 35 : 0,
+        marginTop: Platform.OS === 'android' ? 55 : 0,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",

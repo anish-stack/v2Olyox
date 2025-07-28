@@ -303,7 +303,7 @@ export const RideSearchingProvider = ({ children }) => {
                 showNotification('Authentication Error', 'Please log in again.', 'error');
                 await clearCurrentRideSearching();
             } else if (err.response?.status === 404) {
-                showNotification('Ride Not Found', 'This ride may have been cancelled.', 'error');
+                // showNotification('Ride Not Found', 'This ride may have been cancelled.', 'error');
                 await clearCurrentRideSearching();
             } else if (err.response?.status >= 500) {
                 // Server error - retry with exponential backoff

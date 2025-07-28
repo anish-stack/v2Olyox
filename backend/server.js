@@ -505,6 +505,38 @@ app.post('/Fetch-Current-Location', async (req, res) => {
     }
 });
 
+
+
+app.get('/driver/:id/location', async (req, res) => {
+    try {
+       const {id} = req.params
+       if(!id){
+              return res.status(400).json({ success: false, message: 'Driver ID is required' });
+       }
+       const driver = await RiderModel.findById(id);
+         if (!driver) {
+            return res.status(404).json({ success: false, message: 'Driver not found' });
+        }
+        if (!driver.location || !driver.location.coordinates || driver.location.coordinates.length < 2) {
+            return res.status(404).json({ success: false, message: 'Driver location not available' });
+        }
+        const riders = {
+            id: driver._id,
+            name: driver.name,
+            phone: driver.phone,
+            location: {
+                lat: driver.location.coordinates[1],
+                lng: driver.location.coordinates[0]
+            }
+        };
+        console.log(`[${new Date().toISOString()}] Fetched driver location for ID: ${id}`);
+        res.json({ success: true, riders });
+    } catch (err) {
+        console.error(`[${new Date().toISOString()}] List riders error:`, err.message);
+        res.status(500).json({ success: false, error: 'Failed to list riders' });
+    }
+});
+
 // Geo-code Distance
 app.post('/geo-code-distance', async (req, res) => {
     try {
