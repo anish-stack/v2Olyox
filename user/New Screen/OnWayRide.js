@@ -462,6 +462,7 @@ export default function OnWayRide() {
                     <NewUserAndDriverMap
                         userLocation={location}
                         DriverLocation={driverInfo?.location?.coordinates}
+                        driver={driverInfo}
                         DropLocation={activeRideData?.drop_location?.coordinates}
                         rideStatus={activeRideData?.ride_status}
                     />

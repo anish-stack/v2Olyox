@@ -1,21 +1,19 @@
 "use client"
 
-import { useMemo } from "react"
-
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useMemo, useEffect, useState, useRef, useCallback } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Platform } from "react-native"
 import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Polyline } from "react-native-maps"
 import MapViewDirections from "react-native-maps-directions"
 import * as Notifications from "expo-notifications"
 import { Ionicons } from "@expo/vector-icons"
-import Svg, { Path, Circle } from "react-native-svg"
 
 const GOOGLE_MAPS_APIKEY = "AIzaSyBvyzqhO8Tq3SvpKLjW7I5RonYAtfOVIn8"
 const LATITUDE_DELTA = 0.015
 const LONGITUDE_DELTA = 0.015
 const REACH_THRESHOLD = 100
 const NEARBY_THRESHOLD = 200
-const LOCATION_UPDATE_INTERVAL = 20000 // 20 seconds
+const DRIVER_LOCATION_UPDATE_INTERVAL = 5000 // 5 seconds
+
 const DEFAULT_COORDINATES = {
   latitude: 40.7128,
   longitude: -74.006,
@@ -24,7 +22,6 @@ const DEFAULT_COORDINATES = {
 // Enhanced distance formatting function
 const formatDistance = (distanceInMeters) => {
   if (!distanceInMeters || distanceInMeters <= 0) return "0m"
-
   if (distanceInMeters < 1000) {
     return `${Math.round(distanceInMeters)}m`
   } else {
@@ -36,8 +33,6 @@ const formatDistance = (distanceInMeters) => {
 // Enhanced ETA calculation
 const calculateETA = (distanceInMeters) => {
   if (!distanceInMeters || distanceInMeters <= 0) return "0 min"
-
-  // Average speed assumptions: 30 km/h in city, 50 km/h on highway
   const averageSpeedKmh = distanceInMeters < 5000 ? 30 : 50
   const averageSpeedMs = (averageSpeedKmh * 1000) / 3600
   const etaSeconds = distanceInMeters / averageSpeedMs
@@ -52,14 +47,9 @@ const calculateETA = (distanceInMeters) => {
   }
 }
 
-const CarIcon = ({ color = "#000", size = 30, isNearby = false }) => (
+const CarIcon = ({ color = "#2196F3", size = 35, isNearby = false }) => (
   <View style={[styles.carIconContainer, { width: size, height: size }, isNearby && styles.nearbyCarIcon]}>
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.22.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"
-        fill={color}
-      />
-    </Svg>
+    <Ionicons name="car" size={size * 0.6} color={color} />
     {isNearby && (
       <View style={styles.pulseRing}>
         <Animated.View style={[styles.pulse, { backgroundColor: color + "20" }]} />
@@ -68,12 +58,9 @@ const CarIcon = ({ color = "#000", size = 30, isNearby = false }) => (
   </View>
 )
 
-const PersonIcon = ({ color = "#4CAF50", size = 30, isNearby = false }) => (
+const PersonIcon = ({ color = "#4CAF50", size = 35, isNearby = false }) => (
   <View style={[styles.personIconContainer, { width: size, height: size }, isNearby && styles.nearbyPersonIcon]}>
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Circle cx="12" cy="8" r="4" fill={color} />
-      <Path d="M12 14c-6.67 0-8 4-8 4v2h16v-2s-1.33-4-8-4z" fill={color} />
-    </Svg>
+    <Ionicons name="person" size={size * 0.6} color={color} />
     {isNearby && (
       <View style={styles.pulseRing}>
         <Animated.View style={[styles.pulse, { backgroundColor: color + "20" }]} />
@@ -82,27 +69,19 @@ const PersonIcon = ({ color = "#4CAF50", size = 30, isNearby = false }) => (
   </View>
 )
 
-const DropOffIcon = ({ size = 35 }) => (
+const DropOffIcon = ({ size = 40 }) => (
   <View style={[styles.dropIconContainer, { width: size, height: size }]}>
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
-        fill="#FF6B35"
-        stroke="#FFF"
-        strokeWidth="1"
-      />
-    </Svg>
+    <Ionicons name="location" size={size * 0.8} color="#FF6B35" />
     <View style={styles.dropIconShadow} />
   </View>
 )
 
 export default function NewUserAndDriverMap({
-  userLocation,
-  DriverLocation,
+  pickupLocation,
   DropLocation,
   rideStatus,
+  driver,
   routeCoordinates = [],
-  onLocationUpdate, // Callback for location updates
 }) {
   const mapRef = useRef(null)
   const [notified, setNotified] = useState(false)
@@ -110,11 +89,14 @@ export default function NewUserAndDriverMap({
   const [driverDistance, setDriverDistance] = useState(null)
   const [directionsError, setDirectionsError] = useState(false)
   const [routeCoords, setRouteCoords] = useState([])
+  const [driverLocation, setDriverLocation] = useState(null)
+  const [mapRegion, setMapRegion] = useState(null)
+  const [userScaled, setUserScaled] = useState(false)
+
   const pulseAnim = useRef(new Animated.Value(0)).current
-  const [debouncedCoords, setDebouncedCoords] = useState({})
-  const debounceTimer = useRef(null)
-  const locationUpdateTimer = useRef(null)
-  const [lastLocationUpdate, setLastLocationUpdate] = useState(Date.now())
+  const driverUpdateTimer = useRef(null)
+  const lastUpdateTime = useRef(Date.now())
+  const isMounted = useRef(true)
 
   // Platform detection
   const isAndroid = Platform.OS === "android"
@@ -129,7 +111,6 @@ export default function NewUserAndDriverMap({
         if (Array.isArray(location) && location.length >= 2) {
           const lat = Number.parseFloat(location[1])
           const lng = Number.parseFloat(location[0])
-
           if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
             return { latitude: lat, longitude: lng }
           }
@@ -138,7 +119,14 @@ export default function NewUserAndDriverMap({
         if (typeof location === "object" && location?.coords) {
           const lat = Number.parseFloat(location.coords.latitude)
           const lng = Number.parseFloat(location.coords.longitude)
-
+          if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            return { latitude: lat, longitude: lng }
+          }
+        }
+      } else if (type === "api") {
+        if (typeof location === "object" && location?.lat && location?.lng) {
+          const lat = Number.parseFloat(location.lat)
+          const lng = Number.parseFloat(location.lng)
           if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
             return { latitude: lat, longitude: lng }
           }
@@ -147,13 +135,11 @@ export default function NewUserAndDriverMap({
         if (typeof location === "object" && location?.latitude && location?.longitude) {
           const lat = Number.parseFloat(location.latitude)
           const lng = Number.parseFloat(location.longitude)
-
           if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
             return { latitude: lat, longitude: lng }
           }
         }
       }
-
       return null
     } catch (error) {
       console.error("Error processing coordinates:", error)
@@ -161,53 +147,65 @@ export default function NewUserAndDriverMap({
     }
   }, [])
 
-  // Enhanced debounced coordinate processing
-  useEffect(() => {
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current)
-    }
+  // Fetch driver location from API
+  const fetchDriverLocation = useCallback(async () => {
+    if (!driver?._id || !isMounted.current) return
 
-    debounceTimer.current = setTimeout(() => {
-      const driverCoords = getSafeCoordinates(DriverLocation, "array")
-      const userCoords = getSafeCoordinates(userLocation, "coords")
-      const dropCoords = getSafeCoordinates(DropLocation, "array")
+    try {
+      const response = await fetch(`https://appv2.olyox.com/driver/${driver._id}/location`)
+      const data = await response.json()
 
-      setDebouncedCoords({
-        driver: driverCoords,
-        user: userCoords,
-        drop: dropCoords,
-      })
-    }, 500) // Reduced debounce time for better responsiveness
-
-    return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current)
-      }
-    }
-  }, [DriverLocation, userLocation, DropLocation, getSafeCoordinates])
-
-  // Auto-update driver location every 20 seconds
-  useEffect(() => {
-    if (onLocationUpdate && rideStatus !== "completed") {
-      locationUpdateTimer.current = setInterval(() => {
-        console.log("Requesting location update...")
-        onLocationUpdate()
-        setLastLocationUpdate(Date.now())
-      }, LOCATION_UPDATE_INTERVAL)
-
-      return () => {
-        if (locationUpdateTimer.current) {
-          clearInterval(locationUpdateTimer.current)
+      if (data.success && data.riders && isMounted.current) {
+        const newDriverCoords = getSafeCoordinates(data.riders.location, "api")
+        if (newDriverCoords) {
+          setDriverLocation(newDriverCoords)
+          lastUpdateTime.current = Date.now()
         }
       }
+    } catch (error) {
+      console.error("Error fetching driver location:", error)
     }
-  }, [onLocationUpdate, rideStatus])
+  }, [driver?._id, getSafeCoordinates])
 
-  // Use debounced coordinates or fallback
-  const driverCoords = debouncedCoords.driver || getSafeCoordinates(userLocation, "coords") || DEFAULT_COORDINATES
-  const userCoords = debouncedCoords.user || getSafeCoordinates(userLocation, "coords") || DEFAULT_COORDINATES
-  const dropCoords = debouncedCoords.drop
+  // Setup driver location updates
+  useEffect(() => {
+    if (!driver?._id || rideStatus === "completed") return
 
+    // Initial fetch
+    fetchDriverLocation()
+
+    // Setup interval for updates
+    driverUpdateTimer.current = setInterval(() => {
+      if (isMounted.current) {
+        fetchDriverLocation()
+      }
+    }, DRIVER_LOCATION_UPDATE_INTERVAL)
+
+    return () => {
+      if (driverUpdateTimer.current) {
+        clearInterval(driverUpdateTimer.current)
+        driverUpdateTimer.current = null
+      }
+    }
+  }, [driver?._id, rideStatus, fetchDriverLocation])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isMounted.current = false
+      if (driverUpdateTimer.current) {
+        clearInterval(driverUpdateTimer.current)
+      }
+    }
+  }, [])
+
+  // Process coordinates
+  const pickupCoords = getSafeCoordinates(pickupLocation, "array") || DEFAULT_COORDINATES
+  const dropCoords = getSafeCoordinates(DropLocation, "array")
+  const currentDriverCoords = driverLocation || getSafeCoordinates(pickupLocation, "array") || DEFAULT_COORDINATES
+
+  // Calculate distance between pickup and driver
   const getDistance = useCallback((lat1, lon1, lat2, lon2) => {
     try {
       const toRad = (value) => (value * Math.PI) / 180
@@ -216,10 +214,8 @@ export default function NewUserAndDriverMap({
       const φ2 = toRad(lat2)
       const Δφ = toRad(lat2 - lat1)
       const Δλ = toRad(lon2 - lon1)
-
       const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
       return R * c
     } catch (error) {
       console.error("Error calculating distance:", error)
@@ -230,36 +226,33 @@ export default function NewUserAndDriverMap({
   // Calculate offset for nearby markers to prevent overlap
   const getMarkerOffset = useCallback((distance, isDriver = false) => {
     if (!distance || distance > NEARBY_THRESHOLD) return { x: 0, y: 0 }
-
     const offsetDistance = 0.0001
     return isDriver ? { x: -offsetDistance, y: offsetDistance } : { x: offsetDistance, y: -offsetDistance }
   }, [])
 
-  // Enhanced fit to markers function
+  // Fit to markers function with scale preservation
   const fitToMarkers = useCallback(() => {
     if (!mapRef.current || !mapReady) return
 
     try {
       const coordinates = []
 
-      if (userCoords && userCoords.latitude !== DEFAULT_COORDINATES.latitude) {
-        coordinates.push(userCoords)
+      if (pickupCoords && pickupCoords.latitude !== DEFAULT_COORDINATES.latitude) {
+        coordinates.push(pickupCoords)
       }
-
-      if (driverCoords && driverCoords.latitude !== DEFAULT_COORDINATES.latitude && debouncedCoords.driver) {
-        coordinates.push(driverCoords)
+      if (currentDriverCoords && currentDriverCoords.latitude !== DEFAULT_COORDINATES.latitude && driverLocation) {
+        coordinates.push(currentDriverCoords)
       }
-
       if (dropCoords && dropCoords.latitude !== DEFAULT_COORDINATES.latitude) {
         coordinates.push(dropCoords)
       }
 
-      if (coordinates.length > 1) {
+      if (coordinates.length > 1 && !userScaled) {
         mapRef.current.fitToCoordinates(coordinates, {
           edgePadding: { top: 100, right: 100, bottom: 250, left: 100 },
           animated: true,
         })
-      } else if (coordinates.length === 1) {
+      } else if (coordinates.length === 1 && !userScaled) {
         mapRef.current.animateToRegion(
           {
             ...coordinates[0],
@@ -272,16 +265,16 @@ export default function NewUserAndDriverMap({
     } catch (error) {
       console.error("Error fitting to markers:", error)
     }
-  }, [mapReady, userCoords, driverCoords, dropCoords, debouncedCoords])
+  }, [mapReady, pickupCoords, currentDriverCoords, dropCoords, driverLocation, userScaled])
 
   // Calculate distance and update state
   useEffect(() => {
-    if (debouncedCoords.driver && debouncedCoords.user) {
+    if (currentDriverCoords && pickupCoords && driverLocation) {
       const distance = getDistance(
-        debouncedCoords.user.latitude,
-        debouncedCoords.user.longitude,
-        debouncedCoords.driver.latitude,
-        debouncedCoords.driver.longitude,
+        pickupCoords.latitude,
+        pickupCoords.longitude,
+        currentDriverCoords.latitude,
+        currentDriverCoords.longitude,
       )
       setDriverDistance(distance)
 
@@ -302,22 +295,20 @@ export default function NewUserAndDriverMap({
           ]),
         )
         animation.start()
-
         return () => animation.stop()
       }
     }
-  }, [debouncedCoords, getDistance, pulseAnim])
+  }, [currentDriverCoords, pickupCoords, driverLocation, getDistance, pulseAnim])
 
-  // Auto-fit map when coordinates change
+  // Auto-fit map when driver location changes (only if user hasn't scaled)
   useEffect(() => {
-    if (mapReady && debouncedCoords.user) {
+    if (mapReady && driverLocation && !userScaled) {
       const timer = setTimeout(() => {
         fitToMarkers()
-      }, 1000)
-
+      }, 500)
       return () => clearTimeout(timer)
     }
-  }, [mapReady, debouncedCoords, fitToMarkers])
+  }, [mapReady, driverLocation, fitToMarkers, userScaled])
 
   // Enhanced notification logic
   useEffect(() => {
@@ -354,31 +345,42 @@ export default function NewUserAndDriverMap({
   // Enhanced directions ready handler
   const handleDirectionsReady = useCallback((result, routeType) => {
     console.log(`${routeType} route calculated - Distance: ${result.distance}km, Duration: ${result.duration}min`)
-
-    // Store route coordinates for iOS fallback
     if (result.coordinates && result.coordinates.length > 0) {
       setRouteCoords(result.coordinates)
     }
   }, [])
 
+  // Handle map region change to detect user scaling
+  const handleRegionChangeComplete = useCallback(
+    (region) => {
+      if (mapReady) {
+        setMapRegion(region)
+        // Detect if user manually changed the region
+        const deltaThreshold = 0.005
+        if (
+          Math.abs(region.latitudeDelta - LATITUDE_DELTA) > deltaThreshold ||
+          Math.abs(region.longitudeDelta - LONGITUDE_DELTA) > deltaThreshold
+        ) {
+          setUserScaled(true)
+        }
+      }
+    },
+    [mapReady],
+  )
+
   // Enhanced iOS route coordinates processing
   const processedRouteCoords = useMemo(() => {
     if (isAndroid) return []
-
-    // Use provided routeCoordinates or calculated route coords
     const coords = routeCoordinates.length > 0 ? routeCoordinates : routeCoords
-
-    if (coords.length === 0 && debouncedCoords.driver && debouncedCoords.user) {
-      // Fallback: create simple straight line for iOS
-      return [debouncedCoords.driver, debouncedCoords.user]
+    if (coords.length === 0 && currentDriverCoords && pickupCoords && driverLocation) {
+      return [currentDriverCoords, pickupCoords]
     }
-
     return coords
-  }, [isAndroid, routeCoordinates, routeCoords, debouncedCoords])
+  }, [isAndroid, routeCoordinates, routeCoords, currentDriverCoords, pickupCoords, driverLocation])
 
   const isDriverNearby = driverDistance && driverDistance < NEARBY_THRESHOLD
   const driverOffset = getMarkerOffset(driverDistance || 0, true)
-  const userOffset = getMarkerOffset(driverDistance || 0, false)
+  const pickupOffset = getMarkerOffset(driverDistance || 0, false)
 
   return (
     <View style={styles.container}>
@@ -387,12 +389,13 @@ export default function NewUserAndDriverMap({
         provider={mapProvider}
         style={styles.map}
         initialRegion={{
-          latitude: userCoords.latitude,
-          longitude: userCoords.longitude,
+          latitude: pickupCoords.latitude,
+          longitude: pickupCoords.longitude,
           latitudeDelta: LATITUDE_DELTA,
           longitudeDelta: LONGITUDE_DELTA,
         }}
         onMapReady={() => setMapReady(true)}
+        onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation={false}
         showsMyLocationButton={false}
         showsCompass={true}
@@ -403,15 +406,15 @@ export default function NewUserAndDriverMap({
         minZoomLevel={5}
         maxZoomLevel={18}
       >
-        {/* User Location Marker */}
-        {userCoords && (
+        {/* Pickup Location Marker */}
+        {pickupCoords && (
           <Marker
             coordinate={{
-              latitude: userCoords.latitude + (isDriverNearby ? userOffset.x : 0),
-              longitude: userCoords.longitude + (isDriverNearby ? userOffset.y : 0),
+              latitude: pickupCoords.latitude + (isDriverNearby ? pickupOffset.x : 0),
+              longitude: pickupCoords.longitude + (isDriverNearby ? pickupOffset.y : 0),
             }}
-            title="Your Location"
-            description="Pickup Point"
+            title="Pickup Location"
+            description="Your pickup point"
             anchor={{ x: 0.5, y: 0.5 }}
           >
             <PersonIcon color="#4CAF50" size={35} isNearby={isDriverNearby} />
@@ -419,11 +422,11 @@ export default function NewUserAndDriverMap({
         )}
 
         {/* Driver Location Marker */}
-        {debouncedCoords.driver && (
+        {driverLocation && (
           <Marker
             coordinate={{
-              latitude: debouncedCoords.driver.latitude + (isDriverNearby ? driverOffset.x : 0),
-              longitude: debouncedCoords.driver.longitude + (isDriverNearby ? driverOffset.y : 0),
+              latitude: currentDriverCoords.latitude + (isDriverNearby ? driverOffset.x : 0),
+              longitude: currentDriverCoords.longitude + (isDriverNearby ? driverOffset.y : 0),
             }}
             title="Driver"
             description={`${formatDistance(driverDistance || 0)} away`}
@@ -443,25 +446,24 @@ export default function NewUserAndDriverMap({
         {/* Enhanced Route Rendering */}
         {isAndroid ? (
           <>
-            {/* Route from driver to user - Android */}
-            {debouncedCoords.driver && debouncedCoords.user && rideStatus === "driver_assigned" && !directionsError && (
+            {/* Route from driver to pickup - Android */}
+            {driverLocation && pickupCoords && rideStatus === "driver_assigned" && !directionsError && (
               <MapViewDirections
-                origin={debouncedCoords.driver}
-                destination={debouncedCoords.user}
+                origin={currentDriverCoords}
+                destination={pickupCoords}
                 apikey={GOOGLE_MAPS_APIKEY}
                 strokeWidth={4}
                 strokeColor="#2196F3"
                 optimizeWaypoints={true}
                 mode="DRIVING"
                 onError={handleDirectionsError}
-                onReady={(result) => handleDirectionsReady(result, "Driver to User")}
+                onReady={(result) => handleDirectionsReady(result, "Driver to Pickup")}
               />
             )}
-
-            {/* Route from user to drop location - Android */}
-            {debouncedCoords.user && dropCoords && rideStatus === "in_progress" && !directionsError && (
+            {/* Route from pickup to drop location - Android */}
+            {pickupCoords && dropCoords && rideStatus === "in_progress" && !directionsError && (
               <MapViewDirections
-                origin={debouncedCoords.user}
+                origin={pickupCoords}
                 destination={dropCoords}
                 apikey={GOOGLE_MAPS_APIKEY}
                 strokeWidth={4}
@@ -469,7 +471,7 @@ export default function NewUserAndDriverMap({
                 optimizeWaypoints={true}
                 mode="DRIVING"
                 onError={handleDirectionsError}
-                onReady={(result) => handleDirectionsReady(result, "User to Drop")}
+                onReady={(result) => handleDirectionsReady(result, "Pickup to Drop")}
               />
             )}
           </>
@@ -486,11 +488,10 @@ export default function NewUserAndDriverMap({
                 lineCap="round"
               />
             )}
-
             {/* Additional route for drop location on iOS */}
-            {rideStatus === "in_progress" && debouncedCoords.user && dropCoords && (
+            {rideStatus === "in_progress" && pickupCoords && dropCoords && (
               <Polyline
-                coordinates={[debouncedCoords.user, dropCoords]}
+                coordinates={[pickupCoords, dropCoords]}
                 strokeWidth={4}
                 strokeColor="#FF6B35"
                 lineDashPattern={[5, 5]}
@@ -510,28 +511,32 @@ export default function NewUserAndDriverMap({
         </View>
       )}
 
-      {/* Location update indicator */}
+      {/* Driver update indicator */}
       <View style={styles.updateIndicator}>
         <Ionicons name="refresh" size={12} color="#666" />
-        <Text style={styles.updateText}>Last update: {Math.round((Date.now() - lastLocationUpdate) / 1000)}s ago</Text>
+        <Text style={styles.updateText}>
+          Driver location: {Math.round((Date.now() - lastUpdateTime.current) / 1000)}s ago
+        </Text>
       </View>
 
       {/* Enhanced Control Buttons */}
       <View style={styles.controlButtons}>
-        <TouchableOpacity style={styles.controlButton} onPress={fitToMarkers}>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => {
+            setUserScaled(false)
+            fitToMarkers()
+          }}
+        >
           <Ionicons name="locate" size={24} color="#2196F3" />
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.controlButton}
           onPress={() => {
             console.log("Manual refresh triggered")
             setDirectionsError(false)
             setNotified(false)
-            if (onLocationUpdate) {
-              onLocationUpdate()
-              setLastLocationUpdate(Date.now())
-            }
+            fetchDriverLocation()
           }}
         >
           <Ionicons name="refresh" size={24} color="#2196F3" />

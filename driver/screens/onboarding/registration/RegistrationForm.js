@@ -143,10 +143,10 @@ export default function RegistrationForm() {
     const year = d.getFullYear();
     return `${day}-${month}-${year}`;
   };
-  
+
   const handleDateChange = (event, selectedDate) => {
     if (event.type === "set") {
-      const newDate = selectedDate || date; 
+      const newDate = selectedDate || date;
       setRcExpireDate(newDate)
       hideDatePicker();
     } else {
