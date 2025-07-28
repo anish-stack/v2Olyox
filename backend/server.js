@@ -506,7 +506,6 @@ app.post('/Fetch-Current-Location', async (req, res) => {
 });
 
 
-
 app.get('/driver/:id/location', async (req, res) => {
     try {
         const { id } = req.params;
@@ -524,7 +523,7 @@ app.get('/driver/:id/location', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Driver location not available' });
         }
 
-        const lastUpdated = driver.lastUpdated;
+        const lastUpdated = driver.location?.lastUpdated;
         const timeAgo = lastUpdated ? getTimeAgo(new Date(lastUpdated)) : null;
 
         const riders = {

@@ -27,6 +27,8 @@ cloudinary.config({
 exports.registerRider = async (req, res) => {
   try {
     const { name, phone, rideVehicleInfo, BH, role, aadharNumber } = req.body;
+    console.log("Incoming Request Body:", req.body);
+
     const {
       vehicleName,
       vehicleType,
@@ -36,20 +38,25 @@ exports.registerRider = async (req, res) => {
     } = rideVehicleInfo;
 
     // Validate input
-    if (!BH)
-      return res
-        .status(400)
-        .json({ success: false, message: "Please enter your BH Number." });
-    if (!name || !phone || !vehicleName || !vehicleType || !VehicleNumber)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "All required fields must be filled.",
-        });
+    if (!BH) {
+      console.log("BH Number missing");
+      return res.status(400).json({
+        success: false,
+        message: "Please enter your BH Number.",
+      });
+    }
+
+    if (!name || !phone || !vehicleName || !vehicleType || !VehicleNumber) {
+      console.log("Missing required fields");
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled.",
+      });
+    }
 
     // Check if BH number already exists
     const bhExists = await Rider.findOne({ BH });
+    console.log("BH Exists:", bhExists);
     if (bhExists) {
       return res.status(400).json({
         success: false,
@@ -59,10 +66,15 @@ exports.registerRider = async (req, res) => {
 
     // Check if phone number is already registered
     let existingRider = await Rider.findOne({ phone });
+    console.log("Existing Rider by Phone:", existingRider);
 
     if (existingRider) {
       if (!existingRider.isOtpVerify) {
+        console.log("Rider exists but OTP not verified");
+
         if (existingRider.howManyTimesHitResend >= 5) {
+          console.log("Too many OTP resend attempts");
+
           existingRider.isOtpBlock = true;
           existingRider.isDocumentUpload = false;
           existingRider.otpUnblockAfterThisTime = new Date(
@@ -71,8 +83,7 @@ exports.registerRider = async (req, res) => {
           await existingRider.save();
 
           await SendWhatsAppMessage(
-            `Hi ${existingRider.name || "User"
-            },\n\nYou’ve attempted OTP verification too many times.\nYour account has been temporarily locked for 30 minutes. Please try again later.\n\n- Team Olyox`,
+            `Hi ${existingRider.name || "User"},\n\nYou’ve attempted OTP verification too many times.\nYour account has been temporarily locked for 30 minutes. Please try again later.\n\n- Team Olyox`,
             phone
           );
 
@@ -88,10 +99,10 @@ exports.registerRider = async (req, res) => {
         existingRider.howManyTimesHitResend += 1;
         existingRider.isDocumentUpload = false;
         await existingRider.save();
+        console.log("OTP resent:", otp);
 
         await SendWhatsAppMessage(
-          `Hi ${existingRider.name || "User"
-          },\n\nYour OTP for registering as ${role} rider is: ${otp}\n\nPlease use this to complete your registration.\n\n- Team Olyox`,
+          `Hi ${existingRider.name || "User"},\n\nYour OTP for registering as ${role} rider is: ${otp}\n\nPlease use this to complete your registration.\n\n- Team Olyox`,
           phone
         );
 
@@ -101,6 +112,7 @@ exports.registerRider = async (req, res) => {
         });
       }
 
+      console.log("Phone already registered and verified");
       return res.status(409).json({
         success: false,
         message: `Phone number already registered with a verified account.`,
@@ -109,6 +121,7 @@ exports.registerRider = async (req, res) => {
 
     // Check if Aadhar already exists
     const existingAadhar = await Rider.findOne({ aadharNumber });
+    console.log("Aadhar Exists:", existingAadhar);
     if (existingAadhar) {
       return res.status(409).json({
         success: false,
@@ -120,6 +133,7 @@ exports.registerRider = async (req, res) => {
     const existingVehicle = await Rider.findOne({
       "rideVehicleInfo.VehicleNumber": VehicleNumber,
     });
+    console.log("Vehicle Exists:", existingVehicle);
     if (existingVehicle) {
       return res.status(409).json({
         success: false,
@@ -129,6 +143,8 @@ exports.registerRider = async (req, res) => {
 
     // Create new rider with OTP
     const otp = generateOtp();
+    console.log("Generated OTP:", otp);
+
     const newRider = new Rider({
       name,
       phone,
@@ -150,10 +166,12 @@ exports.registerRider = async (req, res) => {
     });
 
     const savedRider = await newRider.save();
+    console.log("New Rider Saved:", savedRider);
 
     // Send OTP via WhatsApp
     const message = `Hi ${name},\n\nWelcome to Olyox!\nYour OTP for registering as a ${role} rider is: ${otp}.\n\nPlease verify your OTP to complete your registration.\n\nThank you for choosing us!\n- Team Olyox`;
     await SendWhatsAppMessage(message, phone);
+    console.log("OTP message sent to:", phone);
 
     return res.status(201).json({
       success: true,
