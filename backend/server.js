@@ -509,26 +509,36 @@ app.post('/Fetch-Current-Location', async (req, res) => {
 
 app.get('/driver/:id/location', async (req, res) => {
     try {
-       const {id} = req.params
-       if(!id){
-              return res.status(400).json({ success: false, message: 'Driver ID is required' });
-       }
-       const driver = await RiderModel.findById(id);
-         if (!driver) {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({ success: false, message: 'Driver ID is required' });
+        }
+
+        const driver = await RiderModel.findById(id);
+        if (!driver) {
             return res.status(404).json({ success: false, message: 'Driver not found' });
         }
+
         if (!driver.location || !driver.location.coordinates || driver.location.coordinates.length < 2) {
             return res.status(404).json({ success: false, message: 'Driver location not available' });
         }
+
+        const lastUpdated = driver.lastUpdated;
+        const timeAgo = lastUpdated ? getTimeAgo(new Date(lastUpdated)) : null;
+
         const riders = {
             id: driver._id,
             name: driver.name,
             phone: driver.phone,
             location: {
                 lat: driver.location.coordinates[1],
-                lng: driver.location.coordinates[0]
-            }
+                lng: driver.location.coordinates[0],
+            },
+            howOldUpdated: timeAgo,
+            lastUpdated,
         };
+
         console.log(`[${new Date().toISOString()}] Fetched driver location for ID: ${id}`);
         res.json({ success: true, riders });
     } catch (err) {
@@ -536,6 +546,23 @@ app.get('/driver/:id/location', async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to list riders' });
     }
 });
+
+// Helper function to get time ago string
+function getTimeAgo(date) {
+    const now = new Date();
+    const diffMs = now - date;
+
+    const seconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(diffMs / (1000 * 60));
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (seconds < 60) return `${seconds} seconds ago`;
+    if (minutes < 60) return `${minutes} minutes ago`;
+    if (hours < 24) return `${hours} hours ago`;
+    return `${days} days ago`;
+}
+
 
 // Geo-code Distance
 app.post('/geo-code-distance', async (req, res) => {

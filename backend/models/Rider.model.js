@@ -177,11 +177,12 @@ const RiderSchema = new Schema({
         coordinates: {
             type: [Number],
             // required: true
-        },
-        lastUpdated: {
-            type: Date,
-            default: Date.now
         }
+
+    },
+    lastUpdated: {
+        type: Date,
+        default: Date.now
     },
     createdAt: {
         type: Date,
