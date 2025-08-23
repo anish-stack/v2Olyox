@@ -3,16 +3,12 @@ const User = require('../models/normal_user/User.model');
 const RiderModel = require("../models/Rider.model");
 const Parcel_Request = require("../models/Parcel_Models/Parcel_Request");
 
+
+
 exports.webhookExotelApi = async (req, res) => {
     try {
-        console.log('=== WEBHOOK REQUEST START ===');
-        console.log('Request Method:', req.method);
-        console.log('Request Headers:', req.headers);
-        console.log('Request Query:', req.query);
-        console.log('Request Body:', req.body);
-        console.log('Request Params:', req.params);
-
-        // Get CallFrom from query parameters
+        console.log('Webhook triggered: Incoming request', req.query);
+        
         const { CallFrom } = req.query;
         
         if (!CallFrom) {
@@ -236,4 +232,4 @@ exports.webhookExotelApi = async (req, res) => {
         console.error('=== WEBHOOK REQUEST END WITH ERROR ===');
         return res.status(500).type('text/plain').send('Internal Server Error');
     }
-}
+};

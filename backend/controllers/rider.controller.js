@@ -27,6 +27,8 @@ cloudinary.config({
 exports.registerRider = async (req, res) => {
   try {
     const { name, phone, rideVehicleInfo, BH, role, aadharNumber } = req.body;
+    console.log("Incoming Request Body:", req.body);
+
     const {
       vehicleName,
       vehicleType,
@@ -36,20 +38,25 @@ exports.registerRider = async (req, res) => {
     } = rideVehicleInfo;
 
     // Validate input
-    if (!BH)
-      return res
-        .status(400)
-        .json({ success: false, message: "Please enter your BH Number." });
-    if (!name || !phone || !vehicleName || !vehicleType || !VehicleNumber)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "All required fields must be filled.",
-        });
+    if (!BH) {
+      console.log("BH Number missing");
+      return res.status(400).json({
+        success: false,
+        message: "Please enter your BH Number.",
+      });
+    }
+
+    if (!name || !phone || !vehicleName || !vehicleType || !VehicleNumber) {
+      console.log("Missing required fields");
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled.",
+      });
+    }
 
     // Check if BH number already exists
     const bhExists = await Rider.findOne({ BH });
+    console.log("BH Exists:", bhExists);
     if (bhExists) {
       return res.status(400).json({
         success: false,
@@ -59,10 +66,15 @@ exports.registerRider = async (req, res) => {
 
     // Check if phone number is already registered
     let existingRider = await Rider.findOne({ phone });
+    console.log("Existing Rider by Phone:", existingRider);
 
     if (existingRider) {
       if (!existingRider.isOtpVerify) {
+        console.log("Rider exists but OTP not verified");
+
         if (existingRider.howManyTimesHitResend >= 5) {
+          console.log("Too many OTP resend attempts");
+
           existingRider.isOtpBlock = true;
           existingRider.isDocumentUpload = false;
           existingRider.otpUnblockAfterThisTime = new Date(
@@ -71,8 +83,7 @@ exports.registerRider = async (req, res) => {
           await existingRider.save();
 
           await SendWhatsAppMessage(
-            `Hi ${existingRider.name || "User"
-            },\n\nYou’ve attempted OTP verification too many times.\nYour account has been temporarily locked for 30 minutes. Please try again later.\n\n- Team Olyox`,
+            `Hi ${existingRider.name || "User"},\n\nYou’ve attempted OTP verification too many times.\nYour account has been temporarily locked for 30 minutes. Please try again later.\n\n- Team Olyox`,
             phone
           );
 
@@ -88,10 +99,10 @@ exports.registerRider = async (req, res) => {
         existingRider.howManyTimesHitResend += 1;
         existingRider.isDocumentUpload = false;
         await existingRider.save();
+        console.log("OTP resent:", otp);
 
         await SendWhatsAppMessage(
-          `Hi ${existingRider.name || "User"
-          },\n\nYour OTP for registering as ${role} rider is: ${otp}\n\nPlease use this to complete your registration.\n\n- Team Olyox`,
+          `Hi ${existingRider.name || "User"},\n\nYour OTP for registering as ${role} rider is: ${otp}\n\nPlease use this to complete your registration.\n\n- Team Olyox`,
           phone
         );
 
@@ -101,6 +112,7 @@ exports.registerRider = async (req, res) => {
         });
       }
 
+      console.log("Phone already registered and verified");
       return res.status(409).json({
         success: false,
         message: `Phone number already registered with a verified account.`,
@@ -109,6 +121,7 @@ exports.registerRider = async (req, res) => {
 
     // Check if Aadhar already exists
     const existingAadhar = await Rider.findOne({ aadharNumber });
+    console.log("Aadhar Exists:", existingAadhar);
     if (existingAadhar) {
       return res.status(409).json({
         success: false,
@@ -120,6 +133,7 @@ exports.registerRider = async (req, res) => {
     const existingVehicle = await Rider.findOne({
       "rideVehicleInfo.VehicleNumber": VehicleNumber,
     });
+    console.log("Vehicle Exists:", existingVehicle);
     if (existingVehicle) {
       return res.status(409).json({
         success: false,
@@ -129,6 +143,8 @@ exports.registerRider = async (req, res) => {
 
     // Create new rider with OTP
     const otp = generateOtp();
+    console.log("Generated OTP:", otp);
+
     const newRider = new Rider({
       name,
       phone,
@@ -150,10 +166,12 @@ exports.registerRider = async (req, res) => {
     });
 
     const savedRider = await newRider.save();
+    console.log("New Rider Saved:", savedRider);
 
     // Send OTP via WhatsApp
     const message = `Hi ${name},\n\nWelcome to Olyox!\nYour OTP for registering as a ${role} rider is: ${otp}.\n\nPlease verify your OTP to complete your registration.\n\nThank you for choosing us!\n- Team Olyox`;
     await SendWhatsAppMessage(message, phone);
+    console.log("OTP message sent to:", phone);
 
     return res.status(201).json({
       success: true,
@@ -860,7 +878,6 @@ exports.details = async (req, res) => {
   }
 };
 
-
 exports.getMyAllDetails = async (req, res) => {
   try {
     const user_id = req.user?.userId;
@@ -868,43 +885,37 @@ exports.getMyAllDetails = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // 1. Fetch driver
     const driver = await Rider.findById(user_id);
     if (!driver) {
       return res.status(404).json({ message: "Driver not found" });
     }
 
-    // 2. Fetch completed rides
     const completedRides = await NewRideModelModel.find({
       driver: user_id,
       ride_status: "completed",
     });
 
-    // 3. Fetch current ride
     const currentRide = driver?.on_ride_id
       ? await NewRideModelModel.findById(driver.on_ride_id)
       : null;
 
-    // 4. Get today's date in IST
     const todayIST = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
-    // 5. Fetch today's session data from CabRider
     const todaySessionDoc = await CabRiderTimes.findOne({
       riderId: user_id,
       date: todayIST,
     });
 
     let totalSeconds = 0;
-
     if (todaySessionDoc?.sessions?.length > 0) {
       totalSeconds = todaySessionDoc.sessions.reduce((acc, session) => {
         return acc + (session.duration || 0);
       }, 0);
     }
 
-    const totalHours = parseFloat((totalSeconds / 3600).toFixed(2)); // convert seconds to hours
+    const totalHours = parseFloat((totalSeconds / 3600).toFixed(2));
+    const formattedHours = `${Math.floor(totalSeconds / 3600)}h ${Math.floor((totalSeconds % 3600) / 60)}m`;
 
-    // 6. Calculate earnings and ratings
     const totalRides = completedRides.length;
     const totalEarnings = completedRides.reduce((sum, ride) => {
       return sum + Number(ride?.pricing?.total_fare || 0);
@@ -917,6 +928,46 @@ exports.getMyAllDetails = async (req, res) => {
     const averageRating =
       totalRides > 0 ? parseFloat((totalRatings / totalRides).toFixed(2)) : 0;
 
+    // === Extracting Today's Specific Data ===
+    const startOfToday = moment().tz("Asia/Kolkata").startOf('day').toDate();
+    const endOfToday = moment().tz("Asia/Kolkata").endOf('day').toDate();
+
+    const todayCompletedRides = await NewRideModelModel.find({
+      driver: user_id,
+      ride_status: "completed",
+      created_at: {
+        $gte: startOfToday,
+        $lte: endOfToday,
+      },
+    });
+
+    console.log("📊 Today's Completed Rides:", todayCompletedRides.length);
+
+    const todayEarnings = todayCompletedRides.reduce((sum, ride) => {
+      return sum + Number(ride?.pricing?.total_fare || 0);
+    }, 0);
+
+    console.log("📊 Today's Earnings:", todayEarnings);
+
+    const todayTrips = todayCompletedRides.length;
+    const timestamp = new Date().toISOString();
+
+    console.log("📊 Driver Ride Details:", {
+      isOnRide: !!driver.on_ride_id,
+      isAvailable: driver.isAvailable,
+      currentRide: currentRide || null,
+      totalRides,
+      totalEarnings,
+      averageRating,
+      loggedInHours: totalHours,
+      currentDate: todayIST,
+      location: driver.location?.coordinates,
+
+      earnings: todayEarnings || 0,
+      trips: todayTrips || 0,
+      hours: formattedHours,
+      lastUpdated: timestamp,
+    })
     return res.status(200).json({
       isOnRide: !!driver.on_ride_id,
       isAvailable: driver.isAvailable,
@@ -926,13 +977,19 @@ exports.getMyAllDetails = async (req, res) => {
       averageRating,
       loggedInHours: totalHours,
       currentDate: todayIST,
+      location: driver.location?.coordinates,
+
+      // ✅ New Fields
+      earnings: todayEarnings || 0,
+      trips: todayTrips || 0,
+      hours: formattedHours,
+      lastUpdated: timestamp,
     });
   } catch (error) {
     console.error("Error fetching driver ride details:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 exports.getMyAllRides = async (req, res) => {
   try {
