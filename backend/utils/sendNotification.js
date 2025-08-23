@@ -68,7 +68,7 @@ const initializeFirebase = () => {
 
 
 // Rest of the code remains the same...
-const sendNotification = async (token, title, body, eventData = {}) => {
+const sendNotification = async (token, title, body, eventData = {},isAndroid=true) => {
   try {
     // Validate input
     if (!token) {
@@ -99,7 +99,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
         body: body || "₹119.18 - Sector 99A to Sector 29",
       },
       
-      android: {
+      android: isAndroid && {
         priority: "high", // ✅ Important for heads-up
         notification: {
           channelId: "default", // Should match the one created in the app
@@ -121,7 +121,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
     // Send notification
     const response = await admin.messaging().send(message);
 
-    logger.info(`Notification sent successfully: ${response}`);
+    // logger.info(`Notification sent successfully: ${response}`);
     return response;
 
   } catch (error) {
@@ -143,7 +143,7 @@ const sendNotification = async (token, title, body, eventData = {}) => {
         logger.warn('No FCM token provided');
         break;
       default:
-        logger.error(`Notification send failed: ${error.message}`);
+        // logger.error(`Notification send failed: ${error.message}`);
     }
 
     // Rethrow or return null based on error type

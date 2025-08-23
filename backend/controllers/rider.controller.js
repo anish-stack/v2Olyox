@@ -17,6 +17,7 @@ const Parcel_Request = require("../models/Parcel_Models/Parcel_Request");
 const { sendDltMessage } = require("../utils/DltMessageSend");
 const { checkBhAndDoRechargeOnApp } = require("../PaymentWithWebDb/razarpay");
 const NewRideModelModel = require("../src/New-Rides-Controller/NewRideModel.model");
+const sendNotification = require("../utils/sendNotification");
 cloudinary.config({
   cloud_name: "daxbcusb5",
   api_key: "984861767987573",
@@ -328,7 +329,7 @@ exports.login = async (req, res) => {
 
 exports.saveFcmTokenToken = async (req, res) => {
   try {
-    const riderId =req.user?.userId;
+    const riderId = req.user?.userId;
     const { fcmToken } = req.body;
     console.log(req.user)
     console.log(fcmToken)
@@ -1784,6 +1785,86 @@ exports.parcelDashboardData = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Something went wrong while fetching dashboard data.",
+      error: error.message,
+    });
+  }
+};
+
+
+exports.assignFreeRechargeToRider = async (req, res) => {
+  try {
+    console.log("📩 Incoming request for free recharge:", req.body);
+
+    const { number, rechargeData } = req.body;
+
+    if (!number || !rechargeData) {
+      console.error("❌ Missing required fields in request body");
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and recharge data are required",
+      });
+    }
+
+    // Find rider
+    const rider = await Rider.findOne({ phone: number });
+    if (!rider) {
+      console.warn(`⚠️ Rider not found with number: ${number}`);
+      return res.status(404).json({
+        success: false,
+        message: "Rider not found",
+      });
+    }
+
+    console.log("✅ Rider found:", rider._id);
+
+    // Expiry handling
+    const currentExpire = rider.RechargeData?.expireData
+      ? new Date(rider.RechargeData.expireData)
+      : new Date();
+    const newExpireDate =
+      rechargeData?.end_date || new Date(new Date().setFullYear(new Date().getFullYear() + 1));
+
+    rider.RechargeData = {
+      onHowManyEarning: rechargeData?.plan?.HowManyMoneyEarnThisPlan || 0,
+      whichDateRecharge: new Date(),
+      rechargePlan: rechargeData?.plan?.title || "Free Tier",
+      expireData: new Date(currentExpire.getTime() + newExpireDate), // extend expiry
+      approveRecharge: true,
+    };
+
+    rider.isPaid = true;
+    rider.isFreeMember = true;
+    rider.freeTierEndData = new Date(currentExpire.getTime() + newExpireDate)
+
+    // Save rider
+    const result = await rider.save();
+    console.log("💾 Rider updated successfully:", result);
+
+    // Notification (only if FCM token exists)
+    if (rider.fcmToken) {
+      const title = "🎉 Congratulations! Free Recharge Activated 🚀";
+      const body = `Your plan "${rider.RechargeData.rechargePlan}" is now active. Enjoy your benefits until ${rider.RechargeData.expireData.toDateString()}!`;
+
+      try {
+        await sendNotification.sendNotification(rider.fcmToken, title, body, {}, true);
+        console.log("📲 Notification sent to rider:", rider._id);
+      } catch (notifError) {
+        console.error("❌ Failed to send notification:", notifError.message);
+      }
+    } else {
+      console.warn("⚠️ Rider has no FCM token, skipping notification");
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Rider marked as paid with free recharge",
+      data: result,
+    });
+  } catch (error) {
+    console.error("🔥 Error in assignFreeRechargeToRider:", error.message, error.stack);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while assigning free recharge",
       error: error.message,
     });
   }
