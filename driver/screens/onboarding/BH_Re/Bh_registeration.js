@@ -44,7 +44,7 @@ export default function RegisterWithBh() {
     reEmail: "",
     number: "",
     password: "",
-    category: "676ef9685c75082fcbc59c4f",
+    category: "685a5f65249c78f608eb8dd8",
     address: {
       street_address: "",
       location: {

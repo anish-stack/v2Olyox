@@ -1821,20 +1821,29 @@ exports.assignFreeRechargeToRider = async (req, res) => {
     const currentExpire = rider.RechargeData?.expireData
       ? new Date(rider.RechargeData.expireData)
       : new Date();
-    const newExpireDate =
-      rechargeData?.end_date || new Date(new Date().setFullYear(new Date().getFullYear() + 1));
+
+    // If API sends end_date as Date string, ensure it's a Date
+    const newExpireDate = rechargeData?.end_date
+      ? new Date(rechargeData.end_date)
+      : new Date(new Date().setFullYear(new Date().getFullYear() + 1));
+
+    console.log("📆 Current Expiry:", currentExpire);
+    console.log("📆 New Expiry from API:", newExpireDate);
+
+    // Final expiry = max of current expiry and new expiry
+    const finalExpire = currentExpire > newExpireDate ? currentExpire : newExpireDate;
 
     rider.RechargeData = {
       onHowManyEarning: rechargeData?.plan?.HowManyMoneyEarnThisPlan || 0,
       whichDateRecharge: new Date(),
       rechargePlan: rechargeData?.plan?.title || "Free Tier",
-      expireData: new Date(currentExpire.getTime() + newExpireDate), // extend expiry
+      expireData: finalExpire,
       approveRecharge: true,
     };
 
     rider.isPaid = true;
     rider.isFreeMember = true;
-    rider.freeTierEndData = new Date(currentExpire.getTime() + newExpireDate)
+    rider.freeTierEndData = finalExpire;
 
     // Save rider
     const result = await rider.save();
