@@ -647,7 +647,7 @@ const App = () => {
                       <Stack.Screen 
                         name="register" 
                         component={RegistrationForm}
-                        options={{ headerShown: true, title: 'Complete Profile' }}
+                        options={{ headerShown: false, title: 'Complete Profile' }}
                       />
                       <Stack.Screen name="UploadDocuments" component={Document} />
                       <Stack.Screen name="Wait_Screen" component={Wait_Screen} />
