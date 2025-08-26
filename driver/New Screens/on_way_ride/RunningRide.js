@@ -2,7 +2,6 @@ import {
     View,
     Text,
     ScrollView,
-    StyleSheet,
     ActivityIndicator,
     TouchableOpacity,
     RefreshControl,
@@ -15,53 +14,37 @@ import {
     FlatList,
     StatusBar,
     Animated,
+    Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { CommonActions, useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
-import { Audio } from "expo-av"
+import { Audio } from "expo-av";
+import MapView, { Polyline, Marker } from 'react-native-maps';
 
 import { useFetchUserDetails } from "../../hooks/New Hookes/RiderDetailsHooks";
-import NewMap from "../components/running-ride/NewMap";
 import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL } from "../NewConstant";
 import * as Updates from 'expo-updates';
 import HeaderNew from "../components/Header/HeaderNew";
 import useSettings from "../../hooks/settings.hook";
+import { styles } from './RunningRideStyles';
 
 const { width, height } = Dimensions.get('window');
-
-// Enhanced color scheme
-const COLORS = {
-    primary: '#1a73e8',
-    secondary: '#34a853',
-    danger: '#ea4335',
-    warning: '#fbbc04',
-    success: '#34a853',
-    background: '#f8f9fa',
-    surface: '#ffffff',
-    text: {
-        primary: '#202124',
-        secondary: '#5f6368',
-        light: '#9aa0a6',
-    },
-    border: '#e8eaed',
-    shadow: 'rgba(0, 0, 0, 0.1)',
-};
-
-
 
 export default function RunningRide() {
     const route = useRoute();
     const { rideData } = route.params || {};
     const navigation = useNavigation();
     const { fetchUserDetails, userData } = useFetchUserDetails();
+    const { settings } = useSettings();
 
     // Animation refs
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
-    const { settings } = useSettings()
+    const mapRef = useRef(null);
+
     // Core state
     const [activeRideData, setActiveRideData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -87,10 +70,73 @@ export default function RunningRide() {
     const [activeTab, setActiveTab] = useState('user');
     const [rideStep, setRideStep] = useState('pickup');
 
+    // Map state
+    const [routeCoordinates, setRouteCoordinates] = useState([]);
+    const [mapRegion, setMapRegion] = useState(null);
+
     // Memoized values
     const rideStatus = useMemo(() => activeRideData?.ride_status, [activeRideData?.ride_status]);
     const paymentStatus = useMemo(() => activeRideData?.payment_status, [activeRideData?.payment_status]);
     const totalFare = useMemo(() => activeRideData?.pricing?.total_fare?.toFixed(2), [activeRideData?.pricing?.total_fare]);
+
+    // <CHANGE> Driver-friendly alert helper
+    const showDriverAlert = useCallback((title, message, type = 'info') => {
+        const alertConfig = {
+            success: { icon: '✅', color: '#4CAF50' },
+            error: { icon: '❌', color: '#F44336' },
+            warning: { icon: '⚠️', color: '#FF9800' },
+            info: { icon: 'ℹ️', color: '#2196F3' }
+        };
+        
+        const config = alertConfig[type] || alertConfig.info;
+        
+        Alert.alert(
+            `${config.icon} ${title}`,
+            message,
+            [{ text: 'Got it!', style: 'default' }],
+            { 
+                cancelable: true,
+                userInterfaceStyle: 'light' // iOS specific
+            }
+        );
+    }, []);
+
+    // <CHANGE> Enhanced map region calculation for iOS
+    const calculateMapRegion = useCallback((pickup, drop) => {
+        if (!pickup || !drop) return null;
+
+        const pickupCoords = pickup.coordinates || pickup;
+        const dropCoords = drop.coordinates || drop;
+
+        const minLat = Math.min(pickupCoords[1], dropCoords[1]);
+        const maxLat = Math.max(pickupCoords[1], dropCoords[1]);
+        const minLng = Math.min(pickupCoords[0], dropCoords[0]);
+        const maxLng = Math.max(pickupCoords[0], dropCoords[0]);
+
+        const latDelta = (maxLat - minLat) * 1.5; // Add padding
+        const lngDelta = (maxLng - minLng) * 1.5;
+
+        return {
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLng + maxLng) / 2,
+            latitudeDelta: Math.max(latDelta, 0.01),
+            longitudeDelta: Math.max(lngDelta, 0.01),
+        };
+    }, []);
+
+    // <CHANGE> Generate route coordinates for Polyline
+    const generateRouteCoordinates = useCallback((pickup, drop) => {
+        if (!pickup || !drop) return [];
+
+        const pickupCoords = pickup.coordinates || pickup;
+        const dropCoords = drop.coordinates || drop;
+
+        // Simple straight line for now - in production, use Google Directions API
+        return [
+            { latitude: pickupCoords[1], longitude: pickupCoords[0] },
+            { latitude: dropCoords[1], longitude: dropCoords[0] }
+        ];
+    }, []);
 
     // Animation effects
     useEffect(() => {
@@ -108,20 +154,24 @@ export default function RunningRide() {
         ]).start();
     }, []);
 
-    // Optimized user details fetch
+    // <CHANGE> Optimized user details fetch with better error handling
     const handleFetchUserDetails = useCallback(async () => {
         try {
             setUserLoading(true);
             await fetchUserDetails();
         } catch (error) {
             console.error("❌ Error fetching user details:", error);
-            setError("Unable to load user information. Please try again.");
+            showDriverAlert(
+                'Connection Issue',
+                'Unable to load your profile. Please check your internet connection.',
+                'error'
+            );
         } finally {
             setUserLoading(false);
         }
-    }, [fetchUserDetails]);
+    }, [fetchUserDetails, showDriverAlert]);
 
-    // Enhanced ride details fetch with better error handling
+    // <CHANGE> Enhanced ride details fetch with iOS optimizations
     const fetchActiveRideDetails = useCallback(async (isRetry = false) => {
         if (!isRetry) setLoading(true);
         setError(null);
@@ -130,15 +180,27 @@ export default function RunningRide() {
             if (userData?.on_ride_id) {
                 const response = await axios.get(
                     `https://www.appv2.olyox.com/rider/${userData.on_ride_id}`,
-                    { timeout: 15000 }
+                    { 
+                        timeout: Platform.OS === 'ios' ? 20000 : 15000 // iOS gets more time
+                    }
                 );
 
                 if (response.data?.data) {
-                    setActiveRideData(response.data.data);
+                    const rideData = response.data.data;
+                    setActiveRideData(rideData);
                     setRetryCount(0);
 
+                    // <CHANGE> Update map data for iOS Polyline
+                    if (rideData.pickup_location && rideData.drop_location) {
+                        const region = calculateMapRegion(rideData.pickup_location, rideData.drop_location);
+                        const coordinates = generateRouteCoordinates(rideData.pickup_location, rideData.drop_location);
+                        
+                        setMapRegion(region);
+                        setRouteCoordinates(coordinates);
+                    }
+
                     // Update ride step based on status
-                    const status = response.data.data.ride_status;
+                    const status = rideData.ride_status;
                     switch (status) {
                         case 'driver_assigned':
                             setRideStep('pickup');
@@ -165,20 +227,29 @@ export default function RunningRide() {
             console.error("❌ Error fetching ride details:", error);
 
             let errorMessage = "Something went wrong. Please try again.";
+            let alertType = 'error';
+
             if (error?.code === 'ECONNABORTED') {
-                errorMessage = "Connection timeout. Please check your internet.";
+                errorMessage = "Connection timeout. Please check your internet connection.";
+                alertType = 'warning';
             } else if (error?.response?.status === 404) {
                 errorMessage = "Ride not found. It may have been completed or cancelled.";
+                alertType = 'info';
             } else if (error?.response?.status >= 500) {
-                errorMessage = "Server is temporarily unavailable. Please try again.";
+                errorMessage = "Server is temporarily unavailable. Please try again in a moment.";
+                alertType = 'warning';
             }
 
             setError(errorMessage);
             setActiveRideData(null);
 
+            if (!isRetry) {
+                showDriverAlert('Ride Update Failed', errorMessage, alertType);
+            }
+
             // Auto retry with exponential backoff
             if (retryCount < 3 && userData?.on_ride_id) {
-                const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+                const delay = Math.pow(2, retryCount) * 1000;
                 setTimeout(() => {
                     setRetryCount(prev => prev + 1);
                     fetchActiveRideDetails(true);
@@ -187,9 +258,9 @@ export default function RunningRide() {
         } finally {
             if (!isRetry) setLoading(false);
         }
-    }, [userData?.on_ride_id, retryCount]);
+    }, [userData?.on_ride_id, retryCount, calculateMapRegion, generateRouteCoordinates, showDriverAlert]);
 
-    // Optimized polling with proper cleanup
+    // <CHANGE> Optimized polling with iOS background handling
     useFocusEffect(
         useCallback(() => {
             if (!activeRideData) return;
@@ -197,7 +268,10 @@ export default function RunningRide() {
             const currentRoute = navigation.getState()?.routes?.[navigation.getState().index]?.name;
             if (currentRoute !== 'start') return;
 
-            const pollingInterval = rideStatus === 'in_progress' ? 5000 : 10000;
+            // iOS-optimized polling intervals
+            const pollingInterval = Platform.OS === 'ios' 
+                ? (rideStatus === 'in_progress' ? 3000 : 8000)
+                : (rideStatus === 'in_progress' ? 5000 : 10000);
 
             const interval = setInterval(async () => {
                 try {
@@ -209,23 +283,21 @@ export default function RunningRide() {
                     if (isCancelled || isCompleted) {
                         clearInterval(interval);
 
-                        Alert.alert(
+                        showDriverAlert(
                             "Ride Update",
-                            isCancelled ? "Your ride has been cancelled." : "Ride completed successfully!",
-                            [{
-                                text: "OK",
-                                onPress: async () => {
-                                    await Updates.reloadAsync();
-                                    navigation.dispatch(
-                                        CommonActions.reset({
-                                            index: 0,
-                                            routes: [{ name: 'Home' }],
-                                        })
-                                    );
-                                },
-                            }],
-                            { cancelable: false }
+                            isCancelled ? "Your ride has been cancelled." : "Ride completed successfully! 🎉",
+                            isCancelled ? 'warning' : 'success'
                         );
+
+                        setTimeout(async () => {
+                            await Updates.reloadAsync();
+                            navigation.dispatch(
+                                CommonActions.reset({
+                                    index: 0,
+                                    routes: [{ name: 'Home' }],
+                                })
+                            );
+                        }, 2000);
                     }
                 } catch (err) {
                     console.error("Polling error:", err);
@@ -233,10 +305,10 @@ export default function RunningRide() {
             }, pollingInterval);
 
             return () => clearInterval(interval);
-        }, [rideStatus, paymentStatus, navigation, fetchActiveRideDetails])
+        }, [rideStatus, paymentStatus, navigation, fetchActiveRideDetails, showDriverAlert])
     );
 
-    // Enhanced API calls with better UX
+    // <CHANGE> Enhanced API calls with driver-friendly feedback
     const markReached = useCallback(async () => {
         try {
             const response = await axios.post(`${API_BASE_URL}/new/change-ride-status`, {
@@ -250,24 +322,24 @@ export default function RunningRide() {
                 setShowOtpModal(true);
                 await fetchActiveRideDetails();
 
-                Alert.alert(
+                showDriverAlert(
                     'Location Reached! 🎯',
-                    'You have successfully reached the pickup location.',
-                    [{ text: 'OK' }]
+                    'Great! You have successfully reached the pickup location. Please collect the OTP from the rider.',
+                    'success'
                 );
             }
         } catch (error) {
-            Alert.alert(
-                'Unable to Update Status',
-                'Please check your connection and try again.',
-                [{ text: 'OK' }]
+            showDriverAlert(
+                'Update Failed',
+                'Unable to update your location status. Please check your connection and try again.',
+                'error'
             );
         }
-    }, [userData?._id, activeRideData?._id, fetchActiveRideDetails]);
+    }, [userData?._id, activeRideData?._id, fetchActiveRideDetails, showDriverAlert]);
 
     const verifyOtp = useCallback(async () => {
         if (!otp || otp.length !== 4) {
-            Alert.alert('Invalid OTP', 'Please enter a valid 4-digit OTP');
+            showDriverAlert('Invalid OTP', 'Please enter the complete 4-digit OTP from the rider.', 'warning');
             return;
         }
 
@@ -284,23 +356,24 @@ export default function RunningRide() {
                 setShowOtpModal(false);
                 setRideStep('drop');
 
-                Alert.alert(
+                showDriverAlert(
                     'Ride Started! 🚗',
-                    'OTP verified successfully. Have a safe journey!',
-                    [{ text: 'OK' }]
+                    'OTP verified successfully! The ride has begun. Drive safely to the destination.',
+                    'success'
                 );
 
                 await fetchActiveRideDetails();
             }
         } catch (error) {
-            Alert.alert(
+            showDriverAlert(
                 'OTP Verification Failed',
-                error.response?.data?.message || 'Please check the OTP and try again.'
+                error.response?.data?.message || 'The OTP seems incorrect. Please ask the rider to provide the correct OTP.',
+                'error'
             );
         } finally {
             setOtpLoading(false);
         }
-    }, [otp, userData?._id, activeRideData?._id, fetchActiveRideDetails]);
+    }, [otp, userData?._id, activeRideData?._id, fetchActiveRideDetails, showDriverAlert]);
 
     const markDrop = useCallback(async () => {
         try {
@@ -315,30 +388,33 @@ export default function RunningRide() {
                 setShowPaymentModal(true);
                 await fetchActiveRideDetails();
 
-                Alert.alert(
+                showDriverAlert(
                     'Ride Completed! 🎉',
-                    'You have successfully completed the ride.',
-                    [{ text: 'OK' }]
+                    'Excellent! You have successfully completed the ride. Now collect the payment from the rider.',
+                    'success'
                 );
             }
         } catch (error) {
-            Alert.alert(
-                'Unable to Complete Ride',
-                'Please try again or contact support.',
-                [{ text: 'OK' }]
+            showDriverAlert(
+                'Completion Failed',
+                'Unable to mark the ride as completed. Please try again or contact support if the issue persists.',
+                'error'
             );
         }
-    }, [userData?._id, activeRideData?._id, fetchActiveRideDetails]);
+    }, [userData?._id, activeRideData?._id, fetchActiveRideDetails, showDriverAlert]);
 
     const collectPayment = useCallback(async () => {
         try {
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-                staysActiveInBackground: false,
-                playsInSilentModeIOS: true,
-                shouldDuckAndroid: true,
-                playThroughEarpieceAndroid: false,
-            });
+            // <CHANGE> iOS-optimized audio setup
+            if (Platform.OS === 'ios') {
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    staysActiveInBackground: false,
+                    playsInSilentModeIOS: true,
+                    shouldDuckAndroid: false,
+                    playThroughEarpieceAndroid: false,
+                });
+            }
 
             const { sound } = await Audio.Sound.createAsync(
                 require("./coin-sound.mp3"),
@@ -357,33 +433,31 @@ export default function RunningRide() {
             });
 
             if (response.data.success) {
-                // ✅ Play the sound
                 await sound.playAsync();
-
                 setShowPaymentModal(false);
 
-                Alert.alert(
+                showDriverAlert(
                     'Payment Collected! 💰',
-                    `₹${totalFare} has been collected successfully.`,
-                    [{
-                        text: 'OK',
-                        onPress: () => {
-                            navigation.reset({
-                                index: 0,
-                                routes: [{ name: "Home" }],
-                            });
-                        },
-                    },
-                    ]);
+                    `₹${totalFare} has been collected successfully. Great job completing this ride!`,
+                    'success'
+                );
+
+                setTimeout(() => {
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: "Home" }],
+                    });
+                }, 2000);
             }
         } catch (error) {
-            Alert.alert(
+            showDriverAlert(
                 "Payment Collection Failed",
-                error.response?.data?.message || "Please try again.",
-                [{ text: "OK" }]
+                error.response?.data?.message || "Unable to process payment collection. Please try again.",
+                'error'
             );
         }
-    }, [userData?._id, activeRideData?._id, paymentMethod, totalFare, navigation]);
+    }, [userData?._id, activeRideData?._id, paymentMethod, totalFare, navigation, showDriverAlert]);
+
     // Enhanced cancel functionality
     const fetchCancelReasons = useCallback(async () => {
         try {
@@ -392,9 +466,9 @@ export default function RunningRide() {
                 setCancelReasons(response.data.data);
             }
         } catch (err) {
-            Alert.alert("Error", "Unable to load cancellation reasons");
+            showDriverAlert("Error", "Unable to load cancellation reasons. Please try again.", 'error');
         }
-    }, []);
+    }, [showDriverAlert]);
 
     const handleCancel = useCallback(async () => {
         if (!selectedReason || !activeRideData?._id) return;
@@ -408,33 +482,33 @@ export default function RunningRide() {
                 reason: selectedReason.name,
             });
 
-            Alert.alert(
+            showDriverAlert(
                 "Ride Cancelled",
-                "The ride has been cancelled successfully.",
-                [{
-                    text: "OK",
-                    onPress: async () => {
-                        setCancelModal(false);
-                        setSelectedReason(null);
-                        await Updates.reloadAsync();
-                        navigation.dispatch(
-                            CommonActions.reset({
-                                index: 0,
-                                routes: [{ name: 'Home' }],
-                            })
-                        );
-                    },
-                }]
+                "The ride has been cancelled successfully. You will be redirected to the home screen.",
+                'info'
             );
+
+            setTimeout(async () => {
+                setCancelModal(false);
+                setSelectedReason(null);
+                await Updates.reloadAsync();
+                navigation.dispatch(
+                    CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'Home' }],
+                    })
+                );
+            }, 2000);
         } catch (err) {
-            Alert.alert(
+            showDriverAlert(
                 "Cancellation Failed",
-                "Unable to cancel the ride. Please try again."
+                "Unable to cancel the ride. Please try again or contact support.",
+                'error'
             );
         } finally {
             setCancelling(false);
         }
-    }, [selectedReason, activeRideData?._id, navigation]);
+    }, [selectedReason, activeRideData?._id, navigation, showDriverAlert]);
 
     // Utility functions
     const makePhoneCall = useCallback(() => {
@@ -477,15 +551,71 @@ export default function RunningRide() {
         }
     };
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'driver_assigned': return COLORS.warning;
-            case 'driver_arrived': return COLORS.primary;
-            case 'in_progress': return COLORS.success;
-            case 'completed': return COLORS.success;
-            case 'cancelled': return COLORS.danger;
-            default: return COLORS.text.secondary;
-        }
+    // <CHANGE> iOS-optimized map component with Polyline
+    const renderMap = () => {
+        if (!mapRegion || !activeRideData) return null;
+
+        return (
+            <View style={styles.mapContainer}>
+                <MapView
+                    ref={mapRef}
+                    style={styles.map}
+                    region={mapRegion}
+                    showsUserLocation={true}
+                    showsMyLocationButton={Platform.OS === 'ios'}
+                    toolbarEnabled={false}
+                    loadingEnabled={true}
+                    loadingIndicatorColor="#DC2626"
+                    mapType={Platform.OS === 'ios' ? 'standard' : 'standard'}
+                >
+                    {/* Pickup Marker */}
+                    {activeRideData.pickup_location && (
+                        <Marker
+                            coordinate={{
+                                latitude: activeRideData.pickup_location.coordinates[1],
+                                longitude: activeRideData.pickup_location.coordinates[0],
+                            }}
+                            title="Pickup Location"
+                            pinColor="#22C55E"
+                        />
+                    )}
+
+                    {/* Drop Marker */}
+                    {activeRideData.drop_location && (
+                        <Marker
+                            coordinate={{
+                                latitude: activeRideData.drop_location.coordinates[1],
+                                longitude: activeRideData.drop_location.coordinates[0],
+                            }}
+                            title="Drop Location"
+                            pinColor="#DC2626"
+                        />
+                    )}
+
+                    {/* Route Polyline for iOS */}
+                    {Platform.OS === 'ios' && routeCoordinates.length > 0 && (
+                        <Polyline
+                            coordinates={routeCoordinates}
+                            strokeColor="#DC2626"
+                            strokeWidth={4}
+                            lineDashPattern={[5, 5]}
+                        />
+                    )}
+                </MapView>
+
+                {/* Distance and Duration Overlay */}
+                <View style={styles.mapOverlay}>
+                    <View style={styles.routeInfo}>
+                        <Text style={styles.routeDistance}>
+                            {activeRideData.route_info?.distance || 'N/A'} km
+                        </Text>
+                        <Text style={styles.routeDuration}>
+                            {activeRideData.route_info?.duration || 'N/A'} min
+                        </Text>
+                    </View>
+                </View>
+            </View>
+        );
     };
 
     // Enhanced tab content rendering
@@ -499,11 +629,11 @@ export default function RunningRide() {
                         <View style={styles.userCard}>
                             <View style={styles.userHeader}>
                                 <View style={styles.userAvatar}>
-                                    <MaterialIcons name="person" size={24} color={COLORS.primary} />
+                                    <MaterialIcons name="person" size={24} color="#DC2626" />
                                 </View>
                                 <View style={styles.userInfo}>
-                                    <Text style={styles.userName}>{activeRideData.user?.name || 'N/A'}</Text>
-
+                                    <Text style={styles.userName}>{activeRideData.user?.name || 'Rider'}</Text>
+                                    <Text style={styles.userPhone}>Tap call button to contact</Text>
                                 </View>
                                 <TouchableOpacity
                                     style={styles.callButton}
@@ -516,11 +646,11 @@ export default function RunningRide() {
 
                             <View style={styles.addressSection}>
                                 <View style={styles.addressItem}>
-                                    <View style={[styles.locationDot, { backgroundColor: COLORS.success }]} />
+                                    <View style={[styles.locationDot, { backgroundColor: '#22C55E' }]} />
                                     <View style={styles.addressContent}>
                                         <Text style={styles.addressLabel}>Pickup Location</Text>
                                         <Text style={styles.addressValue}>
-                                            {activeRideData.pickup_address?.formatted_address || 'N/A'}
+                                            {activeRideData.pickup_address?.formatted_address || 'Loading address...'}
                                         </Text>
                                     </View>
                                 </View>
@@ -528,11 +658,11 @@ export default function RunningRide() {
                                 <View style={styles.routeLine} />
 
                                 <View style={styles.addressItem}>
-                                    <View style={[styles.locationDot, { backgroundColor: COLORS.danger }]} />
+                                    <View style={[styles.locationDot, { backgroundColor: '#DC2626' }]} />
                                     <View style={styles.addressContent}>
                                         <Text style={styles.addressLabel}>Drop Location</Text>
                                         <Text style={styles.addressValue}>
-                                            {activeRideData.drop_address?.formatted_address || 'N/A'}
+                                            {activeRideData.drop_address?.formatted_address || 'Loading address...'}
                                         </Text>
                                     </View>
                                 </View>
@@ -547,26 +677,26 @@ export default function RunningRide() {
                         <View style={styles.rideDetailsCard}>
                             <View style={styles.statusContainer}>
                                 <Text style={styles.statusLabel}>Ride Status</Text>
-                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(rideStatus) }]}>
+                                <View style={[styles.statusBadge, { backgroundColor: '#DC2626' }]}>
                                     <Text style={styles.statusText}>{rideStatus?.replace('_', ' ').toUpperCase()}</Text>
                                 </View>
                             </View>
 
                             <View style={styles.rideMetrics}>
                                 <View style={styles.metricItem}>
-                                    <MaterialIcons name="straighten" size={20} color={COLORS.primary} />
+                                    <MaterialIcons name="straighten" size={20} color="#DC2626" />
                                     <Text style={styles.metricLabel}>Distance</Text>
-                                    <Text style={styles.metricValue}>{activeRideData.route_info?.distance} km</Text>
+                                    <Text style={styles.metricValue}>{activeRideData.route_info?.distance || 'N/A'} km</Text>
                                 </View>
                                 <View style={styles.metricItem}>
-                                    <MaterialIcons name="schedule" size={20} color={COLORS.primary} />
+                                    <MaterialIcons name="schedule" size={20} color="#DC2626" />
                                     <Text style={styles.metricLabel}>Duration</Text>
-                                    <Text style={styles.metricValue}>{activeRideData.route_info?.duration} min</Text>
+                                    <Text style={styles.metricValue}>{activeRideData.route_info?.duration || 'N/A'} min</Text>
                                 </View>
                                 <View style={styles.metricItem}>
-                                    <MaterialIcons name="payment" size={20} color={COLORS.primary} />
+                                    <MaterialIcons name="payment" size={20} color="#DC2626" />
                                     <Text style={styles.metricLabel}>Payment</Text>
-                                    <Text style={styles.metricValue}>{activeRideData.payment_method}</Text>
+                                    <Text style={styles.metricValue}>{activeRideData.payment_method || 'Cash'}</Text>
                                 </View>
                             </View>
 
@@ -578,7 +708,7 @@ export default function RunningRide() {
                                 }}
                                 activeOpacity={0.8}
                             >
-                                <MaterialIcons name="cancel" size={20} color={COLORS.danger} />
+                                <MaterialIcons name="cancel" size={20} color="#DC2626" />
                                 <Text style={styles.cancelButtonText}>Cancel Ride</Text>
                             </TouchableOpacity>
                         </View>
@@ -588,20 +718,17 @@ export default function RunningRide() {
             case 'fare':
                 return (
                     <Animated.View style={[styles.tabContent, { opacity: fadeAnim }]}>
-                        <View style={styles.fare_dCard}>
-
-
-                            <Text style={styles.fare_dLabel}>Total Fare to be Collected from User</Text>
-
-                            <View style={styles.fare_dNoteContainer}>
-                                <Text style={styles.fare_dNote}>
-                                    This fare Not includes MCD and toll taxes. Please  collect any additional charges from the user if Toll and Any Other.
+                        <View style={styles.fareCard}>
+                            <Text style={styles.fareLabel}>Total Fare to Collect</Text>
+                            
+                            <View style={styles.fareNoteContainer}>
+                                <Text style={styles.fareNote}>
+                                    This fare does not include extra charges. Please collect any additional costs such as tolls and parking fees directly from the rider.
                                 </Text>
                             </View>
 
-                            <Text style={styles.fare_dValue}>₹{totalFare}</Text>
+                            <Text style={styles.fareValue}>₹{totalFare}</Text>
                         </View>
-
                     </Animated.View>
                 );
 
@@ -628,7 +755,10 @@ export default function RunningRide() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+            <StatusBar 
+                barStyle={Platform.OS === 'ios' ? "dark-content" : "light-content"} 
+                backgroundColor="#DC2626" 
+            />
             <HeaderNew />
 
             <ScrollView
@@ -638,8 +768,8 @@ export default function RunningRide() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={[COLORS.primary]}
-                        tintColor={COLORS.primary}
+                        colors={['#DC2626']}
+                        tintColor="#DC2626"
                     />
                 }
             >
@@ -652,22 +782,13 @@ export default function RunningRide() {
                         }
                     ]}
                 >
-                    {/* Map Component */}
-                    {(activeRideData?.pickup_location && activeRideData?.drop_location) && (
-                        <View style={styles.mapContainer}>
-                            <NewMap
-                                ride_status={activeRideData?.ride_status}
-                                pickup={activeRideData?.pickup_location?.coordinates}
-                                drop={activeRideData?.drop_location?.coordinates}
-                                isReached={() => { }}
-                            />
-                        </View>
-                    )}
+                    {/* <CHANGE> iOS-optimized Map Component with Polyline */}
+                    {renderMap()}
 
                     {/* Loading State */}
                     {showLoading && (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color={COLORS.primary} />
+                            <ActivityIndicator size="large" color="#DC2626" />
                             <Text style={styles.loadingText}>
                                 {userLoading ? "Loading your details..." : "Getting ride information..."}
                             </Text>
@@ -682,8 +803,8 @@ export default function RunningRide() {
                     {/* Error State */}
                     {error && !showLoading && (
                         <View style={styles.errorContainer}>
-                            <MaterialIcons name="error-outline" size={32} color={COLORS.danger} />
-                            <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
+                            <MaterialIcons name="error-outline" size={32} color="#DC2626" />
+                            <Text style={styles.errorTitle}>Connection Issue</Text>
                             <Text style={styles.errorText}>{error}</Text>
                             {showRetryButton && (
                                 <TouchableOpacity
@@ -717,7 +838,7 @@ export default function RunningRide() {
                                         <MaterialIcons
                                             name={tab.icon}
                                             size={20}
-                                            color={activeTab === tab.key ? '#fff' : COLORS.text.secondary}
+                                            color={activeTab === tab.key ? '#fff' : '#666'}
                                         />
                                         <Text style={[
                                             styles.tabText,
@@ -737,7 +858,7 @@ export default function RunningRide() {
                     {/* No Data State */}
                     {!showLoading && !error && !activeRideData && (
                         <View style={styles.noDataContainer}>
-                            <MaterialIcons name="info-outline" size={64} color={COLORS.text.light} />
+                            <MaterialIcons name="info-outline" size={64} color="#999" />
                             <Text style={styles.noDataTitle}>No Active Ride</Text>
                             <Text style={styles.noDataText}>
                                 You don't have any active rides at the moment.
@@ -777,7 +898,7 @@ export default function RunningRide() {
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Cancel Ride</Text>
                             <TouchableOpacity onPress={() => setCancelModal(false)}>
-                                <MaterialIcons name="close" size={24} color={COLORS.text.primary} />
+                                <MaterialIcons name="close" size={24} color="#333" />
                             </TouchableOpacity>
                         </View>
 
@@ -841,7 +962,7 @@ export default function RunningRide() {
             <Modal visible={showOtpModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.otpModal}>
-                        <MaterialIcons name="lock-outline" size={48} color={COLORS.primary} />
+                        <MaterialIcons name="lock-outline" size={48} color="#DC2626" />
                         <Text style={styles.otpTitle}>Enter OTP</Text>
                         <Text style={styles.otpSubtitle}>
                             Please enter the 4-digit OTP provided by the rider
@@ -888,7 +1009,7 @@ export default function RunningRide() {
             <Modal visible={showPaymentModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.paymentModal}>
-                        <MaterialIcons name="payment" size={48} color={COLORS.success} />
+                        <MaterialIcons name="payment" size={48} color="#22C55E" />
                         <Text style={styles.paymentTitle}>Collect Payment</Text>
                         <Text style={styles.paymentAmount}>₹{totalFare}</Text>
 
@@ -909,7 +1030,7 @@ export default function RunningRide() {
                                     <MaterialIcons
                                         name={method.icon}
                                         size={24}
-                                        color={paymentMethod === method.key ? '#fff' : COLORS.text.secondary}
+                                        color={paymentMethod === method.key ? '#fff' : '#666'}
                                     />
                                     <Text style={[
                                         styles.paymentMethodText,
@@ -952,787 +1073,3 @@ export default function RunningRide() {
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    scrollContainer: {
-        paddingBottom: 120,
-    },
-    container: {
-        padding: 16,
-    },
-    mapContainer: {
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginBottom: 16,
-        elevation: 4,
-        shadowColor: COLORS.shadow,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-    },
-
-    // Loading States
-    loadingContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 48,
-        backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        marginVertical: 16,
-    },
-    loadingText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-        fontWeight: '500',
-    },
-    retryText: {
-        marginTop: 8,
-        fontSize: 14,
-        color: COLORS.primary,
-        fontWeight: '600',
-    },
-
-    // Error States
-    errorContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 32,
-        paddingHorizontal: 24,
-        backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        marginVertical: 16,
-        borderLeftWidth: 4,
-        borderLeftColor: COLORS.danger,
-    },
-    errorTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-        marginTop: 12,
-        marginBottom: 8,
-    },
-    errorText: {
-        color: COLORS.text.secondary,
-        fontSize: 14,
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 16,
-    },
-    retryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.primary,
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 24,
-    },
-    retryButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-        marginLeft: 8,
-    },
-
-    // Tab Navigation
-    tabContainer: {
-        flexDirection: 'row',
-        backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        padding: 4,
-        marginBottom: 16,
-        elevation: 2,
-        shadowColor: COLORS.shadow,
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    tab: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 8,
-        borderRadius: 12,
-    },
-    activeTab: {
-        backgroundColor: COLORS.primary,
-        elevation: 2,
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-    },
-    tabText: {
-        marginLeft: 6,
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.text.secondary,
-    },
-    activeTabText: {
-        color: '#fff',
-    },
-
-    // Tab Content
-    tabContent: {
-        backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
-        elevation: 2,
-        shadowColor: COLORS.shadow,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-    },
-
-    // User Tab
-    userCard: {
-        backgroundColor: COLORS.surface,
-    },
-    userHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 24,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    userAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: `${COLORS.primary}15`,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    userInfo: {
-        flex: 1,
-    },
-    userName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-        marginBottom: 4,
-    },
-    userPhone: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        fontWeight: '500',
-    },
-    callButton: {
-        backgroundColor: COLORS.success,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 2,
-        shadowColor: COLORS.success,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-    },
-
-    // Address Section
-    addressSection: {
-        marginTop: 8,
-    },
-    addressItem: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginBottom: 16,
-    },
-    locationDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        marginTop: 4,
-        marginRight: 16,
-    },
-    routeLine: {
-        width: 2,
-        height: 20,
-        backgroundColor: COLORS.border,
-        marginLeft: 5,
-        marginBottom: 8,
-    },
-    addressContent: {
-        flex: 1,
-    },
-    addressLabel: {
-        fontSize: 12,
-        color: COLORS.text.secondary,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        marginBottom: 4,
-        letterSpacing: 0.5,
-    },
-    addressValue: {
-        fontSize: 14,
-        color: COLORS.text.primary,
-        lineHeight: 20,
-        fontWeight: '500',
-    },
-
-    // Ride Tab
-    rideDetailsCard: {
-        backgroundColor: COLORS.surface,
-    },
-    statusContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    statusLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-    },
-    statusBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-    },
-    statusText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 0.5,
-    },
-    rideMetrics: {
-        marginBottom: 24,
-    },
-    metricItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    metricLabel: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        fontWeight: '500',
-        marginLeft: 12,
-        flex: 1,
-    },
-    metricValue: {
-        fontSize: 14,
-        color: COLORS.text.primary,
-        fontWeight: '600',
-    },
-    cancelButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        backgroundColor: `${COLORS.danger}10`,
-        borderWidth: 1,
-        borderColor: `${COLORS.danger}30`,
-    },
-    cancelButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.danger,
-        marginLeft: 8,
-    },
-
-    // Fare Tab
-    fareCard: {
-        backgroundColor: COLORS.surface,
-    },
-    fareTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    fareItems: {
-        marginBottom: 20,
-    },
-    fareItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    fareLabel: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        fontWeight: '500',
-    },
-    fareValue: {
-        fontSize: 14,
-        color: COLORS.text.primary,
-        fontWeight: '600',
-    },
-    discountText: {
-        color: COLORS.success,
-    },
-    fareTotal: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        backgroundColor: `${COLORS.primary}10`,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: `${COLORS.primary}20`,
-    },
-    fareTotalLabel: {
-        fontSize: 16,
-        color: COLORS.text.primary,
-        fontWeight: 'bold',
-    },
-    fareTotalNote: {
-        fontSize: 14,
-        color: '#4377a2',
-        marginBottom: 12,
-        lineHeight: 20,
-    },
-    fareTotalValue: {
-        fontSize: 32,
-        color: COLORS.primary,
-        fontWeight: 'bold',
-    },
-
-    // Bottom Button
-    bottomButtonContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: COLORS.surface,
-        padding: 16,
-        paddingBottom: 32,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border,
-        elevation: 8,
-        shadowColor: COLORS.shadow,
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-    },
-    bottomButton: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        borderRadius: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 4,
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-    },
-    bottomButtonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginRight: 8,
-    },
-
-    // No Data State
-    noDataContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 64,
-        paddingHorizontal: 32,
-        backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        marginVertical: 16,
-    },
-    noDataTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    noDataText: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 24,
-    },
-    refreshButton: {
-        backgroundColor: COLORS.primary,
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 24,
-    },
-    refreshButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-
-    // Modal Styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        backgroundColor: COLORS.surface,
-        borderRadius: 20,
-        maxHeight: height * 0.8,
-        width: width * 0.9,
-        maxWidth: 400,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-    },
-    modalSubtitle: {
-        fontSize: 16,
-        color: COLORS.text.secondary,
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        lineHeight: 22,
-    },
-
-    // Cancel Modal
-    reasonsList: {
-        maxHeight: height * 0.4,
-    },
-    reasonItem: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    selectedReason: {
-        backgroundColor: `${COLORS.primary}10`,
-    },
-    radioButton: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        borderWidth: 2,
-        borderColor: COLORS.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 2,
-    },
-    radioSelected: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: COLORS.primary,
-    },
-    reasonContent: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    reasonName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.text.primary,
-        marginBottom: 4,
-    },
-    reasonDescription: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        lineHeight: 18,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        paddingHorizontal: 20,
-        paddingVertical: 20,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border,
-    },
-    cancelModalButton: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        alignItems: 'center',
-        marginRight: 8,
-        backgroundColor: COLORS.background,
-    },
-    cancelModalText: {
-        fontSize: 16,
-        color: COLORS.text.primary,
-        fontWeight: '600',
-    },
-    confirmButton: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: COLORS.danger,
-        alignItems: 'center',
-        marginLeft: 8,
-    },
-    disabledButton: {
-        backgroundColor: COLORS.text.light,
-    },
-    confirmButtonText: {
-        fontSize: 16,
-        color: '#fff',
-        fontWeight: '600',
-    },
-
-    // OTP Modal
-    otpModal: {
-        backgroundColor: COLORS.surface,
-        borderRadius: 20,
-        padding: 15,
-        width: width * 0.9,
-        maxWidth: 400,
-        alignItems: 'center',
-    },
-    otpTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    otpSubtitle: {
-        fontSize: 14,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-        marginBottom: 32,
-        lineHeight: 20,
-    },
-    otpInput: {
-        borderWidth: 2,
-        borderColor: COLORS.primary,
-        borderRadius: 16,
-        padding: 20,
-        fontSize: 32,
-        fontWeight: 'bold',
-        width: '100%',
-        marginBottom: 32,
-        letterSpacing: 12,
-        textAlign: 'center',
-        backgroundColor: `${COLORS.primary}05`,
-    },
-    otpButtons: {
-        flexDirection: 'row',
-        width: '100%',
-        justifyContent: 'space-between',
-    },
-    otpCancelButton: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginRight: 8,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    otpCancelText: {
-        color: COLORS.text.primary,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    otpVerifyButton: {
-        flex: 1,
-        backgroundColor: COLORS.primary,
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginLeft: 8,
-    },
-    otpVerifyText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-
-    // Payment Modal
-    paymentModal: {
-        backgroundColor: COLORS.surface,
-        borderRadius: 20,
-        padding: 32,
-        width: width * 0.9,
-        maxWidth: 400,
-        alignItems: 'center',
-    },
-    paymentTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: COLORS.text.primary,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    paymentAmount: {
-        fontSize: 36,
-        fontWeight: 'bold',
-        color: COLORS.success,
-        marginBottom: 32,
-    },
-    paymentMethods: {
-        flexDirection: 'row',
-        width: '100%',
-        marginBottom: 24,
-    },
-    paymentMethod: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        backgroundColor: COLORS.background,
-        marginHorizontal: 4,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    activePaymentMethod: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
-    paymentMethodText: {
-        marginLeft: 8,
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.text.secondary,
-    },
-    fare_dCard: {
-        backgroundColor: '#fff',
-
-        borderRadius: 16,
-        padding: 14,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        borderWidth: 1,
-        borderColor: '#f44336', // red outline for alert context
-    },
-    fare_dTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#003873',
-        // marginBottom: 16,
-    },
-    fare_dLabel: {
-        fontSize: 17,
-        fontWeight: '600',
-        color: '#212529',
-        marginBottom: 10,
-    },
-    fare_dNoteContainer: {
-        backgroundColor: '#ffecec',
-        padding: 14,
-        borderRadius: 10,
-        marginBottom: 16,
-        borderLeftWidth: 4,
-        borderLeftColor: '#f44336',
-    },
-    fare_dNote: {
-        fontSize: 15,
-        color: '#212529',
-        lineHeight: 22,
-    },
-    fare_dAlert: {
-        fontWeight: 'bold',
-        color: '#d32f2f', // deep red
-    },
-    fare_dValue: {
-        fontSize: 34,
-        fontWeight: '900',
-        color: '#d32f2f',
-        textAlign: 'right',
-    },
-    activePaymentMethodText: {
-        color: '#fff',
-    },
-    qrContainer: {
-        alignItems: 'center',
-        marginBottom: 24,
-        padding: 20,
-        backgroundColor: COLORS.background,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    qrImage: {
-        width: 160,
-        height: 160,
-        borderRadius: 12,
-    },
-    qrText: {
-        marginTop: 12,
-        fontSize: 12,
-        color: COLORS.text.secondary,
-        textAlign: 'center',
-        fontWeight: '500',
-    },
-    paymentButtons: {
-        flexDirection: 'row',
-        width: '100%',
-        justifyContent: 'space-between',
-    },
-    paymentCancelButton: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginRight: 8,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    paymentCancelText: {
-        color: COLORS.text.primary,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    paymentCollectButton: {
-        flex: 1,
-        backgroundColor: COLORS.success,
-        paddingVertical: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginLeft: 8,
-    },
-    paymentCollectText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-});

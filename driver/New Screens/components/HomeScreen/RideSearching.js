@@ -601,8 +601,7 @@ export default function RideSearching({ refreshing, id }) {
                                 <View style={styles.fareTotal}>
                                     <Text style={styles.fareTotalLabel}>Total Fare to be Collected from User</Text>
                                     <Text style={styles.fareTotalNote}>
-                                        This fare includes MCD and toll taxes. Please do not collect any additional charges from the user.
-                                    </Text>
+This fare does not include extra charges. Please pay any additional costs such as state tax, tolls, and parking fees directly.                                    </Text>
                         
                                 </View>
 

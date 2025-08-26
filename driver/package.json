@@ -21,7 +21,6 @@
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
     "@reduxjs/toolkit": "^1.9.5",
-    "@sentry/react-native": "~6.3.0",
     "axios": "^1.7.9",
     "date-fns": "^4.1.0",
     "expo": "~52.0.23",

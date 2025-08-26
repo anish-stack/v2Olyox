@@ -57,6 +57,7 @@ export default function NewHomeScreen() {
         console.log('Missing tokens - Auth:', !!token, 'FCM:', !!currentToken);
         return;
       }
+      console.log('Updating FCM token on server...',currentToken);
 
       const response = await axios.post(
         urlForUpdateFcmToken,

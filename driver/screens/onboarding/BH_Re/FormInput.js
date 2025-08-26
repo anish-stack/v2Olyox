@@ -10,7 +10,6 @@ export default function FormInput({
   textContentType = "none", // Default to "none" to prevent autofill guessing
   error,
   placeholder,
-  key,
   secureTextEntry,
   keyboardType = 'default',
   maxLength,
@@ -22,7 +21,7 @@ export default function FormInput({
     <View style={styles.inputGroup}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        key={key}
+       
         importantForAutofill={importantForAutofill} // Control autofill importance
         style={[styles.input, error && styles.inputError]}
         value={value}

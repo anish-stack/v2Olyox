@@ -386,7 +386,6 @@ export default function RegisterWithBh() {
       ) : null}
 
       <FormInput
-        key="name-input"
         label="Name (as per Aadhaar Card) *"
         value={formData.name}
         onChangeText={(text) => handleInputChange("name", text)}
@@ -398,7 +397,6 @@ export default function RegisterWithBh() {
       />
 
       <FormInput
-        key="aadhaar-input"
         label="Aadhaar Number *"
         value={formData.aadharNumber}
         onChangeText={(text) => handleInputChange("aadharNumber", text)}
@@ -431,7 +429,6 @@ export default function RegisterWithBh() {
       </View>
 
       <FormInput
-        key="email-input"
         label="Email Address *"
         value={formData.email}
         onChangeText={(text) => handleInputChange("email", text)}
@@ -445,7 +442,6 @@ export default function RegisterWithBh() {
       />
 
       <FormInput
-        key="phone-input"
         label="Phone Number *"
         value={formData.number}
         onChangeText={(text) => handleInputChange("number", text)}
@@ -460,7 +456,6 @@ export default function RegisterWithBh() {
       />
 
       <FormInput
-        key="password-input"
         label="Password *"
         value={formData.password}
         onChangeText={(text) => handleInputChange("password", text)}

@@ -13,7 +13,21 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.olyoxpvt.OlyoxDriverApp",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you.",
+        "NSLocationWhenInUseUsageDescription": "We use your location to show your real-time position on the map and provide navigation.",
+        "NSLocationAlwaysUsageDescription": "We use your location in the background to keep tracking your trips and provide accurate service.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need access to your location even when the app is closed or not in use to continue trip tracking.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "UNUserNotificationCenterUsageDescription": "We use notifications to alert you about ride requests, trip updates, and important account information."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -29,13 +43,6 @@
         "ACCESS_BACKGROUND_LOCATION",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "RECEIVE_BOOT_COMPLETED",
-        "ACCESS_BACKGROUND_LOCATION",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK",
         "VIBRATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",

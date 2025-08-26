@@ -642,7 +642,7 @@ export default function RegistrationForm() {
 
         <TouchableOpacity onPress={showDatePicker} style={styles.dateButton}>
           <Text style={styles.dateButtonText}>
-            {rcExpireDate ? `RC Expires: ${formatDate(rcExpireDate)}` : "Select RC Expiry Date *"}
+            {rcExpireDate ? `RC Expires: ${formatDate(rcExpireDate)}` : "Select RC Validity Date *"}
           </Text>
           <Text style={styles.dateButtonIcon}>📅</Text>
         </TouchableOpacity>

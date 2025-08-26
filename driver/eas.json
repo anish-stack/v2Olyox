@@ -9,16 +9,40 @@
       "distribution": "internal",
       "channel": "development"
     },
+    "development-simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "channel": "development-simulator"
+    },
+    "simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "channel": "simulator"
+    },
     "preview": {
       "distribution": "internal",
       "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
+      "ios": {
+        "buildConfiguration": "Release",
+        "simulator": false
+      },
       "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "naveenkumarof01@gmail.com",
+      }
+    }
   }
 }

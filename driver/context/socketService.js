@@ -220,7 +220,7 @@ export const fetchUserData = async () => {
         
  
         return response.data.partner;
-    } catch (error) {
+    } catch (error) { 
         if (error.code === 'ECONNABORTED') {
             log.error("Request timeout while fetching user data");
         } else if (error.response) {

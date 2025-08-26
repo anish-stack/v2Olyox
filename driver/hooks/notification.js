@@ -1,12 +1,38 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Platform, PermissionsAndroid, AppState, Vibration } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
+import { getApp, initializeApp, getApps } from '@react-native-firebase/app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
 
 const FCM_TOKEN_STORAGE_KEY = '@app:fcmToken';
 const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
+
+// Firebase configuration for iOS
+const firebaseConfig = {
+  apiKey: "AIzaSyD-6Nb8EwlZ00EfCfhDkhuHZvWzaPsvk54",
+  authDomain: "olyox-6215a.firebaseapp.com",
+  databaseURL: "https://olyox-6215a-default-rtdb.firebaseio.com",
+  projectId: "olyox-6215a",
+  storageBucket: "olyox-6215a.firebasestorage.app",
+  messagingSenderId: "900366491123",
+  appId: "1:900366491123:ios:c25b8a98abf7d2eeecc686",
+};
+
+// Initialize Firebase for iOS only
+const initializeFirebase = () => {
+  if (Platform.OS === 'ios') {
+    const apps = getApps();
+    if (apps.length === 0) {
+      console.log('🔥 Initializing Firebase for iOS...');
+      initializeApp(firebaseConfig);
+      console.log('✅ Firebase initialized successfully for iOS');
+    } else {
+      console.log('✅ Firebase already initialized for iOS');
+    }
+  }
+};
 
 // Configure expo notifications
 Notifications.setNotificationHandler({
@@ -18,14 +44,24 @@ Notifications.setNotificationHandler({
 });
 
 const requestNotificationsPermission = async () => {
-  const authStatus = await messaging().requestPermission();
-  return {
-    status:
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL
-        ? 'granted'
-        : 'denied',
-  };
+  try {
+    // Ensure Firebase is initialized for iOS
+    if (Platform.OS === 'ios') {
+      initializeFirebase();
+    }
+    
+    const authStatus = await messaging().requestPermission();
+    return {
+      status:
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL
+          ? 'granted'
+          : 'denied',
+    };
+  } catch (error) {
+    console.error('❌ Error requesting iOS notifications permission:', error);
+    return { status: 'denied' };
+  }
 };
 
 const requestAndroidPermission = async (permission) => {
@@ -39,15 +75,20 @@ const requestAndroidPermission = async (permission) => {
 };
 
 const requestExpoNotificationPermission = async () => {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    return finalStatus === 'granted';
+  } catch (error) {
+    console.error('❌ Error requesting Expo notification permission:', error);
+    return false;
   }
-
-  return finalStatus === 'granted';
 };
 
 const useNotificationPermission = (navigation) => {
@@ -164,18 +205,25 @@ const useNotificationPermission = (navigation) => {
 
   const requestPermission = useCallback(async () => {
     try {
-      console.log("I am hit")
+      console.log("🚀 Requesting notification permissions...");
+      
+      // Initialize Firebase for iOS first
+      if (Platform.OS === 'ios') {
+        initializeFirebase();
+      }
+
       // Request permissions for Firebase Messaging
       const status = await Platform.select({
         ios: async () => {
           const { status } = await requestNotificationsPermission();
+          console.log("📱 iOS notification permission status:", status);
           return status;
         },
+
         android: async () => {
           if (Platform.Version >= 33) {
             const granted = await requestAndroidPermission('android.permission.POST_NOTIFICATIONS');
-                  console.log("I am granted",granted)
-
+            console.log("🤖 Android notification permission granted:", granted);
             return granted ? 'granted' : 'denied';
           }
           return 'granted';
@@ -183,24 +231,34 @@ const useNotificationPermission = (navigation) => {
         default: async () => 'not-determined',
       })();
 
+      console.log("✅ Platform notification permission status:", status);
+
       // Request permissions for Expo Notifications
       const expoPermissionGranted = await requestExpoNotificationPermission();
+      console.log("📱 Expo notification permission granted:", expoPermissionGranted);
 
       const granted = status === 'granted' && expoPermissionGranted;
       setPermissionStatus(granted ? 'granted' : 'denied');
       setIsGranted(granted);
 
       if (granted) {
-        // Get FCM token
-        const token = await messaging().getToken();
-        console.log('🔥 FCM Token New:', token);
-      setFcmToken(token);
-        await storeFcmToken(token);
+        try {
+          // Get FCM token
+          const messagingInstance = messaging();
+          const token = await messagingInstance.getToken();
+          console.log('🔥 FCM Token:', token);
+          setFcmToken(token);
+          await storeFcmToken(token);
+        } catch (tokenError) {
+          console.error('❌ Error getting FCM token:', tokenError);
+        }
       }
 
       return granted;
     } catch (error) {
       console.error('❌ Error requesting notification permission:', error);
+      setPermissionStatus('denied');
+      setIsGranted(false);
       return false;
     }
   }, []);
@@ -209,6 +267,11 @@ const useNotificationPermission = (navigation) => {
   useEffect(() => {
     const initializeData = async () => {
       try {
+        // Initialize Firebase for iOS
+        if (Platform.OS === 'ios') {
+          initializeFirebase();
+        }
+
         const storedToken = await getStoredFcmToken();
         if (storedToken) {
           setFcmToken(storedToken);
@@ -225,8 +288,10 @@ const useNotificationPermission = (navigation) => {
         }
 
         isInitialized.current = true;
+        console.log('✅ Notification hook initialized');
       } catch (error) {
         console.error('❌ Error initializing data:', error);
+        isInitialized.current = true; // Set to true to continue execution
       }
     };
 
@@ -276,11 +341,14 @@ const useNotificationPermission = (navigation) => {
 
     const setupListeners = async () => {
       try {
-        // Request permissions
+        // Request permissions first
         await requestPermission();
 
+        // Get messaging instance
+        const messagingInstance = messaging();
+
         // Token refresh listener
-        const unsubscribeTokenRefresh = messaging().onTokenRefresh(async (token) => {
+        const unsubscribeTokenRefresh = messagingInstance.onTokenRefresh(async (token) => {
           if (!mounted) return;
           console.log('🔄 FCM Token refreshed:', token);
           setFcmToken(token);
@@ -288,7 +356,7 @@ const useNotificationPermission = (navigation) => {
         });
 
         // Foreground message listener
-        const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+        const unsubscribeForeground = messagingInstance.onMessage(async (remoteMessage) => {
           if (!mounted) return;
           console.log('📩 FCM Message in foreground:', remoteMessage);
 
@@ -307,13 +375,10 @@ const useNotificationPermission = (navigation) => {
 
           // Play sound and vibration for foreground messages
           await playNotificationSound();
-
-
-
         });
 
-      
-        const unsubscribeOpenedApp = messaging().onNotificationOpenedApp((remoteMessage) => {
+        // Background/quit state notification tap listener
+        const unsubscribeOpenedApp = messagingInstance.onNotificationOpenedApp((remoteMessage) => {
           if (!mounted) return;
           console.log('🔄 App opened from background notification:', remoteMessage);
           setLastFcmMessage(remoteMessage);
@@ -321,7 +386,7 @@ const useNotificationPermission = (navigation) => {
         });
 
         // App launched from quit state
-        messaging().getInitialNotification().then((remoteMessage) => {
+        messagingInstance.getInitialNotification().then((remoteMessage) => {
           if (!mounted || !remoteMessage) return;
           console.log('🚀 App launched from quit state via notification:', remoteMessage);
           setLastFcmMessage(remoteMessage);
@@ -334,7 +399,7 @@ const useNotificationPermission = (navigation) => {
 
           if (nextAppState === 'active') {
             try {
-              const token = await messaging().getToken();
+              const token = await messagingInstance.getToken();
               if (token && token !== fcmToken) {
                 console.log('🔄 FCM Token updated on app foregrounding:', token);
                 setFcmToken(token);
@@ -357,6 +422,9 @@ const useNotificationPermission = (navigation) => {
 
       } catch (error) {
         console.error('❌ Error setting up FCM listeners:', error);
+        return () => {
+          mounted = false;
+        };
       }
     };
 
@@ -372,7 +440,7 @@ const useNotificationPermission = (navigation) => {
   useEffect(() => {
     // Notification received listener
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-
+      console.log('📱 Expo notification received:', notification);
       setLastNotification(notification);
     });
 

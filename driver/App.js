@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { AppState, StatusBar, Platform } from 'react-native';
+import { AppState, StatusBar, Platform ,NativeModules} from 'react-native';
 import { AppRegistry } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,7 +12,7 @@ import * as Notifications from 'expo-notifications';
 import axios from 'axios';
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Sentry from '@sentry/react-native';
+// import * as Sentry from '@sentry/react-native';
 
 import './context/firebaseConfig';
 import { name as appName } from './app.json';
@@ -20,6 +20,9 @@ import { store } from './redux/store';
 import { SocketProvider } from './context/SocketContext';
 import { LocationProvider } from './context/LocationContext';
 import { RideStatusProvider } from './context/CheckRideHaveOrNot.context';
+
+
+console.log("App Version:", NativeModules);
 
 // Components
 import Loading from './components/Loading';
@@ -62,13 +65,13 @@ const PROCESSED_MESSAGES_KEY = '@app:processedMessages';
 const PENDING_NOTIFICATION_KEY = '@app:pendingNotification';
 
 // Sentry Configuration
-Sentry.init({
-  dsn: 'https://cb37ba59c700e925974e3b36d10e8e5b@o4508691997261824.ingest.us.sentry.io/4508692015022080',
-  environment: 'production',
-  enableInExpoDevelopment: true,
-  debug: false,
-  tracesSampleRate: 1.0,
-});
+// Sentry.init({
+//   dsn: 'https://cb37ba59c700e925974e3b36d10e8e5b@o4508691997261824.ingest.us.sentry.io/4508692015022080',
+//   environment: 'production',
+//   enableInExpoDevelopment: true,
+//   debug: false,
+//   tracesSampleRate: 1.0,
+// });
 
 const Stack = createNativeStackNavigator();
 
@@ -404,6 +407,8 @@ const App = () => {
     timeout: 10000,
   }), []);
 
+  console.log('🔔 Notification permission:', isGranted ? 'granted' : 'denied');
+
   // Set global navigation reference
   useEffect(() => {
     if (navigationRef.current) {
@@ -697,11 +702,11 @@ const App = () => {
 };
 
 // Memoized wrapped components
-const WrappedApp = React.memo(Sentry.wrap(App));
+// const WrappedApp = React.memo(Sentry.wrap(App));
 const RootApp = React.memo(() => (
   <ErrorBoundaryWrapper>
     <CheckAppUpdate>
-      <WrappedApp />
+      <App />
     </CheckAppUpdate>
   </ErrorBoundaryWrapper>
 ));
