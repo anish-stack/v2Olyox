@@ -1850,8 +1850,8 @@ exports.parcelDashboardData = async (req, res) => {
 
 exports.assignFreeRechargeToRider = async (req, res) => {
   try {
-    console.log("📩 Incoming request for free recharge:", req.body);
 
+    console.log("📩 Incoming request for free recharge:", req.body);
     const { number, rechargeData } = req.body;
 
     if (!number || !rechargeData) {
@@ -1935,3 +1935,4 @@ exports.assignFreeRechargeToRider = async (req, res) => {
     });
   }
 };
+
