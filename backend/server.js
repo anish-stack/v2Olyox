@@ -154,7 +154,6 @@ async function sendPushNotification(expoPushTokens, title, body) {
 
 // Example usage:
 // const expoPushTokens = ['ExponentPushToken[yBRBtTIa6xCmtrO8igmTz0]'];
-sendPushNotification();
 
 
 

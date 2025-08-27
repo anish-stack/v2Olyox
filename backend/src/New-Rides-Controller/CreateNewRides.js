@@ -483,7 +483,6 @@ const saveRideToRedis = async (redisClient, rideId, rideData) => {
 };
 
 const saveRidersToRedis = async (redisClient, rideId, riders) => {
-    console.log("rideId", rideId)
     try {
         if (!redisClient) {
             console.warn("Redis client not available, skipping save to Redis");
@@ -696,7 +695,6 @@ const initiateDriverSearch = async (rideId, req, res) => {
 
                 console.info(`${validRiders.length} valid riders found out of ${riders.length} total riders for ride ${rideId}`);
 
-                // Always call processRiders, even if validRiders.length is 0
                 await saveRidersToRedis(redisClient, rideId, validRiders);
                 const processResult = await processRiders(redisClient, rideId, validRiders);
 
@@ -727,6 +725,47 @@ const initiateDriverSearch = async (rideId, req, res) => {
                         };
                     }
                 }
+                const sendRideNotifications = async (riders, ride) => {
+                    console.log("i am starting to send notifications");
+                    for (const rider of riders) {
+                        try {
+                            await sendNotification.sendNotification(
+                                rider.fcmToken,
+                                "New Ride Available",
+                                "A new ride request is waiting! Please open the app to accept.",
+                                {
+                                    event: "NEW_RIDE",
+                                    rideDetails: {
+                                        rideId: ride._id.toString(),
+                                        pickup: ride.pickup_address,
+                                        drop: ride.drop_address,
+                                        vehicleType: ride.vehicle_type,
+                                        pricing: ride.pricing
+                                    },
+                                    screen: "RideRequest",
+                                    riderId: rider._id
+                                },
+                                "ride_request_channel"
+                            );
+                            console.info(`Notification sent to rider ${rider._id} for ride ${ride._id}`);
+                        } catch (err) {
+                            console.error(`Failed to send notification to rider ${rider._id}:`, err);
+                        }
+                    }
+                };
+
+                // Fire-and-forget, fully detached from other incoming requests
+                const notifyRiders = (riders, ride) => {
+                    sendRideNotifications(riders, ride).catch(err => {
+                        console.error("Unexpected error in notification flow:", err);
+                    });
+                };
+
+
+
+
+                console.info(`Driver search process completed for ride ${rideId}`);
+
 
                 // Return the result of processRiders if riders were found
                 return processResult;
@@ -786,170 +825,179 @@ const initiateDriverSearch = async (rideId, req, res) => {
 };
 
 const processRiders = async (redisClient, rideId, riders, rideDetails = {}) => {
-    const notificationStateKey = `ride:${rideId}:notification_state`;
-    let notificationsSentCount = 0;
+  const notificationStateKey = `ride:${rideId}:notification_state`;
+  let notificationsSentCount = 0;
 
-    try {
-        console.info(`🚀 Processing ${riders.length} riders for ride ${rideId}`);
-
-        if (riders.length === 0) {
-            await redisClient.set(notificationStateKey, JSON.stringify({
-                batchCount: 0,
-                totalNotificationsSent: 0,
-                completed: true,
-                lastBatchSentAt: new Date(),
-                reason: 'No riders available'
-            }));
-            return {
-                success: true,
-                message: 'No riders available to notify',
-                riders_count: 0,
-                total_notifications: 0
-            };
-        }
-
-        const maxDuration = 120000; // 2 minutes
-        const interval = 5000;
-        const startTime = Date.now();
-
-        await redisClient.set(notificationStateKey, JSON.stringify({
-            batchCount: 0,
-            totalNotificationsSent: 0,
-            completed: false,
-            lastBatchSentAt: null
-        }), 'EX', 3600);
-
-        while (Date.now() - startTime < maxDuration) {
-            let transactionSuccessful = false;
-            let retries = 3;
-
-            while (!transactionSuccessful && retries > 0) {
-                try {
-                    await redisClient.watch(`ride:${rideId}`);
-
-                    const ride = await RideBooking.findById(rideId).select('ride_status rejected_by_drivers');
-                    if (!ride) {
-                        await redisClient.unwatch();
-                        throw new Error('Ride not found');
-                    }
-
-                    if (ride.ride_status === 'cancelled') {
-                        await redisClient.unwatch();
-                        await redisClient.set(notificationStateKey, JSON.stringify({
-                            batchCount: notificationsSentCount,
-                            totalNotificationsSent: notificationsSentCount * riders.length,
-                            completed: true,
-                            lastBatchSentAt: new Date(),
-                            reason: 'Ride cancelled'
-                        }));
-                        return {
-                            success: true,
-                            message: 'Ride cancelled, stopping notifications',
-                            riders_count: riders.length,
-                            total_notifications: notificationsSentCount * riders.length
-                        };
-                    }
-
-                    // ✅ Only proceed if ride_status is "pending" or "searching"
-                    if (!['pending', 'searching'].includes(ride.ride_status)) {
-                        await redisClient.unwatch();
-                        await redisClient.set(notificationStateKey, JSON.stringify({
-                            batchCount: notificationsSentCount,
-                            totalNotificationsSent: notificationsSentCount * riders.length,
-                            completed: true,
-                            lastBatchSentAt: new Date(),
-                            reason: `Ride status is ${ride.ride_status}, skipping notification`
-                        }));
-                        return {
-                            success: true,
-                            message: `Ride status is ${ride.ride_status}, no notifications sent`,
-                            riders_count: riders.length,
-                            total_notifications: 0
-                        };
-                    }
-
-                    const rejectedDriverIds = (ride.rejected_by_drivers || []).map(r => r.driver.toString());
-                    const eligibleRiders = riders.filter(r => !rejectedDriverIds.includes(r._id.toString()));
-
-                    if (eligibleRiders.length === 0) {
-                        await redisClient.unwatch();
-                        await redisClient.set(notificationStateKey, JSON.stringify({
-                            batchCount: notificationsSentCount,
-                            totalNotificationsSent: notificationsSentCount * riders.length,
-                            completed: true,
-                            lastBatchSentAt: new Date(),
-                            reason: 'No eligible riders left'
-                        }));
-                        return {
-                            success: true,
-                            message: 'No eligible riders left',
-                            riders_count: riders.length,
-                            total_notifications: notificationsSentCount * riders.length
-                        };
-                    }
-
-                    notificationsSentCount++;
-
-                    const multi = redisClient.multi();
-                    multi.set(notificationStateKey, JSON.stringify({
-                        batchCount: notificationsSentCount,
-                        totalNotificationsSent: notificationsSentCount * eligibleRiders.length,
-                        completed: false,
-                        lastBatchSentAt: new Date()
-                    }));
-
-                    await RideBooking.findByIdAndUpdate(rideId, {
-                        $set: {
-                            last_notification_sent_at: new Date(),
-                            notified_riders: eligibleRiders.map(r => r._id)
-                        },
-                        $inc: {
-                            total_notifications_sent: eligibleRiders.length
-                        }
-                    });
-
-                    await multi.exec();
-                    transactionSuccessful = true;
-                } catch (err) {
-                    retries--;
-                    await redisClient.unwatch();
-                    if (retries === 0) throw err;
-                    await new Promise(res => setTimeout(res, 100));
-                }
-            }
-
-            await new Promise(res => setTimeout(res, interval));
-        }
-
-        await redisClient.set(notificationStateKey, JSON.stringify({
-            batchCount: notificationsSentCount,
-            totalNotificationsSent: notificationsSentCount * riders.length,
-            completed: true,
-            lastBatchSentAt: new Date()
-        }));
-
-        return {
-            success: true,
-            message: `Completed ${notificationsSentCount} notification batches`,
-            riders_count: riders.length,
-            total_notifications: notificationsSentCount * riders.length
-        };
-    } catch (error) {
-        console.error(`❌ Failed to process riders for ride ${rideId}:`, error.message);
-        await redisClient.set(notificationStateKey, JSON.stringify({
-            batchCount: notificationsSentCount,
-            totalNotificationsSent: notificationsSentCount * riders.length,
-            completed: false,
-            lastBatchSentAt: new Date(),
-            error: error.message
-        }));
-        return {
-            success: false,
-            message: 'Failed to process riders',
-            error: error.message
-        };
+  const sendRideNotifications = async (eligibleRiders, ride) => {
+    console.log(`🚀 Sending notifications to ${eligibleRiders.length} riders for ride ${ride._id}`);
+    for (const rider of eligibleRiders) {
+      try {
+        await sendNotification.sendNotification(
+          rider.fcmToken,
+          "New Ride Available",
+          "A new ride request is waiting! Please open the app to accept.",
+          {
+            event: "NEW_RIDE",
+            rideDetails: {
+              rideId: ride._id.toString(),
+              pickup: ride.pickup_address,
+              drop: ride.drop_address,
+              vehicleType: ride.vehicle_type,
+              pricing: ride.pricing
+            },
+            screen: "RideRequest",
+            riderId: rider._id
+          },
+          "ride_request_channel"
+        );
+        console.info(`✅ Notification sent to rider ${rider._id}`);
+      } catch (err) {
+        console.error(`❌ Failed to send notification to rider ${rider._id}:`, err.message);
+      }
     }
+    console.log(`🚀 Completed sending notifications for this batch`);
+  };
+
+  try {
+    console.info(`🚀 Processing ${riders.length} riders for ride ${rideId}`);
+
+    if (!riders || riders.length === 0) {
+      console.warn(`⚠️ No riders to notify for ride ${rideId}`);
+      await redisClient.set(notificationStateKey, JSON.stringify({
+        batchCount: 0,
+        totalNotificationsSent: 0,
+        completed: true,
+        lastBatchSentAt: new Date(),
+        reason: 'No riders available'
+      }));
+      return { success: true, message: 'No riders available', riders_count: 0, total_notifications: 0 };
+    }
+
+    // Initialize Redis state
+    await redisClient.set(notificationStateKey, JSON.stringify({
+      batchCount: 0,
+      totalNotificationsSent: 0,
+      completed: false,
+      lastBatchSentAt: null
+    }), 'EX', 3600);
+
+    const maxDuration = 120000; // 2 minutes
+    const interval = 5000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxDuration) {
+      let retries = 3;
+      let transactionSuccessful = false;
+
+      while (!transactionSuccessful && retries > 0) {
+        try {
+          await redisClient.watch(`ride:${rideId}`);
+          const ride = await RideBooking.findById(rideId)
+            .select('ride_status rejected_by_drivers pickup_address drop_address vehicle_type pricing');
+
+          if (!ride) {
+            await redisClient.unwatch();
+            throw new Error('Ride not found');
+          }
+
+          if (ride.ride_status === 'cancelled') {
+            await redisClient.unwatch();
+            console.warn(`⚠️ Ride ${rideId} cancelled`);
+            await redisClient.set(notificationStateKey, JSON.stringify({
+              batchCount: notificationsSentCount,
+              totalNotificationsSent: 0,
+              completed: true,
+              lastBatchSentAt: new Date(),
+              reason: 'Ride cancelled'
+            }));
+            return { success: true, message: 'Ride cancelled', riders_count: riders.length, total_notifications: 0 };
+          }
+
+          if (!['pending', 'searching'].includes(ride.ride_status)) {
+            await redisClient.unwatch();
+            console.info(`ℹ️ Ride status is ${ride.ride_status}, skipping notifications`);
+            await redisClient.set(notificationStateKey, JSON.stringify({
+              batchCount: notificationsSentCount,
+              totalNotificationsSent: 0,
+              completed: true,
+              lastBatchSentAt: new Date(),
+              reason: `Ride status is ${ride.ride_status}`
+            }));
+            return { success: true, message: 'Ride not eligible for notifications', riders_count: riders.length, total_notifications: 0 };
+          }
+
+          const rejectedDriverIds = (ride.rejected_by_drivers || []).map(r => r.driver.toString());
+          const eligibleRiders = riders.filter(r => !rejectedDriverIds.includes(r._id.toString()));
+
+          if (eligibleRiders.length === 0) {
+            await redisClient.unwatch();
+            console.info(`ℹ️ All riders have rejected ride ${rideId}`);
+            await redisClient.set(notificationStateKey, JSON.stringify({
+              batchCount: notificationsSentCount,
+              totalNotificationsSent: 0,
+              completed: true,
+              lastBatchSentAt: new Date(),
+              reason: 'All riders rejected'
+            }));
+            return { success: true, message: 'All riders rejected, notifications skipped', riders_count: riders.length, total_notifications: 0 };
+          }
+
+          notificationsSentCount++;
+
+          const multi = redisClient.multi();
+          multi.set(notificationStateKey, JSON.stringify({
+            batchCount: notificationsSentCount,
+            totalNotificationsSent: notificationsSentCount * eligibleRiders.length,
+            completed: false,
+            lastBatchSentAt: new Date()
+          }));
+
+          await RideBooking.findByIdAndUpdate(rideId, {
+            $set: { last_notification_sent_at: new Date(), notified_riders: eligibleRiders.map(r => r._id) },
+            $inc: { total_notifications_sent: eligibleRiders.length }
+          });
+
+          await multi.exec();
+          transactionSuccessful = true;
+
+          // Send notifications in background
+          sendRideNotifications(eligibleRiders, ride);
+
+        } catch (err) {
+          retries--;
+          await redisClient.unwatch();
+          console.error(`⚠️ Transaction failed, retries left: ${retries}`, err.message);
+          if (retries === 0) throw err;
+          await new Promise(res => setTimeout(res, 100));
+        }
+      }
+
+      await new Promise(res => setTimeout(res, interval));
+    }
+
+    console.info(`✅ Completed ${notificationsSentCount} notification batches for ride ${rideId}`);
+    await redisClient.set(notificationStateKey, JSON.stringify({
+      batchCount: notificationsSentCount,
+      totalNotificationsSent: notificationsSentCount * riders.length,
+      completed: true,
+      lastBatchSentAt: new Date()
+    }));
+
+    return { success: true, message: `Completed ${notificationsSentCount} batches`, riders_count: riders.length, total_notifications: notificationsSentCount * riders.length };
+
+  } catch (error) {
+    console.error(`❌ Failed to process riders for ride ${rideId}:`, error.message);
+    await redisClient.set(notificationStateKey, JSON.stringify({
+      batchCount: notificationsSentCount,
+      totalNotificationsSent: notificationsSentCount * riders.length,
+      completed: false,
+      lastBatchSentAt: new Date(),
+      error: error.message
+    }));
+    return { success: false, message: 'Failed to process riders', error: error.message };
+  }
 };
+
 
 
 exports.cancelRideRequest = async (req, res) => {
@@ -2584,7 +2632,8 @@ exports.cancelRideByPoll = async (req, res) => {
                             rideId: rideData._id,
                             message: 'The user has cancelled the ride request.',
                             screen: 'DriverHome',
-                        }
+                        },
+                        "ride_cancel_channel"
                     );
                 }
             }

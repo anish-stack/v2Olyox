@@ -68,7 +68,8 @@ const initializeFirebase = () => {
 
 
 // Rest of the code remains the same...
-const sendNotification = async (token, title, body, eventData = {},isAndroid=true) => {
+const sendNotification = async (token, title, body, eventData = {}, channel) => {
+  console.log("Sending notification to token:", channel);
   try {
     // Validate input
     if (!token) {
@@ -98,12 +99,12 @@ const sendNotification = async (token, title, body, eventData = {},isAndroid=tru
         title: title || "New Ride  by server",
         body: body || "₹119.18 - Sector 99A to Sector 29",
       },
-      
-      android: isAndroid && {
+
+      android: {
         priority: "high", // ✅ Important for heads-up
         notification: {
-          sound: "sound.mp3", // ✅ Ensure sound plays
-          channelId: "ride_channel", 
+
+          channelId: channel ? channel : "ride_channel",
           clickAction: "ACCEPT_RIDE_ACTION", // ✅ Handle in app
           imageUrl: 'https://olyox.in/wp-content/uploads/2025/04/cropped-cropped-logo-CWkwXYQ_-removebg-preview.png', // Optional: ride map/image
           clickAction: "ACCEPT_RIDE_ACTION",
@@ -144,7 +145,7 @@ const sendNotification = async (token, title, body, eventData = {},isAndroid=tru
         logger.warn('No FCM token provided');
         break;
       default:
-        // logger.error(`Notification send failed: ${error.message}`);
+      // logger.error(`Notification send failed: ${error.message}`);
     }
 
     // Rethrow or return null based on error type
