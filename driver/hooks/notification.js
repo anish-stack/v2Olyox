@@ -49,7 +49,7 @@ const requestNotificationsPermission = async () => {
     if (Platform.OS === 'ios') {
       initializeFirebase();
     }
-    
+
     const authStatus = await messaging().requestPermission();
     return {
       status:
@@ -206,7 +206,7 @@ const useNotificationPermission = (navigation) => {
   const requestPermission = useCallback(async () => {
     try {
       console.log("🚀 Requesting notification permissions...");
-      
+
       // Initialize Firebase for iOS first
       if (Platform.OS === 'ios') {
         initializeFirebase();
@@ -236,7 +236,8 @@ const useNotificationPermission = (navigation) => {
       // Request permissions for Expo Notifications
       const expoPermissionGranted = await requestExpoNotificationPermission();
       console.log("📱 Expo notification permission granted:", expoPermissionGranted);
-
+      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      console.log("Expo Token", token);
       const granted = status === 'granted' && expoPermissionGranted;
       setPermissionStatus(granted ? 'granted' : 'denied');
       setIsGranted(granted);

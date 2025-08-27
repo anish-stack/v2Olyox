@@ -30,6 +30,7 @@ const parcel = require('./routes/Parcel/Parcel.routes');
 const admin = require('./routes/Admin/admin.routes');
 const Heavy = require('./routes/Heavy_vehicle/Heavy.routes');
 const NewRoutes = require('./routes/New/New.routes');
+const sendNotification = require('./utils/sendNotification');
 
 // Controllers and Middleware
 const {
@@ -52,7 +53,6 @@ const {
     mark_cancel
 } = require('./driver');
 const Protect = require('./middleware/Auth');
-const sendNotification = require('./utils/sendNotification');
 
 // Initialize Express and Server
 const app = express();
@@ -134,6 +134,32 @@ async function connectDatabases() {
         throw error;
     }
 }
+
+
+async function sendPushNotification(expoPushTokens, title, body) {
+ try {
+  const response = await sendNotification.sendNotification(
+    'f_tdIVaMTJyvTYwxrNtD8m:APA91bEyIBblc-oy_YdseEKWbXNor-kA_GYdniMi2BluhBkkvvjlg_QM-vXIJZdpcwh8j6L0yKWa_dNNygctLD1i9fCsPJbkLYVHGtFIMpe8DNseoHfA_ec',
+    '🚖 Ride Request',
+    'A new rider has booked a cab. Tap to view details.',
+    { rideId: '12345', type: 'newBooking' }, // extra data
+    true // Android flag if your fn supports it
+  );
+
+  console.log("✅ Notification sent successfully:", response);
+} catch (error) {
+  console.error("❌ Failed to send notification:", error);
+}
+}
+
+// Example usage:
+// const expoPushTokens = ['ExponentPushToken[yBRBtTIa6xCmtrO8igmTz0]'];
+sendPushNotification();
+
+
+
+
+
 
 // Multer for File Uploads
 const storage = multer.memoryStorage();

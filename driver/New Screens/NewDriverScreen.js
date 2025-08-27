@@ -6,6 +6,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  NativeModules,
   View,
   Text,
 } from 'react-native';
@@ -25,8 +26,10 @@ import axios from 'axios';
 import { useFetchUserDetails } from '../hooks/New Hookes/RiderDetailsHooks';
 import HeaderNew from './components/Header/HeaderNew';
 import NotificationPermissionModal from '../NotificationPermissionModal';
+import Button from '../components/Button';
 
 const urlForUpdateFcmToken = `https://www.appv2.olyox.com/api/v1/rider/update-fcm`;
+const { FloatingWidget } = NativeModules;
 
 export default function NewHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
@@ -236,9 +239,9 @@ export default function NewHomeScreen() {
     }
   }, [refreshing, isTracking, reCallMe, initializeLocationTracking]);
 
-  if (!isGranted) {
-    return <NotificationPermissionModal visible={true} autoClose={isGranted} onRetry={requestPermission} permissionGranted={isGranted} refreshNavigation={isGranted} />
-  }
+  // if (!isGranted) {
+  //   return <NotificationPermissionModal visible={true} autoClose={isGranted} onRetry={requestPermission} permissionGranted={isGranted} refreshNavigation={isGranted} />
+  // }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -258,6 +261,7 @@ export default function NewHomeScreen() {
           />
         }
       >
+        <Button title={'click me'} onPress={()=> FloatingWidget.startWidget()} />
         <RideSearching
           refreshing={refreshing}
           isLocationTracking={isTracking}

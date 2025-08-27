@@ -2,5 +2,9 @@
   <string name="app_name">Olyox Driver App</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
-  <string name="expo_runtime_version">1.0.0</string>
+  <string name="expo_runtime_version">1.0.1</string>
+  <string name="create_floating_widget">Create Olyox Floating Widget</string>
+  <string name="floating_widget_label">Olyox Driver Widget</string>
+  <string name="floating_widget_details">Olyox Driver Widget Details</string>
+  <string name="draw_other_app_permission_denied">Draw over other app permission not available. Olyox Driver App won\'t work without permission. Please try again.</string>
 </resources>

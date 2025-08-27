@@ -102,7 +102,8 @@ const sendNotification = async (token, title, body, eventData = {},isAndroid=tru
       android: isAndroid && {
         priority: "high", // ✅ Important for heads-up
         notification: {
-          channelId: "default", // Should match the one created in the app
+          sound: "sound.mp3", // ✅ Ensure sound plays
+          channelId: "ride_channel", 
           clickAction: "ACCEPT_RIDE_ACTION", // ✅ Handle in app
           imageUrl: 'https://olyox.in/wp-content/uploads/2025/04/cropped-cropped-logo-CWkwXYQ_-removebg-preview.png', // Optional: ride map/image
           clickAction: "ACCEPT_RIDE_ACTION",

@@ -184,9 +184,11 @@ export default function RegistrationForm() {
     return `${day}-${month}-${year}`
   }
 
+
+  
   const handleDateChange = (event, selectedDate) => {
     if (event.type === "set") {
-      const newDate = selectedDate || date
+      const newDate = selectedDate || date || new Date()
       setRcExpireDate(newDate)
       hideDatePicker()
     } else {
@@ -651,13 +653,14 @@ export default function RegistrationForm() {
           <DateTimePicker
             value={date}
             mode="date"
-            display="calendar"
             onChange={handleDateChange}
-            minimumDate={new Date()}
+            display="default"
+            maximumDate={new Date()}
           />
         )}
       </View>
 
+    
       <Button mode="contained" onPress={registerRider} style={styles.primaryButton} textColor="white" disabled={loading}>
         {loading ? "Submitting Registration..." : "Complete Registration"}
       </Button>

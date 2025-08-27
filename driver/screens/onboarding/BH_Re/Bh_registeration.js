@@ -395,8 +395,20 @@ export default function RegisterWithBh() {
         textContentType="name"
         autoCorrect={true}
       />
+       <FormInput
+       label="Aadhaar Number *"
+        value={formData.aadharNumber}
+        onChangeText={(text) => handleInputChange("aadharNumber", text)}
+        error={errors.aadharNumber}
+        placeholder="XXXX XXXX XXXX"
+      
+       
+        autoComplete="aadharNumber"
+        textContentType="aadharNumber"
+        autoCorrect={true}
+      />
 
-      <FormInput
+      {/* <FormInput
         label="Aadhaar Number *"
         value={formData.aadharNumber}
         onChangeText={(text) => handleInputChange("aadharNumber", text)}
@@ -408,7 +420,7 @@ export default function RegisterWithBh() {
         textContentType="none"
         importantForAutofill="no"
         autoCorrect={false}
-      />
+      /> */}
 
       <View style={styles.datePickerContainer}>
         <Text style={styles.label}>Date of Birth *</Text>

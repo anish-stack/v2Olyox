@@ -3,4 +3,9 @@
   <color name="iconBackground">#ffffff</color>
   <color name="colorPrimary">#023c69</color>
   <color name="colorPrimaryDark">#ffffff</color>
+  <color name="colorAccent">#FF4081</color>
+  <color name="ride_request_color">#00FF00</color>
+  <color name="ride_cancel_color">#FF0000</color>
+  <color name="payment_complete_color">#0000FF</color>
+  <color name="app_notification_color">#FF9500</color>
 </resources>
